@@ -1,4 +1,6 @@
-# Adam's Implementation of M1
+# Trailmix
+
+ *Note: No changes have been made since Adam's implementation of M1. This README will be updated as Trailmix takes its shape.*
 
 ## Overview
 
