@@ -5,23 +5,20 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import com.example.cpen321application.BuildConfig
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
-/**
- * spec: runs the google account picker (Credential Manager) and returns a
- * google id token
- * throws androidx.credentials.exceptions.GetCredentialException
- * if the user cancels or no account is available.
- * note: BuildConfig.GOOGLE_CLIENT_ID must be the web/backend client id (the
- * same value as the backend's GOOGLE_BACKEND_CLIENT_ID), not the android one.
- */
 object GoogleSignInClient {
+    /**
+     * Shows the Google Sign-in card and returns Google ID Token for the account.
+     *
+     * @param context an activity context. This is what the Credential Manager UI attaches to.
+     * @return a Google-signed ID Token.
+     * @throws IllegalStateException if the credential is not a Google ID Token.
+     */
     // context must be an Activity so the picker can show
     suspend fun getIdToken(context: Context): String {
-        val option = GetGoogleIdOption.Builder()
-            .setServerClientId(BuildConfig.GOOGLE_CLIENT_ID)
-            .setFilterByAuthorizedAccounts(false) // show all accounts, needed for sign-up
+        val option = GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_CLIENT_ID)
             .build()
         val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
 
