@@ -1,5 +1,6 @@
 package com.example.cpen321application.ui.websocket
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -48,6 +49,8 @@ fun WebSocketScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onBack)
+
     Column(
         modifier = modifier
             .fillMaxSize()

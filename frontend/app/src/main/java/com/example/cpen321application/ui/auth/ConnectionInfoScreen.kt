@@ -1,5 +1,6 @@
 package com.example.cpen321application.ui.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,8 @@ fun ConnectionInfoScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onBack)
+
     val token = authViewModel.sessionToken
     LaunchedEffect(token) {
         if (token != null) viewModel.load(token, authViewModel::onUnauthorized)
