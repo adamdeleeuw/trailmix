@@ -9,8 +9,5 @@ coverage/
 *.log
 .DS_Store
 
-
-#Ignore vscode AI rules
-.codacy/
 certs/
 *.pem

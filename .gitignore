@@ -58,3 +58,5 @@ pdfs/
 
 # Gradle outputs
 frontend/app/release/
+
+.codacy/
