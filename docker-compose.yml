@@ -26,7 +26,8 @@ services:
   # Data lives in the mongo-data volume, so it survives container restarts,
   # rebuilds and deploys, and only `docker compose down -v` deletes it.
   mongo:
-    image: mongo:8.0
+    # not 8.x: its allocator makes mongod refuse to start on Linux 6.19+ kernels, which the VM runs (SERVER-121912)
+    image: mongo:7.0
     restart: unless-stopped
     # loopback only: reachable by tests and `npm run dev` on this machine, not by
     # other devices on the network. production removes this mapping entirely.

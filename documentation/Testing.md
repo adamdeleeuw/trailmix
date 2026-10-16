@@ -21,7 +21,7 @@
 | **GET /api/users/me** | [`backend/tests/no-mock/users.me.test.ts#L11`](../backend/tests/no-mock/users.me.test.ts#L11) | [`backend/tests/mock/users.me.test.ts#L20`](../backend/tests/mock/users.me.test.ts#L20) | Session DB, User DB |
 | **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
 
-"No mocks" tests run against a real MongoDB (the same `mongo:8.0` image deployed on the VM). The sign-in tests that need Google to accept a token are in the mocked group, because automated tests can't get a real Google ID token. Every other test signs users in by adding a user and session straight to the test database (`backend/tests/helpers/auth.ts`), so it doesn't need Google.
+"No mocks" tests run against a real MongoDB (the same `mongo:7.0` image deployed on the VM). The sign-in tests that need Google to accept a token are in the mocked group, because automated tests can't get a real Google ID token. Every other test signs users in by adding a user and session straight to the test database (`backend/tests/helpers/auth.ts`), so it doesn't need Google.
 
 #### 2.1.2. Commit Hash Where Tests Run
 
@@ -49,7 +49,7 @@
 
 ### 2.2. GitHub Actions Configuration Location
 
-`~/.github/workflows/backend.yml` (the `test` job runs the same script, with a `mongo:8.0` service container)
+`~/.github/workflows/backend.yml` (the `test` job runs the same script, with a `mongo:7.0` service container)
 
 _(Placeholder for a screenshot of the passing GitHub Actions run)_
 

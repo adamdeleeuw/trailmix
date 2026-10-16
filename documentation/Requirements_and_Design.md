@@ -93,7 +93,7 @@
 
 
 ### **4.2. Databases**
-1. **MongoDB (`mongo:8.0`)**
+1. **MongoDB (`mongo:7.0`)**
     - **Purpose**: Stores Trailmix's accounts and sign-in sessions. It runs as a container next to the backend on the VM and is reachable only over the private docker compose network. Its data lives in the `mongo-data` volume, so it survives restarts, rebuilds, and deploys.
     - **`users` collection**: one document per account, with `googleId` (Google's account ID), `email`, `name`, `photoUrl`, `profileComplete`, `createdAt`, and `updatedAt`.
         - A **unique index on `googleId`** identifies users by the Google ID, which never changes, rather than by email, which can. The index also makes the database refuse a second account for the same Google account, even when two first sign-ins arrive at once.
