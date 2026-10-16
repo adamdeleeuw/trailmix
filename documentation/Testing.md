@@ -5,6 +5,7 @@
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
 | 2026-10-15        | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 | Added the sign-in, sign-out and "get my account" API tests (issue #9) |
+| 2026-10-16        | 2.1.2, 2.2, 2.3, 2.4, 2.5, 2.6, 4.1 | Added the CI run and coverage screenshots, the coverage upload to Codacy, the error-handler branch API tests can't reach, and the real front-end test location (issue #9) |
 
 ---
 
@@ -25,7 +26,7 @@
 
 #### 2.1.2. Commit Hash Where Tests Run
 
-`[Insert Commit SHA here]`
+`b0e71819f4748b99331c55ac8e9620e776190a57`
 
 #### 2.1.3. Explanation on How to Run the Tests
 
@@ -53,19 +54,21 @@
 
 Each run posts a coverage table for all three runs on its summary page and uploads the three HTML reports as the `backend-coverage` artifact. The combined report is also uploaded to Codacy.
 
-_(Placeholder for a screenshot of the passing GitHub Actions run)_
+![Passing Backend workflow run with the coverage summary](images/backend-ci-run.png)
 
 ### 2.3. Jest Coverage Report Screenshots With Mocks
 
-_(Placeholder for Jest coverage screenshot with mocks enabled)_
+![Jest coverage report for tests/mock/](images/backend-coverage-mock.png)
 
 ### 2.4. Jest Coverage Report Screenshots Without Mocks
 
-_(Placeholder for Jest coverage screenshot without mocks)_
+![Jest coverage report for tests/no-mock/](images/backend-coverage-no-mock.png)
 
 ### 2.5. Jest Coverage Report Screenshots, Both Combined
 
-Add later
+![Jest coverage report for tests/mock/ and tests/no-mock/ together](images/backend-coverage-combined.png)
+
+`src`, `src/config` and `src/middleware` are below 100% only because of the startup code and the error-handler branch listed in 2.6. Every other folder is at 100%.
 
 ### 2.6. Lines API Tests Can't Reach
 
@@ -73,10 +76,10 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 
 | **File** | **Lines** | **Reason** |
 | -------- | --------- | ---------- |
-| `backend/src/index.ts` | 1–27 | The process entry point: it checks the environment, connects to MongoDB, calls `listen`, and handles SIGINT/SIGTERM. Tests import `createApp()` instead of starting the server, and the test helper connects to the database itself. |
-| `backend/src/config/env.ts` | 15, 19–20 | Parsing and rejecting `PORT`. This runs once when the module is first loaded, and tests can't change the environment before that. |
+| `backend/src/index.ts` | 1–32 | The process entry point: it checks the environment, connects to MongoDB, calls `listen`, and handles SIGINT/SIGTERM. Tests import `createApp()` instead of starting the server, and the test helper connects to the database itself. |
+| `backend/src/config/env.ts` | 15–20 | Reading a `PORT` that is set, and rejecting an invalid one. This runs once when the module is first loaded, and tests can't change the environment before that. |
 | `backend/src/config/env.ts` | 25–26 | Throwing when a required variable is missing. The test setup always provides `GOOGLE_BACKEND_CLIENT_ID`, and `MONGODB_URI` is only read at startup. |
-| `backend/src/config/env.ts` | 39, 49–50 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
+| `backend/src/config/env.ts` | 36–38, 46–49 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
 | `backend/src/middleware/error-handler.middleware.ts` | 17–19 | Handing the error to Express when the response has already started. Every route sends its response in a single call after all of its work succeeds, so no request can fail after headers have gone out. |
 
 ---
