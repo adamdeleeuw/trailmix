@@ -29,6 +29,9 @@
 		"@typescript-eslint", 
 		"security-node"
 	],
+	// Typed linting only covers files in backend/tsconfig.json; JS tooling configs
+	// such as backend/jest.config.js aren't part of it, so skip them.
+	"ignorePatterns": ["*.js", "*.cjs", "*.mjs"],
 	"parser": "@typescript-eslint/parser",
 	"parserOptions": {
 		"project": "./backend/tsconfig.json"
