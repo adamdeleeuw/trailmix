@@ -28,7 +28,7 @@ sequenceDiagram
     participant G as Google
     participant C as Caddy (VM :443)
     participant B as Backend (:3000, private)
-    participant P as Course pixel server
+    participant M as MongoDB (private)
 
     Note over C: On startup: Caddy gets a Let's Encrypt<br/>certificate for 136-67-54-50.sslip.io (ACME, port 80)
 
@@ -45,20 +45,15 @@ sequenceDiagram
     C->>B: Forwards as plain HTTP (inside Docker network)
     B->>G: Verify ID token
     G-->>B: Verification response
-    B-->>C: Session JWT
-    C-->>App: Session JWT (encrypted)
+    B->>M: Find or create user, store hashed session token
+    B-->>C: Session token + user
+    C-->>App: Session token + user (encrypted)
 
-    App->>C: GET /api/connection-info (encrypted)
+    App->>C: GET /api/users/me, Authorization: Bearer token (encrypted)
     C->>B: HTTP
-    B-->>C: Server IP, client IP, server time
+    B->>M: Look up session by token hash, then its user
+    B-->>C: User (or 401 if the session was ended)
     C-->>App: Response (encrypted)
-
-    App->>C: WSS upgrade /ws/pixels (encrypted)
-    C->>B: WebSocket upgrade
-    B->>P: WSS wss://8.229.22.124
-    P-->>B: Pixel messages
-    B-->>C: Forwards each pixel
-    C-->>App: Pixels (encrypted)
 ```
 
 Release builds of the app only allow HTTPS. Debug builds additionally allow plain HTTP to `10.0.2.2` so the app can talk to a backend running locally.
@@ -95,18 +90,18 @@ Fill in `backend/.env`:
 
 ```dotenv
 GOOGLE_BACKEND_CLIENT_ID=<your Google Web client ID>.apps.googleusercontent.com
-JWT_SECRET=<a random secret>
-SERVER_PUBLIC_IP=<127.0.0.1 locally, or the VM's public IP>
+MONGODB_URI=mongodb://localhost:27017/trailmix
 ```
 
 **Local:**
 
 ```bash
+docker compose up -d --wait mongo  # MongoDB on 127.0.0.1:27017 (run from the repo root)
 npm install
 npm run build && npm run start     # serves plain HTTP on http://localhost:3000
 ```
 
-**VM:** the VM runs the backend and Caddy with Docker (Docker must be installed, and `backend/.env` must exist on the VM). The deploy script syncs the clone to `origin/main`, starts both containers and waits for `https://136-67-54-50.sslip.io/health` to respond:
+**VM:** the VM runs the backend, MongoDB and Caddy with Docker (Docker must be installed, and `backend/.env` must exist on the VM). The deploy script syncs the clone to `origin/main`, starts the containers and waits for `https://136-67-54-50.sslip.io/health` to respond:
 
 ```bash
 ~/cpen321-m1/scripts/deploy-backend.sh

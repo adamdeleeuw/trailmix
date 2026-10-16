@@ -1,11 +1,17 @@
-import express, { type Express, type Request, type Response} from 'express';
-import healthRoute from './routes/health.route';
+import express, { type Express, type Request, type Response } from 'express';
+import { handleError } from './middleware/error-handler.middleware';
 import authRoute from './routes/auth.route';
-import myNameRoute from './routes/my-name.route';
-import connectionInfoRoute from './routes/connection-info.route';
+import healthRoute from './routes/health.route';
+import usersRoute from './routes/users.route';
 
 const NOT_FOUND = 404;
 
+/**
+ * Builds the Express app with every route mounted.
+ *
+ * @remarks
+ * Doesn't connect to the database or listen, so tests can use it directly.
+ */
 export function createApp(): Express {
   const app = express();
   // trust X-Forwarded-For from Caddy: loopback when it runs on the host, a private
@@ -18,12 +24,13 @@ export function createApp(): Express {
 
   app.use('/health', healthRoute);
   app.use('/api/auth', authRoute);
-  app.use('/api/my-name', myNameRoute);
-  app.use('/api/connection-info', connectionInfoRoute);
+  app.use('/api/users', usersRoute);
 
   app.use((_req: Request, res: Response) => {
     res.status(NOT_FOUND).json({ error: 'Not Found' });
   });
+
+  app.use(handleError);
 
   return app;
 }

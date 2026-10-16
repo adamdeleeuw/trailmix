@@ -93,9 +93,15 @@
 
 
 ### **4.2. Databases**
-1. **[WRITE_NAME_HERE]**
-    - **Purpose**: ...
-2. ...
+1. **MongoDB (`mongo:8.0`)**
+    - **Purpose**: Stores Trailmix's accounts and sign-in sessions. It runs as a container next to the backend on the VM and is reachable only over the private docker compose network. Its data lives in the `mongo-data` volume, so it survives restarts, rebuilds, and deploys.
+    - **`users` collection**: one document per account, with `googleId` (Google's account ID), `email`, `name`, `photoUrl`, `profileComplete`, `createdAt`, and `updatedAt`.
+        - A **unique index on `googleId`** identifies users by the Google ID, which never changes, rather than by email, which can. The index also makes the database refuse a second account for the same Google account, even when two first sign-ins arrive at once.
+        - The email, name, and photo are refreshed from Google on every sign-in.
+    - **`sessions` collection**: one document per signed-in device, with `tokenHash`, `userId`, and `createdAt`.
+        - The app holds a random 256-bit token. Only its SHA-256 hash is stored (with a **unique index**), so a leaked database can't be used to sign in, and finding a session is one indexed lookup.
+        - Sessions are kept separate from users so one user can be signed in on several devices, and signing out deletes only that device's session.
+        - Sessions never expire on their own. A session ends when its device signs out, or when the account is deleted (`userId` is **indexed** so every session for the account can be removed at once). A session whose account no longer exists is rejected.
 
 
 ### **4.3. External Modules**

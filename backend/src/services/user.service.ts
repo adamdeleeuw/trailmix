@@ -1,39 +1,36 @@
+import type { Types } from 'mongoose';
+import { UserModel, type User } from '../models/user.model';
+import type { GoogleProfile } from './google.service';
+
 /**
- * spec: user storage keyed by google `sub`.
- * in-memory for now (no db wired up yet); swap the Maps for a db without
- * changing the exported function signatures.
+ * Returns the account for a Google account, creating it on first sign-in.
+ *
+ * @remarks
+ * This is one atomic upsert. When two first sign-ins race, the unique index on
+ * `googleId` rejects the second insert and MongoDB retries it as an update, so
+ * only one account is ever created. The email, name, and photo are refreshed
+ * from Google every time.
+ *
+ * @param profile - The verified Google account.
+ * @returns The stored user.
+ * @throws If the database operation fails.
  */
-import { randomUUID } from 'node:crypto';
-import type { TokenPayload } from 'google-auth-library';
-import type { User } from '../types/user';
-
-const usersByGoogleId = new Map<string, User>();
-const usersById = new Map<string, User>();
-
-/** returns the existing user for this google account, or creates one. */
-export function findOrCreateUser(profile: TokenPayload): {
-  user: User;
-  isNewUser: boolean;
-} {
-  const existing = usersByGoogleId.get(profile.sub);
-  if (existing) {
-    return { user: existing, isNewUser: false };
-  }
-
-  const user: User = {
-    id: randomUUID(), // concern: technically possible that two users happen to be assigned the same ID?
-    googleId: profile.sub,
-    email: profile.email ?? '',
-    firstName: profile.given_name ?? '',
-    lastName: profile.family_name ?? '',
-    pictureUrl: profile.picture,
-    createdAt: new Date(),
-  };
-  usersByGoogleId.set(user.googleId, user);
-  usersById.set(user.id, user);
-  return { user, isNewUser: true };
+export async function upsertGoogleUser(profile: GoogleProfile): Promise<User> {
+  const { googleId, ...googleFields } = profile;
+  return UserModel.findOneAndUpdate(
+    { googleId },
+    { $set: googleFields },
+    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+  ).lean();
 }
 
-export function findUserById(id: string): User | undefined {
-  return usersById.get(id);
+/**
+ * Looks up a user by ID.
+ *
+ * @param id - The user's ID.
+ * @returns The user, or `null` if the account doesn't exist (e.g. it was deleted).
+ * @throws If the database operation fails.
+ */
+export async function findUserById(id: Types.ObjectId): Promise<User | null> {
+  return UserModel.findById(id).lean();
 }

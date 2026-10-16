@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "jest"
+    "test": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js"
   },
   "engines": {
     "node": ">=22.0.0 <23.0.0",
@@ -21,16 +21,13 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "google-auth-library": "^11.0.2",
-    "jsonwebtoken": "^9.0.3",
-    "ws": "^8.21.3"
+    "mongoose": "^9.11.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.0",
     "@types/supertest": "^7.2.1",
-    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",

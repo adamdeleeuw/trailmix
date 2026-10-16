@@ -4,7 +4,7 @@
 
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
-| _Nothing to show_ |
+| 2026-10-15        | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 | Added the sign-in, sign-out and "get my account" API tests (issue #9) |
 
 ---
 
@@ -14,12 +14,14 @@
 
 #### 2.1.1. Tests
 
-| **Interface**                 | **Describe Group Location, No Mocks**                | **Describe Group Location, With Mocks**            | **Mocked Components**              |
-| ----------------------------- | ---------------------------------------------------- | -------------------------------------------------- | ---------------------------------- |
-| **POST /user/login**          | [`tests/no-mock/authenticationLogin.test.js#L1`](#) | [`tests/mock/authenticationLogin.test.js#L1`](#) | Google Authentication API, User DB |
-| **POST /study-groups/create** | ...                                                  | ...                                                | Study Group DB                     |
-| ...                           | ...                                                  | ...                                                | ...                                |
-| ...                           | ...                                                  | ...                                                | ...                                |
+| **Interface** | **Describe Group Location, No Mocks** | **Describe Group Location, With Mocks** | **Mocked Components** |
+| ------------- | ------------------------------------- | --------------------------------------- | --------------------- |
+| **POST /api/auth/google** | [`backend/tests/no-mock/auth.google.test.ts#L10`](../backend/tests/no-mock/auth.google.test.ts#L10) | [`backend/tests/mock/auth.google.test.ts#L51`](../backend/tests/mock/auth.google.test.ts#L51) | Google ID token verification (`OAuth2Client.verifyIdToken`), User DB, Session DB |
+| **POST /api/auth/sign-out** | [`backend/tests/no-mock/auth.sign-out.test.ts#L12`](../backend/tests/no-mock/auth.sign-out.test.ts#L12) | [`backend/tests/mock/auth.sign-out.test.ts#L19`](../backend/tests/mock/auth.sign-out.test.ts#L19) | Session DB |
+| **GET /api/users/me** | [`backend/tests/no-mock/users.me.test.ts#L11`](../backend/tests/no-mock/users.me.test.ts#L11) | [`backend/tests/mock/users.me.test.ts#L20`](../backend/tests/mock/users.me.test.ts#L20) | Session DB, User DB |
+| **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
+
+"No mocks" tests run against a real MongoDB (the same `mongo:8.0` image deployed on the VM). The sign-in tests that need Google to accept a token are in the mocked group, because automated tests can't get a real Google ID token. Every other test signs users in by adding a user and session straight to the test database (`backend/tests/helpers/auth.ts`), so it doesn't need Google.
 
 #### 2.1.2. Commit Hash Where Tests Run
 
@@ -27,18 +29,29 @@
 
 #### 2.1.3. Explanation on How to Run the Tests
 
-1. **Clone the Repository**:
+1. **Install the prerequisites:** Node.js 22 and Docker (running).
 
-   - Open your terminal and run:
-     ```
-     git clone https://github.com/example/your-project.git
-     ```
+2. **Clone the repository and install dependencies:**
+   ```
+   git clone https://github.com/adamdeleeuw/trailmix.git
+   cd trailmix/backend
+   npm install
+   ```
 
-2. **...**
+3. **Run the tests:** from the repository root, run one of these:
+   ```
+   ./scripts/run-backend-interface-tests.sh        # macOS / Linux
+   .\scripts\run-backend-interface-tests.ps1       # Windows
+   ```
+   The script starts the docker compose `mongo` container (bound to `127.0.0.1:27017`), then runs the mocked tests, the unmocked tests, and both together. Each run writes its coverage report to `backend/coverage/mock`, `backend/coverage/no-mock`, and `backend/coverage/interface`.
+
+   To use another MongoDB, set `MONGODB_TEST_URI` (e.g. `mongodb://localhost:27017`) and the script won't start the container. Each Jest worker uses its own `trailmix-test-<worker>` database and drops it when it finishes.
 
 ### 2.2. GitHub Actions Configuration Location
 
-`~/.github/workflows/backend-tests.yml`
+`~/.github/workflows/backend.yml` (the `test` job runs the same script, with a `mongo:8.0` service container)
+
+_(Placeholder for a screenshot of the passing GitHub Actions run)_
 
 ### 2.3. Jest Coverage Report Screenshots With Mocks
 
@@ -47,6 +60,21 @@ _(Placeholder for Jest coverage screenshot with mocks enabled)_
 ### 2.4. Jest Coverage Report Screenshots Without Mocks
 
 _(Placeholder for Jest coverage screenshot without mocks)_
+
+### 2.5. Jest Coverage Report Screenshots, Both Combined
+
+Add later
+
+### 2.6. Lines API Tests Can't Reach
+
+The combined run covers 100% of the statements, branches, functions, and lines in every file issue #9 adds or changes, except for this startup code. API tests build the app with `createApp()` and never start the server process.
+
+| **File** | **Lines** | **Reason** |
+| -------- | --------- | ---------- |
+| `backend/src/index.ts` | 1–27 | The process entry point: it checks the environment, connects to MongoDB, calls `listen`, and handles SIGINT/SIGTERM. Tests import `createApp()` instead of starting the server, and the test helper connects to the database itself. |
+| `backend/src/config/env.ts` | 15, 19–20 | Parsing and rejecting `PORT`. This runs once when the module is first loaded, and tests can't change the environment before that. |
+| `backend/src/config/env.ts` | 25–26 | Throwing when a required variable is missing. The test setup always provides `GOOGLE_BACKEND_CLIENT_ID`, and `MONGODB_URI` is only read at startup. |
+| `backend/src/config/env.ts` | 39, 49–50 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
 
 ---
 

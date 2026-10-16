@@ -16,15 +16,22 @@ services:
       - "3000:3000"
     env_file:
       - path: ./backend/.env
+    environment:
+      # overrides backend/.env, which points at localhost for `npm run dev`
+      MONGODB_URI: mongodb://mongo:27017/trailmix
+    depends_on:
+      mongo:
+        condition: service_healthy
 
-  # Nothing in the backend talks to a database yet, so MongoDB only starts when
-  # asked for: `docker compose --profile db up -d`. Once the backend uses it, drop
-  # the profile, set MONGODB_URI=mongodb://mongo:27017/cpen321 on the backend and
-  # add `depends_on: mongo: condition: service_healthy`.
+  # Data lives in the mongo-data volume, so it survives container restarts,
+  # rebuilds and deploys, and only `docker compose down -v` deletes it.
   mongo:
-    image: mongo:7
-    profiles: [db]
+    image: mongo:8.0
     restart: unless-stopped
+    # loopback only: reachable by tests and `npm run dev` on this machine, not by
+    # other devices on the network. production removes this mapping entirely.
+    ports:
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:

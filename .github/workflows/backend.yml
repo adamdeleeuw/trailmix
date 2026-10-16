@@ -31,6 +31,19 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # same image the VM runs, so tests get a real database rather than a mock
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGODB_TEST_URI: mongodb://localhost:27017
     defaults:
       run:
         working-directory: backend
@@ -43,7 +56,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      # mocked, unmocked, then combined, each with its own coverage report
+      - run: bash ../scripts/run-backend-interface-tests.sh
       - run: npm run build
 
   deploy:

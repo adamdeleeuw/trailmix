@@ -12,8 +12,10 @@
 #       ├── mock/         interface tests with mocks
 #       ├── no-mock/      interface tests without mocks
 #       └── ...           other test directories
+# The tests use a real MongoDB. Unless MONGODB_TEST_URI is set (CI provides its
+# own service container), this starts the docker compose `mongo` container.
 # Usage:
-#   ./scripts/run-backend-tests.sh
+#   ./scripts/run-backend-interface-tests.sh
 
 set -euo pipefail
 
@@ -86,6 +88,16 @@ fi
 if [[ ! -d "$BACKEND_DIR/node_modules" ]]; then
   info "Installing dependencies..."
   ( cd "$BACKEND_DIR" && npm install )
+fi
+
+# ---------------------------------------------------------------------------
+# Test database
+# ---------------------------------------------------------------------------
+if [[ -z "${MONGODB_TEST_URI:-}" ]]; then
+  command -v docker >/dev/null 2>&1 || die "Docker not found (needed for the test MongoDB)."
+  docker info >/dev/null 2>&1       || die "Docker is not running."
+  info "Starting the mongo container..."
+  ( cd "$ROOT" && docker compose up -d --wait mongo )
 fi
 
 # ---------------------------------------------------------------------------

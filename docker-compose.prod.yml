@@ -2,8 +2,8 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Caddy is the only thing reachable from the internet. It gets a Let's Encrypt
-# certificate for SITE_ADDRESS and forwards everything (HTTP and the /ws/pixels
-# WebSocket) to the backend over the private compose network.
+# certificate for SITE_ADDRESS and forwards everything to the backend over the
+# private compose network.
 
 services:
   backend:
@@ -11,6 +11,11 @@ services:
     ports: !reset []
     expose:
       - "3000"
+
+  mongo:
+    # no host port: only the backend, on the compose network, can reach the
+    # database (it has no password, so it must never be exposed)
+    ports: !reset []
 
   caddy:
     image: caddy:2-alpine

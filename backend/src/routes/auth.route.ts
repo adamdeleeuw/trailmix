@@ -1,9 +1,10 @@
-/** spec: maps POST /api/auth/google to the google sign-in controller. */
-import express, {type Router} from 'express';
-import {logIntoGoogle} from '../controllers/auth.controller';
+import { Router } from 'express';
+import { signInWithGoogle, signOut } from '../controllers/auth.controller';
+import { requireSession } from '../middleware/require-session.middleware';
 
-const router: Router = express.Router();
+const router = Router(); // routes under /api/auth
 
-router.post('/google', logIntoGoogle);
+router.post('/google', signInWithGoogle);
+router.post('/sign-out', requireSession, signOut);
 
 export default router;

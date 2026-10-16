@@ -114,6 +114,25 @@ if (-not (Test-Path (Join-Path $BackendDir 'node_modules'))) {
 }
 
 # ---------------------------------------------------------------------------
+# Test database
+# ---------------------------------------------------------------------------
+
+if (-not $env:MONGODB_TEST_URI) {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Die "Docker not found (needed for the test MongoDB)." }
+    docker info *> $null
+    if ($LASTEXITCODE -ne 0) { Die "Docker is not running." }
+    Info "Starting the mongo container..."
+    Push-Location $Root
+    try {
+        docker compose up -d --wait mongo
+        if ($LASTEXITCODE -ne 0) { Die "Couldn't start the mongo container." }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Run interface test phases
 # ---------------------------------------------------------------------------
 
