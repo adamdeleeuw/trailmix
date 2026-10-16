@@ -3,112 +3,100 @@ package com.example.cpen321application.data
 import com.example.cpen321application.BuildConfig
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.HttpURLConnection.HTTP_NO_CONTENT
+import java.net.HttpURLConnection.HTTP_OK
+import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONException
 import org.json.JSONObject
 
-/**
- * spec: http client for the backend. all calls run on Dispatchers.IO.
- * - signInWithGoogle: POST /api/auth/google, trades a google id token for a session.
- * - getMyName: GET /api/my-name with the session token.
- * - getConnectionInfo: GET /api/connection-info with the session token.
- * errors: InvalidCredentialsException (401 on sign-in), UnauthorizedException
- * (401 on protected route), IOException (network / other http errors).
- */
+/** Thrown when the backend responds 401, meaning the token or session is not valid. */
+class UnauthorizedException : IOException("Unauthorized")
 
-class InvalidCredentialsException : Exception("Invalid credentials")
-class UnauthorizedException : Exception("Unauthorized")
-
-data class UserInfo(
+/** The signed-in user's account, as returned by the backend. */
+data class User(
     val id: String,
     val email: String,
-    val firstName: String,
-    val lastName: String,
+    val name: String,
+    val photoUrl: String?,
+    val profileComplete: Boolean, // whether the commute questionnaire has been submitted
 )
 
-data class ConnectionInfo(
-    val serverIp: String,
-    val serverTime: String,
-    val clientIp: String,
-)
+/** A new session from signing in. */
+data class SignInResponse(val sessionToken: String, val user: User)
 
-data class Session(
-    val token: String,
-    val expiresAtMillis: Long, // local clock; used to drop expired sessions client-side
-    val isNewUser: Boolean,
-    val user: UserInfo,
-)
+/**
+ * The backend's auth endpoints.
+ *
+ * Every call throws [UnauthorizedException] on a 401 and [IOException] on any
+ * other failure, including no network and a malformed response.
+ */
+interface AuthApi {
+    /** Trades a Google ID token for a session, creating the account on first sign-in. */
+    suspend fun signIn(idToken: String): SignInResponse
 
-object BackendApi {
+    /** Fetches the account a session belongs to. */
+    suspend fun getMe(sessionToken: String): User
+
+    /** Ends one session, leaving the user's other devices signed in. */
+    suspend fun signOut(sessionToken: String)
+}
+
+/** [AuthApi] over HTTP. */
+object BackendApi : AuthApi {
+    private const val TIMEOUT_MS = 5_000
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
-    suspend fun signInWithGoogle(idToken: String): Session {
-        val body = JSONObject().put("idToken", idToken).toString()
-        val (code, text) = request("POST", "/api/auth/google", body = body)
-        if (code == HttpURLConnection.HTTP_UNAUTHORIZED) throw InvalidCredentialsException()
-        if (code != HttpURLConnection.HTTP_OK) throw IOException("HTTP $code")
+    override suspend fun signIn(idToken: String) =
+        request("POST", "/api/auth/google", body = JSONObject().put("idToken", idToken)) {
+            SignInResponse(it.getString("sessionToken"), parseUser(it.getJSONObject("user")))
+        }
 
-        val json = JSONObject(text)
-        val user = json.getJSONObject("user")
-        return Session(
-            token = json.getString("sessionToken"),
-            expiresAtMillis = System.currentTimeMillis() + json.getLong("expiresIn") * 1000,
-            isNewUser = json.getBoolean("isNewUser"),
-            user = UserInfo(
-                id = user.getString("id"),
-                email = user.getString("email"),
-                firstName = user.getString("firstName"),
-                lastName = user.getString("lastName"),
-            ),
-        )
-    }
+    override suspend fun getMe(sessionToken: String) =
+        request("GET", "/api/users/me", sessionToken) { parseUser(it.getJSONObject("user")) }
 
-    suspend fun getMyName(sessionToken: String): String {
-        val (code, text) = request("GET", "/api/my-name", sessionToken = sessionToken)
-        if (code == HttpURLConnection.HTTP_UNAUTHORIZED) throw UnauthorizedException()
-        if (code != HttpURLConnection.HTTP_OK) throw IOException("HTTP $code")
+    override suspend fun signOut(sessionToken: String) =
+        request("POST", "/api/auth/sign-out", sessionToken) {}
 
-        val json = JSONObject(text)
-        return "${json.getString("firstName")} ${json.getString("lastName")}"
-    }
+    private fun parseUser(json: JSONObject) = User(
+        id = json.getString("id"),
+        email = json.getString("email"),
+        name = json.getString("name"),
+        photoUrl = if (json.isNull("photoUrl")) null else json.getString("photoUrl"),
+        profileComplete = json.getBoolean("profileComplete"),
+    )
 
-    suspend fun getConnectionInfo(sessionToken: String): ConnectionInfo {
-        val (code, text) = request("GET", "/api/connection-info", sessionToken = sessionToken)
-        if (code == HttpURLConnection.HTTP_UNAUTHORIZED) throw UnauthorizedException()
-        if (code != HttpURLConnection.HTTP_OK) throw IOException("HTTP $code")
-
-        val json = JSONObject(text)
-        return ConnectionInfo(
-            serverIp = json.getString("serverIp"),
-            serverTime = json.getString("serverTime"),
-            clientIp = json.getString("clientIp"),
-        )
-    }
-
-    // returns (status code, body)
-    // body is the error stream for non-2xx
-    private suspend fun request(
+    // parses inside the try so a malformed body (e.g. a captive portal page) becomes an IOException
+    private suspend fun <T> request(
         method: String,
         path: String,
-        body: String? = null,
         sessionToken: String? = null,
-    ): Pair<Int, String> = withContext(Dispatchers.IO) {
-        val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 5_000
-            readTimeout = 5_000
-            if (sessionToken != null) setRequestProperty("Authorization", "Bearer $sessionToken")
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                outputStream.use { it.write(body.toByteArray()) }
-            }
-        }
+        body: JSONObject? = null,
+        parse: (JSONObject) -> T,
+    ): T = withContext(Dispatchers.IO) {
+        val connection = URL(baseUrl + path).openConnection() as HttpURLConnection
         try {
-            val code = connection.responseCode
-            val stream = if (code < 400) connection.inputStream else connection.errorStream
-            code to (stream?.bufferedReader()?.use { it.readText() } ?: "")
+            connection.requestMethod = method
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            sessionToken?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
+            body?.let {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { out -> out.write(it.toString().toByteArray()) }
+            }
+
+            when (val code = connection.responseCode) {
+                HTTP_OK, HTTP_NO_CONTENT -> {
+                    val text = connection.inputStream.bufferedReader().use { it.readText() }
+                    parse(JSONObject(text.ifEmpty { "{}" })) // a 204 has no body
+                }
+                else -> throw if (code == HTTP_UNAUTHORIZED) UnauthorizedException() else IOException("HTTP $code")
+            }
+        } catch (e: JSONException) {
+            throw IOException("Malformed response", e)
         } finally {
             connection.disconnect()
         }
