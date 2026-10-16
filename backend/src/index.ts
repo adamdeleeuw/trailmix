@@ -2,7 +2,6 @@ import { createApp } from './app';
 import { connectDatabase, disconnectDatabase } from './config/db';
 import { assertEnv, env } from './config/env';
 
-const SUCCESS_CODE = 0;
 const FAILURE_CODE = 1;
 
 async function main(): Promise<void> {
@@ -13,16 +12,21 @@ async function main(): Promise<void> {
     console.log(`Server listening on port ${env.port}`);
   });
 
+  // once the server and database are closed nothing keeps the event loop alive, so node exits on its own
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
       server.close(() => {
-        void disconnectDatabase().finally(() => process.exit(SUCCESS_CODE));
+        disconnectDatabase().catch((err: unknown) => {
+          console.error(err);
+          process.exitCode = FAILURE_CODE;
+        });
       });
     });
   }
 }
 
-main().catch((err: unknown) => {
+main().catch(async (err: unknown) => {
   console.error(err);
-  process.exit(FAILURE_CODE);
+  process.exitCode = FAILURE_CODE;
+  await disconnectDatabase(); // startup may have failed after connecting, which would keep node alive
 });

@@ -44,6 +44,7 @@ export const env = {
  * @throws If any required variable is missing or empty.
  */
 export function assertEnv(): void {
-  void env.googleClientId;
-  void env.mongodbUri;
+  for (const name of ['GOOGLE_BACKEND_CLIENT_ID', 'MONGODB_URI']) {
+    requireEnv(name);
+  }
 }

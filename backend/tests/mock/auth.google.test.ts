@@ -26,10 +26,8 @@ function googlePayload(
     picture: 'https://example.com/ada.png',
     ...overrides,
   };
-  for (const key of omit) {
-    delete payload[key];
-  }
-  return payload;
+  const omitted = new Set<string>(omit);
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => !omitted.has(key))) as TokenPayload;
 }
 
 // fakes Google's token check: automated tests can't get a real Google token
