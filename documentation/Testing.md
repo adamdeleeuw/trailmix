@@ -43,13 +43,15 @@
    ./scripts/run-backend-interface-tests.sh        # macOS / Linux
    .\scripts\run-backend-interface-tests.ps1       # Windows
    ```
-   The script starts the docker compose `mongo` container (bound to `127.0.0.1:27017`), then runs the mocked tests, the unmocked tests, and both together. Each run writes its coverage report to `backend/coverage/mock`, `backend/coverage/no-mock`, and `backend/coverage/interface`.
+   The script starts the docker compose `mongo` container (bound to `127.0.0.1:27017`), then runs the mocked tests, the unmocked tests, and both together. Each run writes its coverage report to `backend/coverage/mock`, `backend/coverage/no-mock`, and `backend/coverage/interface`. Open `lcov-report/index.html` in any of those folders to browse the report.
 
    To use another MongoDB, set `MONGODB_TEST_URI` (e.g. `mongodb://localhost:27017`) and the script won't start the container. Each Jest worker uses its own `trailmix-test-<worker>` database and drops it when it finishes.
 
 ### 2.2. GitHub Actions Configuration Location
 
 `~/.github/workflows/backend.yml` (the `test` job runs the same script, with a `mongo:7.0` service container)
+
+Each run posts a coverage table for all three runs on its summary page and uploads the three HTML reports as the `backend-coverage` artifact. The combined report is also uploaded to Codacy.
 
 _(Placeholder for a screenshot of the passing GitHub Actions run)_
 
@@ -67,7 +69,7 @@ Add later
 
 ### 2.6. Lines API Tests Can't Reach
 
-The combined run covers 100% of the statements, branches, functions, and lines in every file issue #9 adds or changes, except for this startup code. API tests build the app with `createApp()` and never start the server process.
+The combined run covers 100% of the statements, branches, functions, and lines in every file issue #9 adds or changes, except for the lines below. API tests build the app with `createApp()` and never start the server process.
 
 | **File** | **Lines** | **Reason** |
 | -------- | --------- | ---------- |
@@ -75,6 +77,7 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 | `backend/src/config/env.ts` | 15, 19–20 | Parsing and rejecting `PORT`. This runs once when the module is first loaded, and tests can't change the environment before that. |
 | `backend/src/config/env.ts` | 25–26 | Throwing when a required variable is missing. The test setup always provides `GOOGLE_BACKEND_CLIENT_ID`, and `MONGODB_URI` is only read at startup. |
 | `backend/src/config/env.ts` | 39, 49–50 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
+| `backend/src/middleware/error-handler.middleware.ts` | 17–19 | Handing the error to Express when the response has already started. Every route sends its response in a single call after all of its work succeeds, so no request can fail after headers have gone out. |
 
 ---
 

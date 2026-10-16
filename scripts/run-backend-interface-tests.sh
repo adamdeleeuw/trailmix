@@ -58,7 +58,7 @@ require_dir "$BACKEND_DIR"
 require_dir "$BACKEND_DIR/src"
 require_dir "$BACKEND_DIR/tests"
 
-if ! node -e "const p=require('$BACKEND_DIR/package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
+if ! (cd "$BACKEND_DIR" && node -e "const p=require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"); then
   die "No \"test\" script found in $BACKEND_DIR/package.json (expected Jest)."
 fi
 
