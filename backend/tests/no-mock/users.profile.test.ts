@@ -54,14 +54,14 @@ describe('Unmocked: PUT /api/users/me/profile', () => {
     expect(await storedUser(user)).toMatchObject({ profileComplete: true, vehicle: corolla });
   });
 
-  // Input: doesn't drive, doesn't take transit
+  // Input: doesn't drive, doesn't take transit, and a timezone in lowercase
   // Expected status code: 200
-  // Expected behavior: the profile is saved and marked finished
+  // Expected behavior: the profile is saved and marked finished, with the timezone's standard spelling
   // Expected output: { user } with vehicle null and transit null
   test("Doesn't drive and doesn't take transit", async () => {
     const { user, token } = await createSignedInUser();
 
-    const response = await putProfile(token, { timezone: 'Europe/London', vehicle: null, transit: null });
+    const response = await putProfile(token, { timezone: 'europe/london', vehicle: null, transit: null });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ user: { profileComplete: true, vehicle: null, transit: null } });

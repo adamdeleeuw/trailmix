@@ -15,12 +15,12 @@ function isOneOf<T>(list: readonly T[], value: unknown): value is T {
   return list.includes(value as T);
 }
 
-/** Checks a timezone name, like "America/Vancouver", against the ones Node knows. */
+/** Checks a timezone name, like "America/Vancouver", against the ones Node knows, and returns its standard spelling. */
 function parseTimezone(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_TIMEZONE_LENGTH) return undefined;
   try {
-    new Intl.DateTimeFormat('en', { timeZone: value });
-    return value;
+    // the resolved name fixes capitals and old aliases, e.g. "US/Pacific" becomes "America/Los_Angeles"
+    return new Intl.DateTimeFormat('en', { timeZone: value }).resolvedOptions().timeZone;
   } catch {
     return undefined; // RangeError for a name that isn't a real timezone
   }
