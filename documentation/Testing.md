@@ -7,6 +7,7 @@
 | 2026-10-15        | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 | Added the sign-in, sign-out and "get my account" API tests (issue #9) |
 | 2026-10-16        | 2.1.2, 2.2, 2.3, 2.4, 2.5, 2.6, 4.1 | Added the CI run and coverage screenshots, the coverage upload to Codacy, the error-handler branch API tests can't reach, and the real front-end test location (issue #9) |
 | 2026-10-16        | 2.1.1, 2.1.3, 2.6 | Added the vehicle list and "save my profile" API tests, and labelled each HTML coverage report with its run (issue #10) |
+| 2026-10-16        | 2.1.2, 2.2, 2.3, 2.4, 2.5 | Updated the CI run and coverage screenshots and the commit the tests run on for issue #10 |
 
 ---
 
@@ -32,7 +33,7 @@ The vehicle list endpoints have no mocked group. Their data is `backend/src/data
 
 #### 2.1.2. Commit Hash Where Tests Run
 
-`b0e71819f4748b99331c55ac8e9620e776190a57`
+`cb7edbe7a5f04f1fc0f1d959136ea53a1660c402`
 
 #### 2.1.3. Explanation on How to Run the Tests
 
