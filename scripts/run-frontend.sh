@@ -26,9 +26,17 @@ command -v java >/dev/null 2>&1 || die "Java not found."
 [[ -f "$FRONTEND_DIR/local.properties" ]] || die "Missing $FRONTEND_DIR/local.properties."
 [[ -x "$FRONTEND_DIR/gradlew" ]] || die "Missing $FRONTEND_DIR/gradlew."
 
+# local.properties escapes ':' and '\' (Android Studio writes C\:\\Users\\...), so unescape it,
+# and Git Bash needs it as /c/Users/... because PATH is split on ':'
+sdk_dir="$(grep -E '^sdk\.dir=' "$FRONTEND_DIR/local.properties" | head -1 | cut -d= -f2- | tr -d ' "' \
+  | sed -E 's/[\](.)/\1/g' || true)"
+if [[ -n "$sdk_dir" ]] && command -v cygpath >/dev/null 2>&1; then
+  sdk_dir="$(cygpath -u "$sdk_dir")"
+fi
+
 if [[ -n "${ANDROID_HOME:-}" && -d "$ANDROID_HOME" ]]; then
   :
-elif sdk_dir="$(grep -E '^sdk\.dir=' "$FRONTEND_DIR/local.properties" | head -1 | cut -d= -f2- | tr -d ' "')"; [[ -n "$sdk_dir" && -d "$sdk_dir" ]]; then
+elif [[ -n "$sdk_dir" && -d "$sdk_dir" ]]; then
   export ANDROID_HOME="$sdk_dir"
 else
   die "Set ANDROID_HOME or sdk.dir in $FRONTEND_DIR/local.properties."

@@ -1,0 +1,23 @@
+{
+  "Acura": ["ILX", "Integra", "MDX", "RDX", "TLX", "TSX"],
+  "Audi": ["A3", "A4", "A5", "A6", "Q3", "Q5", "Q7"],
+  "BMW": ["3 Series", "5 Series", "X1", "X3", "X5"],
+  "Chevrolet": ["Camaro", "Cruze", "Equinox", "Malibu", "Silverado", "Spark", "Tahoe", "Trax"],
+  "Dodge": ["Caravan", "Challenger", "Charger", "Durango", "Journey"],
+  "Ford": ["Escape", "Explorer", "F-150", "Focus", "Fusion", "Maverick", "Mustang", "Ranger"],
+  "GMC": ["Acadia", "Canyon", "Sierra", "Terrain", "Yukon"],
+  "Honda": ["Accord", "Civic", "CR-V", "Fit", "HR-V", "Odyssey", "Pilot", "Ridgeline"],
+  "Hyundai": ["Accent", "Elantra", "Kona", "Palisade", "Santa Fe", "Sonata", "Tucson"],
+  "Jeep": ["Cherokee", "Compass", "Grand Cherokee", "Wrangler"],
+  "Kia": ["Forte", "Rio", "Seltos", "Sorento", "Soul", "Sportage", "Telluride"],
+  "Lexus": ["ES", "IS", "NX", "RX", "UX"],
+  "Mazda": ["CX-30", "CX-5", "CX-50", "CX-9", "Mazda3", "Mazda6", "MX-5"],
+  "Mercedes-Benz": ["C-Class", "E-Class", "GLA", "GLC", "GLE"],
+  "Mitsubishi": ["Eclipse Cross", "Lancer", "Mirage", "Outlander", "RVR"],
+  "Nissan": ["Altima", "Frontier", "Kicks", "Murano", "Pathfinder", "Rogue", "Sentra", "Versa"],
+  "Ram": ["1500", "2500", "ProMaster"],
+  "Subaru": ["Ascent", "Crosstrek", "Forester", "Impreza", "Legacy", "Outback", "WRX"],
+  "Toyota": ["4Runner", "Camry", "Corolla", "Highlander", "Prius", "RAV4", "Sienna", "Tacoma", "Tundra"],
+  "Volkswagen": ["Atlas", "Golf", "Jetta", "Passat", "Taos", "Tiguan"],
+  "Volvo": ["S60", "XC40", "XC60", "XC90"]
+}
