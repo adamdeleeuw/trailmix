@@ -27,7 +27,6 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Baked in at build time from local.properties — never hard-code URLs or
@@ -42,6 +41,7 @@ android {
             "GOOGLE_CLIENT_ID",
             "\"${localProperty("GOOGLE_CLIENT_ID")}\""
         )
+        manifestPlaceholders["MAPS_API_KEY"] = localProperty("MAPS_API_KEY")
     }
 
     buildTypes {
@@ -91,4 +91,5 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    implementation(libs.maps.compose)
 }
