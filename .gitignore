@@ -60,3 +60,7 @@ pdfs/
 frontend/app/release/
 
 .codacy/
+# Local Claude instructions (personal, not part of the project)
+CLAUDE.md
+CLAUDE.local.md
+.local/
