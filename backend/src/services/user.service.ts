@@ -1,5 +1,5 @@
 import type { Types } from 'mongoose';
-import { UserModel, type User } from '../models/user.model';
+import { UserModel, type Profile, type User } from '../models/user.model';
 import type { GoogleProfile } from './google.service';
 
 /**
@@ -33,4 +33,23 @@ export async function upsertGoogleUser(profile: GoogleProfile): Promise<User> {
  */
 export async function findUserById(id: Types.ObjectId): Promise<User | null> {
   return UserModel.findById(id).lean();
+}
+
+/**
+ * Saves a user's questionnaire answers and marks their profile as finished.
+ *
+ * @remarks
+ * Replaces the whole profile, so saving `vehicle: null` removes a saved car.
+ *
+ * @param id - The user's ID.
+ * @param profile - Answers already checked by `parseProfile`.
+ * @returns The updated user, or `null` if the account doesn't exist.
+ * @throws If the database operation fails.
+ */
+export async function saveUserProfile(id: Types.ObjectId, profile: Profile): Promise<User | null> {
+  return UserModel.findByIdAndUpdate(
+    id,
+    { $set: { ...profile, profileComplete: true } },
+    { new: true, runValidators: true },
+  ).lean();
 }

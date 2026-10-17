@@ -36,14 +36,26 @@ has_test_files() {
   find "$1" -name "$2" -print -quit 2>/dev/null | grep -q .
 }
 
+# Jest's HTML coverage report has no title option, so name the run in each
+# page's <title> and heading, so screenshots show which report they are.
+label_html_report() {
+  local title="$1"
+  local coverage_dir="$2"
+
+  find "$coverage_dir" -name '*.html' -exec sed -i.bak     -e "s|<title>Code coverage report|<title>$title: code coverage report|"     -e "s|<h1>|<h1>$title: |" {} +
+  find "$coverage_dir" -name '*.html.bak' -delete # -i.bak works with both GNU and BSD sed
+}
+
 run_interface_tests() {
   local label="$1"
-  local coverage_dir="$2"
-  shift 2
+  local title="$2"
+  local coverage_dir="$3"
+  shift 3
   local -a test_paths=("$@")
 
   info "Running $label interface tests with coverage (${test_paths[*]})..."
   npm test -- "${test_paths[@]}" --coverage --coverageDirectory="$coverage_dir"
+  label_html_report "$title" "$coverage_dir"
   echo
 }
 
@@ -107,15 +119,15 @@ fi
   cd "$BACKEND_DIR"
 
   if [[ "$has_mock_tests" == true ]]; then
-    run_interface_tests "mocked" "coverage/mock" "tests/mock/"
+    run_interface_tests "mocked" "Mocked tests" "coverage/mock" "tests/mock/"
   fi
 
   if [[ "$has_no_mock_tests" == true ]]; then
-    run_interface_tests "no-mock" "coverage/no-mock" "tests/no-mock/"
+    run_interface_tests "no-mock" "No-mock tests" "coverage/no-mock" "tests/no-mock/"
   fi
 
   if [[ "$has_mock_tests" == true && "$has_no_mock_tests" == true ]]; then
-    run_interface_tests "all interface" "coverage/interface" "tests/mock/" "tests/no-mock/"
+    run_interface_tests "all interface" "All tests (mock + no-mock)" "coverage/interface" "tests/mock/" "tests/no-mock/"
   fi
 )
 

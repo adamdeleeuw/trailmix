@@ -17,8 +17,10 @@ class BackButtonTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
 
+    private val user = User("1", "a@b.c", "Ada", null, true)
+
     private fun assertBackExits(state: AppState) {
-        rule.setContent { TrailmixApp(state, isSigningIn = false, signInError = null, {}, {}, {}) }
+        rule.setContent { TrailmixApp(state, isSigningIn = false, signInError = null, {}, {}, {}) {} }
         // with no screen handling Back, Android handles it and leaves the app
         assertFalse(rule.activity.onBackPressedDispatcher.hasEnabledCallbacks())
     }
@@ -27,5 +29,5 @@ class BackButtonTest {
     fun backOnSignInExitsApp() = assertBackExits(AppState.SignIn)
 
     @Test
-    fun backOnMainExitsApp() = assertBackExits(AppState.Main(User("1", "a@b.c", "Ada", null, true)))
+    fun backOnMainExitsApp() = assertBackExits(AppState.Main(user))
 }
