@@ -33,7 +33,7 @@ fun TrailmixApp(
     Surface(Modifier.fillMaxSize()) {
         when (state) {
             AppState.Loading -> CenteredColumn { CircularProgressIndicator() }
-            AppState.SignIn -> RouteScreen() // TEMP: skip sign-in to test the map. DO NOT COMMIT
+            AppState.SignIn -> RouteScreen() // SWITCH BACK WHEN MERGING WITH MAIN
             AppState.Offline -> CenteredColumn {
                 Text("Couldn't reach Trailmix. Check your connection.")
                 Button(onClick = onRetry) { Text("Retry") }

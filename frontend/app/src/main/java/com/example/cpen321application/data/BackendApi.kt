@@ -1,19 +1,25 @@
 package com.example.cpen321application.data
 
 import com.example.cpen321application.BuildConfig
+import com.google.android.gms.maps.model.LatLng
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.HttpURLConnection.HTTP_NOT_FOUND
 import java.net.HttpURLConnection.HTTP_NO_CONTENT
 import java.net.HttpURLConnection.HTTP_OK
 import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
 /** Thrown when the backend responds 401, meaning the token or session is not valid. */
 class UnauthorizedException : IOException("Unauthorized")
+
+/** Thrown when the backend responds 404, e.g. Google found no route. */
+class NotFoundException : IOException("Not Found")
 
 /** The signed-in user's account, as returned by the backend. */
 data class User(
@@ -23,6 +29,17 @@ data class User(
     val photoUrl: String?,
     val profileComplete: Boolean, // whether the commute questionnaire has been submitted
 )
+
+/** One leg of a commute. [polyline] is in Google's encoded polyline format (see `decodePolyline`). */
+data class RouteLeg(
+    val mode: String, // "DRIVE" or "TRANSIT"
+    val durationSeconds: Int,
+    val distanceMeters: Int,
+    val polyline: String,
+)
+
+/** A planned chained commute: the drive leg, then the transit leg. */
+data class ChainedRoute(val legs: List<RouteLeg>, val totalDurationSeconds: Int)
 
 /** A new session from signing in. */
 data class SignInResponse(val sessionToken: String, val user: User)
@@ -44,9 +61,15 @@ interface AuthApi {
     suspend fun signOut(sessionToken: String)
 }
 
-/** [AuthApi] over HTTP. */
-object BackendApi : AuthApi {
-    private const val TIMEOUT_MS = 5_000
+/** The backend's route planning endpoints. Throws like [AuthApi], plus [NotFoundException] when there is no route. */
+interface RoutesApi {
+    /** Plans driving from [start] to [split], then transit from [split] to [destination]. */
+    suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng): ChainedRoute
+}
+
+/** [AuthApi] and [RoutesApi] over HTTP. */
+object BackendApi : AuthApi, RoutesApi {
+    private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
     override suspend fun signIn(idToken: String) =
@@ -59,6 +82,31 @@ object BackendApi : AuthApi {
 
     override suspend fun signOut(sessionToken: String) =
         request("POST", "/api/auth/sign-out", sessionToken) {}
+
+    override suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng) =
+        request(
+            "POST",
+            "/api/routes/chained",
+            sessionToken,
+            body = JSONObject().put("start", start.toJson()).put("split", split.toJson()).put("destination", destination.toJson()),
+        ) {
+            ChainedRoute(
+                legs = parseLegs(it.getJSONArray("legs")),
+                totalDurationSeconds = it.getInt("totalDurationSeconds"),
+            )
+        }
+
+    private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
+
+    private fun parseLegs(json: JSONArray) = (0 until json.length()).map { i ->
+        val leg = json.getJSONObject(i)
+        RouteLeg(
+            mode = leg.getString("mode"),
+            durationSeconds = leg.getInt("durationSeconds"),
+            distanceMeters = leg.getInt("distanceMeters"),
+            polyline = leg.getString("polyline"),
+        )
+    }
 
     private fun parseUser(json: JSONObject) = User(
         id = json.getString("id"),
@@ -93,7 +141,11 @@ object BackendApi : AuthApi {
                     val text = connection.inputStream.bufferedReader().use { it.readText() }
                     parse(JSONObject(text.ifEmpty { "{}" })) // a 204 has no body
                 }
-                else -> throw if (code == HTTP_UNAUTHORIZED) UnauthorizedException() else IOException("HTTP $code")
+                else -> throw when (code) {
+                    HTTP_UNAUTHORIZED -> UnauthorizedException()
+                    HTTP_NOT_FOUND -> NotFoundException()
+                    else -> IOException("HTTP $code")
+                }
             }
         } catch (e: JSONException) {
             throw IOException("Malformed response", e)
