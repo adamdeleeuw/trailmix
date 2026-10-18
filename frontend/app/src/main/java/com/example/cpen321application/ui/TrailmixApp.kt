@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.cpen321application.ui.auth.SignInScreen
-import com.example.cpen321application.ui.route.RouteScreen
 import com.example.cpen321application.ui.main.MainScreen
 
 import com.example.cpen321application.ui.questionnaire.QuestionnaireScreen
@@ -33,7 +32,7 @@ fun TrailmixApp(
     Surface(Modifier.fillMaxSize()) {
         when (state) {
             AppState.Loading -> CenteredColumn { CircularProgressIndicator() }
-            AppState.SignIn -> RouteScreen() // SWITCH BACK WHEN MERGING WITH MAIN
+            AppState.SignIn -> SignInScreen(isSigningIn, signInError, onSignIn)
             AppState.Offline -> CenteredColumn {
                 Text("Couldn't reach Trailmix. Check your connection.")
                 Button(onClick = onRetry) { Text("Retry") }

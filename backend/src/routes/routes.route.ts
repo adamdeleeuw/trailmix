@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { planChainedRoute } from '../controllers/routes.controller';
-// import { requireSession } from '../middleware/require-session.middleware'; #DO NOT COMMIT, TEMP
+import { requireSession } from '../middleware/require-session.middleware';
 
 const router = Router(); // routes under /api/routes
 
-router.post('/chained', planChainedRoute); // ADD REQUIRESESSION BACK LATER
+router.post('/chained', requireSession, planChainedRoute);
 
 export default router;
