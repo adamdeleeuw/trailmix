@@ -10,13 +10,13 @@ import com.example.cpen321application.data.UnauthorizedException
 import com.example.cpen321application.data.User
 import com.example.cpen321application.data.Vehicle
 import com.example.cpen321application.ui.components.filterOptions
-import com.example.cpen321application.ui.questionnaire.CHOOSE_AN_OPTION
-import com.example.cpen321application.ui.questionnaire.FUEL_OUT_OF_RANGE
+import com.example.cpen321application.ui.commute.CHOOSE_AN_OPTION
+import com.example.cpen321application.ui.commute.FUEL_OUT_OF_RANGE
 import com.example.cpen321application.ui.questionnaire.QuestionnaireViewModel
-import com.example.cpen321application.ui.questionnaire.REQUIRED
-import com.example.cpen321application.ui.questionnaire.SAVE_FAILED
-import com.example.cpen321application.ui.questionnaire.SAVE_OFFLINE
-import com.example.cpen321application.ui.questionnaire.TransitChoice
+import com.example.cpen321application.ui.commute.REQUIRED
+import com.example.cpen321application.ui.SAVE_FAILED
+import com.example.cpen321application.ui.SAVE_OFFLINE
+import com.example.cpen321application.ui.commute.TransitChoice
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +69,7 @@ private class TokenStore(private val token: String?) : SessionStore {
 @OptIn(ExperimentalCoroutinesApi::class)
 class QuestionnaireViewModelTest {
     private val api = FakeProfileApi()
-    private val viewModel = QuestionnaireViewModel(api, TokenStore("token"))
+    private lateinit var viewModel: QuestionnaireViewModel // built after the test dispatcher is set
     private var savedAs: User? = null
     private var signedOut = false
 
@@ -77,60 +77,63 @@ class QuestionnaireViewModelTest {
 
     // a driver who takes transit, with every required answer filled in
     private fun answerAsDriver() {
-        viewModel.loadMakes()
-        viewModel.chooseDrives(true)
-        viewModel.chooseMake("Toyota")
-        viewModel.chooseModel("Corolla")
-        viewModel.changeFuelDigits("72")
-        viewModel.chooseTransit(TransitChoice.ADULT_STORED_VALUE)
+        viewModel.vehicleForm.loadMakes()
+        viewModel.vehicleForm.chooseDrives(true)
+        viewModel.vehicleForm.chooseMake("Toyota")
+        viewModel.vehicleForm.chooseModel("Corolla")
+        viewModel.vehicleForm.changeFuelDigits("72")
+        viewModel.transitForm.choose(TransitChoice.ADULT_STORED_VALUE)
     }
 
     @Before
-    fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    fun setUp() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        viewModel = QuestionnaireViewModel(api, TokenStore("token"))
+    }
 
     @After
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
     fun noErrorsShowBeforeTheFirstSubmit() {
-        assertNull(viewModel.drivesError)
-        assertNull(viewModel.transitError)
+        assertNull(viewModel.vehicleForm.drivesError)
+        assertNull(viewModel.transitForm.choiceError)
     }
 
     @Test
     fun emptySubmitShowsErrorsAndSendsNothing() {
         submit()
-        assertEquals(CHOOSE_AN_OPTION, viewModel.drivesError)
-        assertEquals(CHOOSE_AN_OPTION, viewModel.transitError)
+        assertEquals(CHOOSE_AN_OPTION, viewModel.vehicleForm.drivesError)
+        assertEquals(CHOOSE_AN_OPTION, viewModel.transitForm.choiceError)
         assertTrue(api.saved.isEmpty())
 
-        viewModel.chooseDrives(true)
-        assertNull(viewModel.drivesError) // goes away once fixed
-        assertEquals(REQUIRED, viewModel.makeError)
-        assertEquals(REQUIRED, viewModel.modelError)
-        assertEquals(REQUIRED, viewModel.fuelError)
+        viewModel.vehicleForm.chooseDrives(true)
+        assertNull(viewModel.vehicleForm.drivesError) // goes away once fixed
+        assertEquals(REQUIRED, viewModel.vehicleForm.makeError)
+        assertEquals(REQUIRED, viewModel.vehicleForm.modelError)
+        assertEquals(REQUIRED, viewModel.vehicleForm.fuelError)
     }
 
     @Test
     fun fuelConsumptionMustBeInRange() {
         answerAsDriver()
-        viewModel.changeFuelDigits("9")
+        viewModel.vehicleForm.changeFuelDigits("9")
         submit()
-        assertEquals(FUEL_OUT_OF_RANGE, viewModel.fuelError)
-        viewModel.changeFuelDigits("401")
-        assertEquals(FUEL_OUT_OF_RANGE, viewModel.fuelError)
-        viewModel.changeFuelDigits("400")
-        assertNull(viewModel.fuelError)
+        assertEquals(FUEL_OUT_OF_RANGE, viewModel.vehicleForm.fuelError)
+        viewModel.vehicleForm.changeFuelDigits("401")
+        assertEquals(FUEL_OUT_OF_RANGE, viewModel.vehicleForm.fuelError)
+        viewModel.vehicleForm.changeFuelDigits("400")
+        assertNull(viewModel.vehicleForm.fuelError)
         assertTrue(api.saved.isEmpty())
     }
 
     @Test
     fun adultMonthlyPassNeedsZones() {
         answerAsDriver()
-        viewModel.chooseTransit(TransitChoice.ADULT_MONTHLY_PASS)
+        viewModel.transitForm.choose(TransitChoice.ADULT_MONTHLY_PASS)
         submit()
-        assertEquals(CHOOSE_AN_OPTION, viewModel.zonesError)
-        viewModel.chooseZones(2)
+        assertEquals(CHOOSE_AN_OPTION, viewModel.transitForm.zonesError)
+        viewModel.transitForm.chooseZones(2)
         submit()
         assertEquals(Transit(FareType.ADULT_MONTHLY_PASS, 2), api.saved.single().transit)
     }
@@ -138,10 +141,10 @@ class QuestionnaireViewModelTest {
     @Test
     fun changingTheMakeClearsTheModelAndLoadsItsModels() {
         answerAsDriver()
-        assertEquals(listOf("Camry", "Corolla"), viewModel.models)
-        viewModel.chooseMake("Honda")
-        assertNull(viewModel.model)
-        assertEquals(listOf("Civic"), viewModel.models)
+        assertEquals(listOf("Camry", "Corolla"), viewModel.vehicleForm.models)
+        viewModel.vehicleForm.chooseMake("Honda")
+        assertNull(viewModel.vehicleForm.model)
+        assertEquals(listOf("Civic"), viewModel.vehicleForm.models)
     }
 
     @Test
@@ -157,9 +160,9 @@ class QuestionnaireViewModelTest {
     @Test
     fun switchingToNoKeepsTheCarButDoesNotSendIt() {
         answerAsDriver()
-        viewModel.chooseDrives(false)
-        viewModel.chooseTransit(TransitChoice.NONE)
-        assertEquals("Corolla", viewModel.model) // still there if they switch back to Yes
+        viewModel.vehicleForm.chooseDrives(false)
+        viewModel.transitForm.choose(TransitChoice.NONE)
+        assertEquals("Corolla", viewModel.vehicleForm.model) // still there if they switch back to Yes
         submit()
         assertEquals(Profile(api.saved.single().timezone, vehicle = null, transit = null), api.saved.single())
     }
@@ -186,7 +189,7 @@ class QuestionnaireViewModelTest {
         api.failure = HttpException(500)
         submit()
         assertEquals(SAVE_FAILED, viewModel.saveError)
-        assertEquals("Corolla", viewModel.model)
+        assertEquals("Corolla", viewModel.vehicleForm.model)
         assertNull(savedAs)
     }
 
@@ -201,12 +204,12 @@ class QuestionnaireViewModelTest {
     @Test
     fun makesThatFailToLoadCanBeRetried() {
         api.makesOffline = true
-        viewModel.loadMakes()
-        assertTrue(viewModel.makesFailed)
+        viewModel.vehicleForm.loadMakes()
+        assertTrue(viewModel.vehicleForm.makesFailed)
         api.makesOffline = false
-        viewModel.loadMakes()
-        assertFalse(viewModel.makesFailed)
-        assertEquals(listOf("Honda", "Toyota"), viewModel.makes)
+        viewModel.vehicleForm.loadMakes()
+        assertFalse(viewModel.vehicleForm.makesFailed)
+        assertEquals(listOf("Honda", "Toyota"), viewModel.vehicleForm.makes)
     }
 
     @Test
@@ -214,10 +217,10 @@ class QuestionnaireViewModelTest {
         answerAsDriver()
         submit()
         viewModel.reset()
-        assertNull(viewModel.drives)
-        assertNull(viewModel.make)
-        assertEquals("", viewModel.fuelDigits)
-        assertNull(viewModel.drivesError)
+        assertNull(viewModel.vehicleForm.drives)
+        assertNull(viewModel.vehicleForm.make)
+        assertEquals("", viewModel.vehicleForm.fuelDigits)
+        assertNull(viewModel.vehicleForm.drivesError)
     }
 
     @Test
