@@ -45,10 +45,22 @@ function HasTestFiles($dir, $pattern) {
     return [bool]$match
 }
 
-function Run-InterfaceTests($label, $coverageDir, [string[]]$testPaths) {
+# Jest's HTML coverage report has no title option, so name the run in each
+# page's <title> and heading, so screenshots show which report they are.
+function Set-HtmlReportTitle($title, $coverageDir) {
+    foreach ($file in Get-ChildItem $coverageDir -Recurse -Filter '*.html') {
+        $html = [IO.File]::ReadAllText($file.FullName)
+        $html = $html.Replace('<title>Code coverage report', "<title>${title}: code coverage report")
+        $html = $html.Replace('<h1>', "<h1>${title}: ")
+        [IO.File]::WriteAllText($file.FullName, $html)
+    }
+}
+
+function Run-InterfaceTests($label, $title, $coverageDir, [string[]]$testPaths) {
     Info "Running $label interface tests with coverage ($($testPaths -join ' '))..."
     npm test -- @testPaths --coverage "--coverageDirectory=$coverageDir"
     if ($LASTEXITCODE -ne 0) { Die "$label interface tests failed." }
+    Set-HtmlReportTitle $title $coverageDir
     Write-Host ""
 }
 
@@ -139,15 +151,15 @@ if (-not $env:MONGODB_TEST_URI) {
 Push-Location $BackendDir
 try {
     if ($hasMockTests) {
-        Run-InterfaceTests 'mocked' 'coverage/mock' @('tests/mock/')
+        Run-InterfaceTests 'mocked' 'Mocked tests' 'coverage/mock' @('tests/mock/')
     }
 
     if ($hasNoMockTests) {
-        Run-InterfaceTests 'no-mock' 'coverage/no-mock' @('tests/no-mock/')
+        Run-InterfaceTests 'no-mock' 'No-mock tests' 'coverage/no-mock' @('tests/no-mock/')
     }
 
     if ($hasMockTests -and $hasNoMockTests) {
-        Run-InterfaceTests 'all interface' 'coverage/interface' @('tests/mock/', 'tests/no-mock/')
+        Run-InterfaceTests 'all interface' 'All tests (mock + no-mock)' 'coverage/interface' @('tests/mock/', 'tests/no-mock/')
     }
 }
 finally {

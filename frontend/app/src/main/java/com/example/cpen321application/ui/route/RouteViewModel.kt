@@ -7,11 +7,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cpen321application.data.ChainedRoute
-import com.example.cpen321application.data.NotFoundException
+import com.example.cpen321application.data.HttpException
 import com.example.cpen321application.data.RoutesApi
 import com.example.cpen321application.data.SessionStore
 import com.google.android.gms.maps.model.LatLng
 import java.io.IOException
+import java.net.HttpURLConnection.HTTP_NOT_FOUND
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -62,8 +63,8 @@ class RouteViewModel(
         planJob = viewModelScope.launch {
             try {
                 route = api.planChainedRoute(store.token(), points[0], points[1], points[2])
-            } catch (e: NotFoundException) {
-                error = NO_ROUTE
+            } catch (e: HttpException) {
+                error = if (e.code == HTTP_NOT_FOUND) NO_ROUTE else PLAN_FAILED
             } catch (e: IOException) {
                 error = PLAN_FAILED
             } finally {

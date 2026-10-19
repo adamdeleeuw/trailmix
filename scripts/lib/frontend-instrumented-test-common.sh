@@ -16,8 +16,12 @@ die()  { printf '\033[31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 configure_android_home() {
   if [[ -z "${ANDROID_HOME:-}" || ! -d "$ANDROID_HOME" ]]; then
+    # unescape local.properties (C\:\\Users\\...) and convert it to /c/Users/... in Git Bash, as in run-frontend.sh
     sdk_dir="$(grep -E '^sdk\.dir=' "$FRONTEND_DIR/local.properties" 2>/dev/null \
-      | head -1 | cut -d= -f2- | tr -d ' "' || true)"
+      | head -1 | cut -d= -f2- | tr -d ' "' | sed -E 's/[\](.)/\1/g' || true)"
+    if [[ -n "$sdk_dir" ]] && command -v cygpath >/dev/null 2>&1; then
+      sdk_dir="$(cygpath -u "$sdk_dir")"
+    fi
     [[ -n "$sdk_dir" ]] && export ANDROID_HOME="$sdk_dir"
   fi
   export PATH="${ANDROID_HOME:-}/platform-tools:$PATH"
