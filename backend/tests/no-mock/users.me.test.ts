@@ -12,7 +12,7 @@ describe('Unmocked: GET /api/users/me', () => {
   // Input: Authorization header with a valid session token
   // Expected status code: 200
   // Expected behavior: the signed-in user's account is returned
-  // Expected output: { user: { id, email, name, photoUrl, profileComplete, timezone, vehicle, transit } } with no googleId
+  // Expected output: { user: { id, email, name, photoUrl, profileComplete, timezone, vehicle, transit, lastGasPrice } } with no googleId
   test('Valid session', async () => {
     const { user, token } = await createSignedInUser({ photoUrl: 'https://example.com/me.png' });
 
@@ -29,6 +29,7 @@ describe('Unmocked: GET /api/users/me', () => {
         timezone: null,
         vehicle: null,
         transit: null,
+        lastGasPrice: null,
       },
     });
   });
@@ -51,6 +52,20 @@ describe('Unmocked: GET /api/users/me', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ user: { profileComplete: true, ...profile } });
+  });
+
+  // Input: Authorization header for a user who has saved a gas price
+  // Expected status code: 200
+  // Expected behavior: the last gas price is returned with the date it was saved
+  // Expected output: { user } whose lastGasPrice is { centsPerLitre: 189.9, savedAt } with savedAt as an ISO date
+  test('Returns the last gas price and the date it was saved', async () => {
+    const savedAt = new Date('2026-10-14T17:30:00.000Z');
+    const { token } = await createSignedInUser({ lastGasPrice: { centsPerLitre: 189.9, savedAt } });
+
+    const response = await request(createApp()).get('/api/users/me').set('Authorization', bearer(token));
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.lastGasPrice).toStrictEqual({ centsPerLitre: 189.9, savedAt: savedAt.toISOString() });
   });
 
   // Input: no Authorization header, a header that isn't "Bearer <token>", or a token that matches no session
