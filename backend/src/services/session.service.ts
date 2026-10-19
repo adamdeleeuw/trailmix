@@ -43,3 +43,13 @@ export async function findSessionByToken(token: string): Promise<Session | null>
 export async function deleteSession(sessionId: Types.ObjectId): Promise<void> {
   await SessionModel.deleteOne({ _id: sessionId });
 }
+
+/**
+ * Ends every session a user has, signing them out on every device.
+ *
+ * @param userId - The user whose sessions end.
+ * @throws If the database operation fails.
+ */
+export async function deleteUserSessions(userId: Types.ObjectId): Promise<void> {
+  await SessionModel.deleteMany({ userId });
+}

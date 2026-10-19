@@ -51,7 +51,7 @@ describe('Mocked: POST /api/auth/google', () => {
   // Input: { idToken: "valid" }
   // Expected status code: 200
   // Expected behavior: a user and a session are created, and only the token's hash is stored
-  // Expected output: { sessionToken, user: { id, email, name, photoUrl, profileComplete: false, timezone: null, vehicle: null, transit: null } }
+  // Expected output: { sessionToken, user: { id, email, name, photoUrl, profileComplete: false, timezone: null, vehicle: null, transit: null, lastGasPrice: null } }
   test('New user gets an account and a session', async () => {
     mockGoogleVerify(googlePayload());
 
@@ -70,6 +70,7 @@ describe('Mocked: POST /api/auth/google', () => {
         timezone: null,
         vehicle: null,
         transit: null,
+        lastGasPrice: null,
       },
     });
     const session = await SessionModel.findOne({ userId: user._id }).orFail().lean();

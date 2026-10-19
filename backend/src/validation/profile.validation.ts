@@ -1,14 +1,10 @@
 import { COLOURS, FARE_TYPES, PASS_ZONES, type Profile, type Transit, type Vehicle } from '../models/user.model';
 import { isKnownVehicle } from '../services/vehicle.service';
+import { isOneDecimalInRange, isRecord } from './common.validation';
 
 const MAX_TIMEZONE_LENGTH = 64; // the longest IANA names are around 30 characters
 const MIN_LITRES_PER_100KM = 1;
 const MAX_LITRES_PER_100KM = 40;
-
-/** Narrows an unknown value to a plain object whose fields can be read. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /** Checks that a value is one of a fixed list, without trusting its type. */
 function isOneOf<T>(list: readonly T[], value: unknown): value is T {
@@ -26,16 +22,6 @@ function parseTimezone(value: unknown): string | undefined {
   }
 }
 
-/** Checks fuel consumption is in range and has at most one decimal, like the app's input allows. */
-function isLitresPer100km(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    value >= MIN_LITRES_PER_100KM &&
-    value <= MAX_LITRES_PER_100KM &&
-    Number(value.toFixed(1)) === value
-  );
-}
-
 /** Checks the car answers. `null` means the user doesn't drive. */
 function parseVehicle(value: unknown): Vehicle | null | undefined {
   if (value === null) return null;
@@ -43,7 +29,7 @@ function parseVehicle(value: unknown): Vehicle | null | undefined {
   const { make, model, colour, litresPer100km } = value;
   if (typeof make !== 'string' || typeof model !== 'string' || !isKnownVehicle(make, model)) return undefined;
   if (colour !== null && !isOneOf(COLOURS, colour)) return undefined;
-  if (!isLitresPer100km(litresPer100km)) return undefined;
+  if (!isOneDecimalInRange(litresPer100km, MIN_LITRES_PER_100KM, MAX_LITRES_PER_100KM)) return undefined;
   return { make, model, colour, litresPer100km };
 }
 

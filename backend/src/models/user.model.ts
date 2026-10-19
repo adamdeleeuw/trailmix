@@ -19,6 +19,10 @@ export const FARE_TYPES = [
 /** Zones an adult monthly pass can cover. */
 export const PASS_ZONES = [1, 2, 3] as const;
 
+/** The gas prices a user can save, in cents per litre. */
+export const MIN_CENTS_PER_LITRE = 50;
+export const MAX_CENTS_PER_LITRE = 400;
+
 /** The car a user drives. */
 export interface Vehicle {
   make: string; // one of the makes in data/vehicles.json
@@ -31,6 +35,12 @@ export interface Vehicle {
 export interface Transit {
   fareType: (typeof FARE_TYPES)[number];
   monthlyPassZones: (typeof PASS_ZONES)[number] | null; // only set for ADULT_MONTHLY_PASS
+}
+
+/** The last gas price a user saved. Kept when they stop driving, but hidden by the app. */
+export interface GasPrice {
+  centsPerLitre: number; // 50.0 to 400.0, one decimal at most
+  savedAt: Date; // set by the server when the price is saved
 }
 
 /** The commute questionnaire's answers. Saving always replaces all of them. */
@@ -59,6 +69,7 @@ export interface User {
   timezone: string | null; // null until the questionnaire is submitted
   vehicle: Vehicle | null;
   transit: Transit | null;
+  lastGasPrice: GasPrice | null; // null until a price is saved
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +84,7 @@ export interface UserResponse {
   timezone: string | null;
   vehicle: Vehicle | null;
   transit: Transit | null;
+  lastGasPrice: { centsPerLitre: number; savedAt: string } | null; // savedAt is an ISO 8601 date
 }
 
 // _id: false because there's only ever one of each, inside the user
@@ -94,6 +106,14 @@ const transitSchema = new Schema<Transit>(
   { _id: false },
 );
 
+const gasPriceSchema = new Schema<GasPrice>(
+  {
+    centsPerLitre: { type: Number, required: true, min: MIN_CENTS_PER_LITRE, max: MAX_CENTS_PER_LITRE },
+    savedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema<User>(
   {
     googleId: { type: String, required: true, unique: true },
@@ -104,6 +124,7 @@ const userSchema = new Schema<User>(
     timezone: { type: String, default: null },
     vehicle: { type: vehicleSchema, default: null },
     transit: { type: transitSchema, default: null },
+    lastGasPrice: { type: gasPriceSchema, default: null },
   },
   { timestamps: true },
 );
@@ -133,6 +154,10 @@ export function toUserResponse(user: User): UserResponse {
     transit: user.transit && {
       fareType: user.transit.fareType,
       monthlyPassZones: user.transit.monthlyPassZones,
+    },
+    lastGasPrice: user.lastGasPrice && {
+      centsPerLitre: user.lastGasPrice.centsPerLitre,
+      savedAt: user.lastGasPrice.savedAt.toISOString(),
     },
   };
 }

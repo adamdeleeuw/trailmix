@@ -49,6 +49,7 @@ describe('Unmocked: PUT /api/users/me/profile', () => {
         timezone: 'America/Vancouver',
         vehicle: corolla,
         transit: { fareType: 'ADULT_STORED_VALUE', monthlyPassZones: null },
+        lastGasPrice: null,
       },
     });
     expect(await storedUser(user)).toMatchObject({ profileComplete: true, vehicle: corolla });
