@@ -36,7 +36,7 @@ export const env = {
   get mongodbUri(): string { // MongoDB connection string, including the database name
     return requireEnv('MONGODB_URI');
   },
-    get googleRoutesApiKey(): string { // server-only key restricted to the Routes API
+  get googleRoutesApiKey(): string { // server-only key restricted to the Routes API
     return requireEnv('GOOGLE_ROUTES_API_KEY');
   },
 };
