@@ -152,4 +152,12 @@ class AuthViewModelTest {
         viewModel(store) // next launch
         assertTrue(store.pending.isEmpty() && api.sessions.isEmpty())
     }
+
+    @Test
+    fun savedProfileMovesQuestionnaireToMain() {
+        api.user = user(false)
+        val viewModel = viewModel(FakeStore("old"))
+        viewModel.profileSaved(user(true))
+        assertEquals(AppState.Main(user(true)), viewModel.state)
+    }
 }

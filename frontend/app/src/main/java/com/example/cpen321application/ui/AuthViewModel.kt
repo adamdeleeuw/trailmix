@@ -16,7 +16,10 @@ import kotlinx.coroutines.launch
 
 const val SIGN_IN_FAILED = "Sign-in failed. Check your connection and try again."
 
-/** Which screen the app shows. Each one is the only screen, so Back always exits the app. */
+/**
+ * Which screen the app shows. Each one is the only screen, so Back exits the app,
+ * except on the questionnaire, where it asks before signing out.
+ */
 sealed interface AppState {
     data object Loading : AppState
     data object SignIn : AppState
@@ -101,6 +104,11 @@ class AuthViewModel(
             endPendingSessions()
             forgetGoogleAccount()
         }
+    }
+
+    /** Moves to Main once the questionnaire is saved. Main replaces it, so Back can't return to it. */
+    fun profileSaved(user: User) {
+        state = AppState.Main(user)
     }
 
     private fun signedIn(user: User) = if (user.profileComplete) AppState.Main(user) else AppState.Questionnaire(user)

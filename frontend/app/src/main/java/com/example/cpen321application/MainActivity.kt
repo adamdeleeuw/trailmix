@@ -12,6 +12,8 @@ import com.example.cpen321application.data.DataStoreSessionStore
 import com.example.cpen321application.data.GoogleSignInClient
 import com.example.cpen321application.ui.AuthViewModel
 import com.example.cpen321application.ui.TrailmixApp
+import com.example.cpen321application.ui.questionnaire.QuestionnaireScreen
+import com.example.cpen321application.ui.questionnaire.QuestionnaireViewModel
 import com.example.cpen321application.ui.theme.CPEN321ApplicationTheme
 
 /** The app's only activity. [AuthViewModel] decides which screen it shows. */
@@ -26,6 +28,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val questionnaireViewModel: QuestionnaireViewModel by viewModels {
+        viewModelFactory { initializer { QuestionnaireViewModel(BackendApi, DataStoreSessionStore(application)) } }
+    }
+
+    // clears the questionnaire too, so the next sign-in starts it empty
+    private fun signOut() {
+        questionnaireViewModel.reset()
+        viewModel.signOut()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -37,8 +49,10 @@ class MainActivity : ComponentActivity() {
                     signInError = viewModel.signInError,
                     onSignIn = { viewModel.signIn { GoogleSignInClient.getIdToken(this) } },
                     onRetry = viewModel::load,
-                    onSignOut = viewModel::signOut,
-                )
+                    onSignOut = ::signOut,
+                ) {
+                    QuestionnaireScreen(questionnaireViewModel, onSaved = viewModel::profileSaved, onSignOut = ::signOut)
+                }
             }
         }
     }
