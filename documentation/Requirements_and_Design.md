@@ -1,97 +1,256 @@
 # Requirements and Design
 
+
 ## 1. Change History
+
 
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
-| 2026-10-19        | 4.2, 4.4 | Added the user's last gas price to the `users` collection, described what deleting an account removes, and listed Navigation Compose, which the app's nav bar uses (issue #11) |
-| 2026-10-19        | 4.2, 4.4 | Added the `trips` collection behind the trip history and commute insights (PR #20), and noted that the History tab shows them |
-| 2026-10-19        | 4.2 | Deleting an account now also deletes the user's saved trips, which the trip history feature (PR #20) added, as the delete confirmation promises |
+| Oct 15, 2026 | 4.2 | Added MongoDB for Google sign-in with persistent sessions (#9). |
+| Oct 16, 2026 | 4.2 | Added commute profile fields to `users` for the questionnaire (#10). |
+| Oct 19, 2026 | 2, 3, 4 | Filled in requirements and design for the implemented features, and added the `trips` collection for trip history (#20). |
+| Oct 19, 2026 | 4.2, 4.4 | Added the user's last gas price to the `users` collection, described what deleting an account removes, and listed Navigation Compose, which the app's nav bar uses (#11). |
+| Oct 19, 2026 | 4.2, 4.4 | Added the `trips` collection behind the trip history and commute insights (#20), and noted that the History tab shows them. |
+| Oct 19, 2026 | 4.2 | Deleting an account now also deletes the user's saved trips, which the trip history feature (#20) added, as the delete confirmation promises. |
+| Oct 19, 2026 | 4.1 | Listed `PUT /api/users/me/gas-price` and `DELETE /api/users/me` under the Users component, so the interfaces match the backend (#11). |
+
 
 ---
+
 
 ## 2. Project Description
 
-[WRITE_PROJECT_DESCRIPTION_HERE]
+
+Trailmix is an Android app for **chained commutes**: driving partway, then taking transit from a split point. Regular map apps plan one travel mode per trip, so they can't plan "drive to the station, then take the SkyTrain." Trailmix plans both legs together, personalizes trip costs to the user's car and transit fare (goal), and saves each trip to a history with time and cost insights (goal: saving planned trips).
+
 
 ---
 
+
 ## 3. Requirements Specification
 
+
 ### **3.1. List of Features**
+
+1. **Authentication**: Sign in with Google and sign out.
+2. **Commute Profile**: A first-time questionnaire about the user's car (make, model, fuel use) and transit fare type. It will be used to estimate trip costs (goal).
+3. **Chained Commute Planning**: Pick a start, split point, and destination on a map, and get a drive leg plus a transit leg with their times. Trailmix will choose the split point automatically (goal).
+4. **Trip History and Insights**: View past trips by date and cost, and see average time, average cost, and driving vs transit time. Planned trips will be saved here automatically (goal).
 
 
 ### **3.2. Use Case Diagram**
 
 
+
+
 ### **3.3. Actors Description**
-1. **[WRITE_NAME_HERE]**: ...
-2. **[WRITE_NAME_HERE]**: ...
+1. **User**: A commuter using the app.
+2. **Google Sign-In**: Authenticates the user.
+3. **Google Routes API**: Provides driving and transit routes.
+
 
 ### **3.4. Use Case Description**
-- Use cases for feature 1: [WRITE_FEATURE_1_NAME_HERE]
-1. **[WRITE_NAME_HERE]**: ...
-2. **[WRITE_NAME_HERE]**: ...
-- Use cases for feature 2: [WRITE_FEATURE_2_NAME_HERE]
-3. **[WRITE_NAME_HERE]**: ...
-4. **[WRITE_NAME_HERE]**: ...
-...
+- Use cases for feature 1: **Authentication**
+1. **Sign In with Google**: The user signs in, and an account is created on first sign-in.
+2. **Sign Out**: Ends the session on this device.
+- Use cases for feature 2: **Commute Profile**
+3. **Complete Questionnaire**: The user saves their car and transit details.
+- Use cases for feature 3: **Chained Commute Planning**
+4. **Plan Chained Commute**: The user sets three points and sees the drive and transit legs.
+5. **Reset Route**: Clears the points and route.
+- Use cases for feature 4: **Trip History and Insights**
+6. **View Trip History**: Lists trips, filtered by date range and sorted by date or cost.
+7. **View Commute Insights**: Shows the stats for a chosen period.
+
 
 ### **3.5. Formal Use Case Specifications (5 Most Major Use Cases)**
 <a name="uc1"></a>
 
-#### Use Case 1: [WRITE_USE_CASE_1_NAME_HERE]
 
-**Description**: ...
+#### Use Case 1: Sign In with Google
 
-**Primary actor(s)**: ... 
-    
+
+**Description**: The user signs in to Trailmix.
+
+
+**Primary actor(s)**: User, Google Sign-In
+  
 **Main success scenario**:
-1. ...
-2. ...
+1. The user taps "Sign in with Google" and picks an account.
+2. The backend verifies the Google token and creates a session.
+3. The app shows the questionnaire (if the profile isn't finished) or the main screen.
+
 
 **Failure scenario(s)**:
-- 1a. ...
-    - 1a1. ...
-    - 1a2. ...
+- 1a. The user closes the account picker.
+   - 1a1. The app stays on the sign-in screen.
 
-- 1b. ...
-    - 1b1. ...
-    - 1b2. ...
-                
-- 2a. ...
-    - 2a1. ...
-    - 2a2. ...
 
-...
+- 2a. The token is invalid or the network fails.
+   - 2a1. The app shows a sign-in error.
+
 
 <a name="uc2"></a>
 
-#### Use Case 2: [WRITE_USE_CASE_2_NAME_HERE]
-...
+
+#### Use Case 2: Complete Questionnaire
+
+
+**Description**: The user saves their driving and transit details.
+
+
+**Primary actor(s)**: User
+  
+**Main success scenario**:
+1. The user enters their car details (if they drive) and transit fare type.
+2. The user taps "Submit".
+3. The backend validates and saves the answers. The app shows the main screen.
+
+
+**Failure scenario(s)**:
+- 2a. An answer is missing or invalid.
+   - 2a1. The app marks the field and doesn't submit.
+
+
+- 3a. The save fails.
+   - 3a1. The app shows an error and keeps the answers.
+
+
+<a name="uc3"></a>
+
+
+#### Use Case 3: Plan Chained Commute
+
+
+**Description**: The user plans a drive-then-transit trip.
+
+
+**Primary actor(s)**: User, Google Routes API
+  
+**Main success scenario**:
+1. The user taps the start, split point, and destination on the map.
+2. The backend gets the drive and transit legs from the Routes API.
+3. The app draws both legs and shows each leg's time and the total.
+4. The trip is saved to the user's history (goal).
+
+
+**Failure scenario(s)**:
+- 2a. There is no route for a leg.
+   - 2a1. The app shows "No route found."
+
+
+- 2b. The request fails or times out.
+   - 2b1. The app shows an error with Retry.
+
+
+<a name="uc4"></a>
+
+
+#### Use Case 4: View Trip History
+
+
+**Description**: The user browses past trips.
+
+
+**Primary actor(s)**: User
+  
+**Main success scenario**:
+1. The user opens Trip history.
+2. The app lists trips, newest first.
+3. The user changes the date range or sort.
+
+
+**Failure scenario(s)**:
+- 2a. There are no trips.
+   - 2a1. The app shows "No trips yet."
+
+
+- 2b. Loading fails.
+   - 2b1. The app shows an error with Retry.
+
+
+<a name="uc5"></a>
+
+
+#### Use Case 5: View Commute Insights
+
+
+**Description**: The user sees a summary of their commuting.
+
+
+**Primary actor(s)**: User
+  
+**Main success scenario**:
+1. The user opens Commute insights and picks a period.
+2. The app shows the trip count, average time, average cost, and a driving vs transit pie chart.
+
+
+**Failure scenario(s)**:
+- 2a. There are no trips in the period.
+   - 2a1. The app shows a "No trips found" message.
+
+
+- 2b. Loading fails.
+   - 2b1. The app shows an error with Retry.
+
 
 ### **3.6. Screen Mock-ups**
+
+
 
 
 ### **3.7. Non-Functional Requirements**
 <a name="nfr1"></a>
 
-1. **[WRITE_NAME_HERE]**
-    - **Description**: ...
-    - **Justification**: ...
-2. ...
+
+1. **Response Time**
+   - **Description**: A chained route is returned within 3 seconds.
+   - **Justification**: Users compare split points before leaving, so planning must feel quick.
+<a name="nfr2"></a>
+2. **Security**
+   - **Description**: In production, all traffic uses HTTPS, and all user data requires a valid session.
+   - **Justification**: Trips reveal where users live and work.
+
 
 ---
 
+
 ## 4. Designs Specification
 ### **4.1. Main Components**
-1. **[WRITE_NAME_HERE]**
-    - **Purpose**: ...
-    - **Interfaces**: 
-        1. ...
-            - **Purpose**: ...
-        2. ...
-2. ...
+1. **Auth**
+   - **Purpose**: Google sign-in and sessions.
+   - **Interfaces**:
+       1. `POST /api/auth/google { idToken }` → `{ sessionToken, user }`
+           - **Purpose**: Signs in and creates a session.
+       2. `POST /api/auth/sign-out`
+           - **Purpose**: Ends this device's session.
+2. **Users**
+   - **Purpose**: Account and commute profile.
+   - **Interfaces**:
+       1. `GET /api/users/me` → `{ user }`
+           - **Purpose**: Gets the signed-in user.
+       2. `PUT /api/users/me/profile { timezone, vehicle, transit }` → `{ user }`
+           - **Purpose**: Saves the questionnaire answers.
+       3. `GET /api/vehicles/makes`, `GET /api/vehicles/makes/:make/models`
+           - **Purpose**: Gets the car options.
+       4. `PUT /api/users/me/gas-price { centsPerLitre }` → `{ user }`
+           - **Purpose**: Saves the last gas price a driver entered on the Profile tab.
+       5. `DELETE /api/users/me` → `204 No Content`
+           - **Purpose**: Deletes the account with its trips and sessions.
+3. **Routes**
+   - **Purpose**: Chained route planning.
+   - **Interfaces**:
+       1. `POST /api/routes/chained { start, split, destination }` → `{ legs, totalDurationSeconds }`
+           - **Purpose**: Returns the drive and transit legs. Leg costs from the user's profile will be added (goal).
+4. **Trips**
+   - **Purpose**: Trip history.
+   - **Interfaces**:
+       1. `GET /api/users/me/trips` → `{ trips }`
+           - **Purpose**: Gets the user's trips, newest first.
+       2. An endpoint to save a planned trip (goal).
+           - **Purpose**: Adds a planned trip to the user's history.
+
+
 
 
 ### **4.2. Databases**
@@ -115,16 +274,34 @@
 
 
 ### **4.3. External Modules**
-1. **[WRITE_NAME_HERE]** 
-- **Purpose**: ...
-2. ...
+1. **Google Sign-In**
+- **Purpose**: Authenticates users.
+2. **Google Routes API**
+- **Purpose**: Computes the drive and transit legs.
+3. **Google Maps SDK**
+- **Purpose**: Displays the map and routes.
+
+
 
 
 ### **4.4. Frameworks and Libraries**
-1. **Navigation Compose (`androidx.navigation:navigation-compose`)**
-    - **Purpose**: Moves between the screens after sign-in: the Map, History (trip history and commute insights), and Profile tabs of the nav bar, and the Edit vehicle and Edit transit screens opened from Profile. It keeps each tab's back stack and scroll position when the user switches tabs, and makes Back on any tab return to Map.
-    - **Reason**: It is the official Jetpack library for navigating between Compose screens. Writing our own back stack would mean re-implementing saving and restoring each tab's state across tab switches and screen rotation.
-2. ...
+1. **Kotlin + Jetpack Compose**
+   - **Purpose**: Android UI.
+   - **Reason**: Course requirement.
+2. **Node.js + TypeScript + Express**
+   - **Purpose**: Backend server.
+   - **Reason**: Course requirement. Types catch errors early.
+3. **Mongoose**
+   - **Purpose**: MongoDB access and validation.
+   - **Reason**: Typed schemas and indexes.
+4. **Docker + Caddy (GCP VM)**
+   - **Purpose**: Deployment and HTTPS.
+   - **Reason**: Caddy renews HTTPS certificates automatically.
+5. **Navigation Compose (`androidx.navigation:navigation-compose`)**
+   - **Purpose**: Moves between the screens after sign-in: the Map, History (trip history and commute insights), and Profile tabs of the nav bar, and the Edit vehicle and Edit transit screens opened from Profile. It keeps each tab's back stack and scroll position when the user switches tabs, and makes Back on any tab return to Map.
+   - **Reason**: It is the official Jetpack library for navigating between Compose screens. Writing our own back stack would mean re-implementing saving and restoring each tab's state across tab switches and screen rotation.
+
+
 
 
 ### **4.5. Dependencies Diagram**
@@ -137,6 +314,7 @@
 
 
 ### **4.7. Design of Non-Functional Requirements**
-1. [**[WRITE_NAME_HERE]**](#nfr1)
-    - **Implementation**: ...
-2. ...
+1. [**Response Time**](#nfr1)
+   - **Implementation**: Both legs are requested in parallel, and each request times out after 10 s.
+2. [**Security**](#nfr2)
+   - **Implementation**: Caddy is the only public entry point and serves HTTPS. Session tokens are stored hashed, and every user-data endpoint checks the session.
