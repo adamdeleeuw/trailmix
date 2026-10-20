@@ -94,4 +94,10 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation(libs.maps.compose)
+
+    constraints {
+        // The app alone resolves 1.1.0 (via profileinstaller), but espresso-core needs 1.2.0,
+        // and Gradle's consistent resolution won't let the test classpath differ from the app's.
+        implementation(libs.androidx.concurrent.futures)
+    }
 }
