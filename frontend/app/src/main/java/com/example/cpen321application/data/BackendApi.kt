@@ -177,21 +177,7 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
     override suspend fun getTripHistory(sessionToken: String) =
         request("GET", "/api/users/me/trips", sessionToken) { root ->
             val trips = root.getJSONArray("trips")
-            List(trips.length()) { index ->
-                val trip = trips.getJSONObject(index)
-                Trip(
-                    id = trip.getString("id"),
-                    origin = TripPlace(trip.getJSONObject("origin").getString("label")),
-                    destination = TripPlace(trip.getJSONObject("destination").getString("label")),
-                    legs = List(trip.getJSONArray("legs").length()) { legIndex ->
-                        val leg = trip.getJSONArray("legs").getJSONObject(legIndex)
-                        TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
-                    },
-                    totalDurationSeconds = trip.getInt("totalDurationSeconds"),
-                    totalCostCents = trip.getInt("totalCostCents"),
-                    tripDate = trip.getString("tripDate"),
-                )
-            }
+            List(trips.length()) { trips.getJSONObject(it).toTrip() }
         }
 
     override suspend fun saveGasPrice(sessionToken: String, centsPerLitre: Double) =
@@ -271,12 +257,6 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
         },
     )
 
-    private fun JSONObject.stringOrNull(key: String) = if (isNull(key)) null else getString(key)
-
-    private fun JSONObject.intOrNull(key: String) = if (isNull(key)) null else getInt(key)
-
-    private fun JSONObject.objectOrNull(key: String) = if (isNull(key)) null else getJSONObject(key)
-
     // parses inside the try so a malformed body (e.g. a captive portal page) becomes an IOException
     private suspend fun <T> request(
         method: String,
@@ -315,3 +295,26 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
         }
     }
 }
+
+// a trip from GET /api/users/me/trips, keeping only the fields the History tab shows
+private fun JSONObject.toTrip(): Trip {
+    val legs = getJSONArray("legs")
+    return Trip(
+        id = getString("id"),
+        origin = TripPlace(getJSONObject("origin").getString("label")),
+        destination = TripPlace(getJSONObject("destination").getString("label")),
+        legs = List(legs.length()) { index ->
+            val leg = legs.getJSONObject(index)
+            TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
+        },
+        totalDurationSeconds = getInt("totalDurationSeconds"),
+        totalCostCents = getInt("totalCostCents"),
+        tripDate = getString("tripDate"),
+    )
+}
+
+private fun JSONObject.stringOrNull(key: String) = if (isNull(key)) null else getString(key)
+
+private fun JSONObject.intOrNull(key: String) = if (isNull(key)) null else getInt(key)
+
+private fun JSONObject.objectOrNull(key: String) = if (isNull(key)) null else getJSONObject(key)
