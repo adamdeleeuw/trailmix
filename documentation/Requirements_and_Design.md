@@ -6,9 +6,9 @@
 
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
-| Oct 15, 2026 | 4.2 | Added MongoDB for Google sign-in with persistent sessions (#9). |
-| Oct 16, 2026 | 4.2 | Added commute profile fields to `users` for the questionnaire (#10). |
-| Oct 19, 2026 | 2, 3, 4 | Filled in requirements and design for the implemented features, and added the `trips` collection for trip history (#20). |
+| Oct 15, 2026 | 4.2 | Added the MongoDB `users` and `sessions` collections for Google sign-in |
+| Oct 19, 2026 | 4.2 | Added the commute profile fields to `users` for the questionnaire |
+| Oct 19, 2026 | 2, 3, 4 | Filled in the project description, requirements, and design for sign-in, the commute questionnaire, chained commute planning, and trip history; added the `trips` collection |
 
 
 ---
