@@ -11,13 +11,10 @@ useTestDatabase(); // fresh test database, emptied after every test
 const POINT = { lat: 49.2827, lng: -123.1207 }; // a real spot in Vancouver
 const VALID_BODY = { start: POINT, split: POINT, destination: POINT };
 
-// Sends a request to our endpoint. Pass a token to be signed in, or leave it out to be signed out.
-// Pass undefined as the body to send no body at all.
-async function planRoute(body: object | undefined, token?: string): Promise<request.Response> {
-  const req = request(createApp()).post('/api/routes/chained');
-  if (token !== undefined) {
-    req.set('Authorization', bearer(token)); // the "wristband": "Bearer <token>"
-  }
+// Sends a request to our endpoint. Pass headers with the "wristband" to be signed in, or leave them out
+// to be signed out. Pass undefined as the body to send no body at all.
+function planRoute(body: object | undefined, headers: Record<string, string> = {}): request.Test {
+  const req = request(createApp()).post('/api/routes/chained').set(headers);
   return body === undefined ? req : req.send(body);
 }
 
@@ -29,7 +26,7 @@ describe('Unmocked: POST /api/routes/chained', () => {
   // Expected output: { error: "Unauthorized" }
   test('Not signed in', async () => {
     // Good points, but no wristband, then a made-up one. requireSession should turn both away.
-    const responses = [await planRoute(VALID_BODY), await planRoute(VALID_BODY, 'fake-token')];
+    const responses = [await planRoute(VALID_BODY), await planRoute(VALID_BODY, { Authorization: bearer('fake-token') })];
 
     for (const response of responses) {
       expect(response.status).toBe(401);
@@ -43,6 +40,7 @@ describe('Unmocked: POST /api/routes/chained', () => {
   // Expected output: { error: "start, split and destination must each be { lat, lng }" }
   test('Missing or invalid points', async () => {
     const { token } = await createSignedInUser(); // signed in, so only the points can be the problem
+    const signedIn = { Authorization: bearer(token) };
 
     // Each body breaks a different check in parsePoint (routes.controller.ts)
     const badBodies = [
@@ -58,7 +56,7 @@ describe('Unmocked: POST /api/routes/chained', () => {
 
     // Send each one; every single one should get a 400 with the same error
     for (const body of badBodies) {
-      const response = await planRoute(body, token);
+      const response = await planRoute(body, signedIn);
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'start, split and destination must each be { lat, lng }' });
     }

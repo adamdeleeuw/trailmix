@@ -5,6 +5,7 @@
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
 | 2026-10-16        | 2.4 | Justified the "Promise returned in function argument" warnings on the Express routes (issue #10) |
+| 2026-10-19        | 2.4 | Justified the "Promise returned in function argument" warning on the chained route and the "Unsafe return of an error typed value" warnings in its tests (issue #7) |
 
 ---
 
@@ -41,7 +42,24 @@ _(Placeholder for screenshots of Codacy's Issues page)_
      - **Location in Git:** [`backend/src/routes/vehicles.route.ts#L8`](../backend/src/routes/vehicles.route.ts#L8)
      - **Justification:** Same as above, for the async `requireSession` in front of `getModels`.
 
+  4. **Issue**
+
+     - **Location in Git:** [`backend/src/routes/routes.route.ts#L7`](../backend/src/routes/routes.route.ts#L7)
+     - **Justification:** Same as above, for the async `requireSession` and `planChainedRoute` handlers. The mocked API tests prove errors are handled, since a failing Routes API call returns a 500 instead of crashing.
+
   The same warning on [`backend/src/routes/auth.route.ts`](../backend/src/routes/auth.route.ts) and [`backend/src/routes/users.route.ts#L7`](../backend/src/routes/users.route.ts#L7) was ignored for the same reason in issue #9. Wrapping every handler to silence the rule would add code that does nothing Express 5 doesn't already do.
+
+- **Code Pattern: Unsafe return of an error typed value** (`@typescript-eslint/no-unsafe-return`)
+
+  1. **Issue**
+
+     - **Location in Git:** [`backend/tests/mock/routes.chained.test.ts#L30`](../backend/tests/mock/routes.chained.test.ts#L30)
+     - **Justification:** The test helper returns the request built by `supertest`. "Error typed" means Codacy couldn't work out the value's type, because, as with the Express warnings above, it can't load the installed type definitions (here `@types/supertest`). With the real types the value is a `supertest` `Test`, and `npm run typecheck` (strict mode, run in CI) passes with no errors.
+
+  2. **Issue**
+
+     - **Location in Git:** [`backend/tests/no-mock/routes.chained.test.ts#L18`](../backend/tests/no-mock/routes.chained.test.ts#L18)
+     - **Justification:** Same as above: the helper returns a `supertest` `Test`, which Codacy can't type without `@types/supertest`.
 
 ---
 

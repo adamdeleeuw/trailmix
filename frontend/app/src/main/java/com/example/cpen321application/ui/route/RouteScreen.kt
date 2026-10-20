@@ -102,7 +102,6 @@ fun RouteScreen(modifier: Modifier = Modifier) {
     }
 }
 
-/** What the card says: the next point to tap, progress, an error, or the route summary. */
 @Composable
 private fun RowScope.StatusText(viewModel: RouteViewModel, stops: List<Stop>) {
     val route = viewModel.route
@@ -115,7 +114,6 @@ private fun RowScope.StatusText(viewModel: RouteViewModel, stops: List<Stop>) {
     }
 }
 
-/** e.g. "Drive 11 min · Transit 22 min" over "Total 33 min". */
 @Composable
 private fun RouteSummary(route: ChainedRoute) {
     Column {

@@ -81,7 +81,7 @@ describe('Mocked: POST /api/routes/chained', () => {
   // Expected behavior: the missing distance is treated as 0
   // Expected output: the drive leg has distanceMeters 0
   test('Google leaves out a distance', async () => {
-    const { distanceMeters: _removed, ...driveWithNoDistance } = DRIVE_ROUTE; // copy without distanceMeters
+    const driveWithNoDistance = { duration: DRIVE_ROUTE.duration, polyline: DRIVE_ROUTE.polyline }; // no distanceMeters
     fakeGoogle(googleSays({ routes: [driveWithNoDistance] }), googleSays({ routes: [TRANSIT_ROUTE] }));
 
     const response = await planRoute();
