@@ -9,6 +9,8 @@ import java.net.HttpURLConnection.HTTP_OK
 import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import java.net.URL
 import java.net.URLEncoder
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -21,13 +23,22 @@ class UnauthorizedException : IOException("Unauthorized")
 /** Thrown when the backend responds with an error status other than 401, so it was reached but failed. */
 class HttpException(val code: Int) : IOException("HTTP $code")
 
-/** The signed-in user's account, as returned by the backend. */
+/**
+ * The signed-in user's account, as returned by the backend.
+ *
+ * The commute fields are `null` until the questionnaire is submitted, and a `null`
+ * [vehicle] or [transit] after that means the user doesn't drive or take transit.
+ */
 data class User(
     val id: String,
     val email: String,
     val name: String,
     val photoUrl: String?,
     val profileComplete: Boolean, // whether the commute questionnaire has been submitted
+    val timezone: String? = null, // IANA name, e.g. "America/Vancouver"
+    val vehicle: Vehicle? = null,
+    val transit: Transit? = null,
+    val lastGasPrice: GasPrice? = null, // null until a price is saved
 )
 
 /** A place recorded in a trip. */
@@ -46,6 +57,9 @@ data class Trip(
     val totalCostCents: Int,
     val tripDate: String,
 )
+
+/** The last gas price a user saved, and when the backend saved it. */
+data class GasPrice(val centsPerLitre: Double, val savedAt: Instant)
 
 /** How a user pays for transit. The names match the backend's `fareType` values. */
 enum class FareType {
@@ -118,14 +132,23 @@ interface TripApi {
     suspend fun getTripHistory(sessionToken: String): List<Trip>
 }
 
+/** The backend's account endpoints used by the Profile tab. Fails the same way as [ProfileApi]. */
+interface AccountApi {
+    /** Saves the user's last gas price, stamped with the current time, and returns the updated account. */
+    suspend fun saveGasPrice(sessionToken: String, centsPerLitre: Double): User
+
+    /** Permanently deletes the account and ends its sessions on every device. */
+    suspend fun deleteAccount(sessionToken: String)
+}
+
 /** The backend's route planning endpoints. Throws like [AuthApi], and [HttpException] with code 404 when there is no route. */
 interface RoutesApi {
     /** Plans driving from [start] to [split], then transit from [split] to [destination]. */
     suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng): ChainedRoute
 }
 
-/** [AuthApi], [ProfileApi] and [RoutesApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, TripApi, RoutesApi {
+/** [AuthApi], [ProfileApi], [AccountApi], [TripApi] and [RoutesApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
     private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -154,22 +177,16 @@ object BackendApi : AuthApi, ProfileApi, TripApi, RoutesApi {
     override suspend fun getTripHistory(sessionToken: String) =
         request("GET", "/api/users/me/trips", sessionToken) { root ->
             val trips = root.getJSONArray("trips")
-            List(trips.length()) { index ->
-                val trip = trips.getJSONObject(index)
-                Trip(
-                    id = trip.getString("id"),
-                    origin = TripPlace(trip.getJSONObject("origin").getString("label")),
-                    destination = TripPlace(trip.getJSONObject("destination").getString("label")),
-                    legs = List(trip.getJSONArray("legs").length()) { legIndex ->
-                        val leg = trip.getJSONArray("legs").getJSONObject(legIndex)
-                        TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
-                    },
-                    totalDurationSeconds = trip.getInt("totalDurationSeconds"),
-                    totalCostCents = trip.getInt("totalCostCents"),
-                    tripDate = trip.getString("tripDate"),
-                )
-            }
+            List(trips.length()) { trips.getJSONObject(it).toTrip() }
         }
+
+    override suspend fun saveGasPrice(sessionToken: String, centsPerLitre: Double) =
+        request("PUT", "/api/users/me/gas-price", sessionToken, JSONObject().put("centsPerLitre", centsPerLitre)) {
+            parseUser(it.getJSONObject("user"))
+        }
+
+    override suspend fun deleteAccount(sessionToken: String) =
+        request("DELETE", "/api/users/me", sessionToken) {}
 
     // URLEncoder is for query strings, so its "+" for a space is swapped for the path form
     private fun encodePathSegment(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
@@ -221,8 +238,23 @@ object BackendApi : AuthApi, ProfileApi, TripApi, RoutesApi {
         id = json.getString("id"),
         email = json.getString("email"),
         name = json.getString("name"),
-        photoUrl = if (json.isNull("photoUrl")) null else json.getString("photoUrl"),
+        photoUrl = json.stringOrNull("photoUrl"),
         profileComplete = json.getBoolean("profileComplete"),
+        timezone = json.stringOrNull("timezone"),
+        vehicle = json.objectOrNull("vehicle")?.let {
+            Vehicle(
+                make = it.getString("make"),
+                model = it.getString("model"),
+                colour = it.stringOrNull("colour"),
+                litresPer100km = it.getDouble("litresPer100km"),
+            )
+        },
+        transit = json.objectOrNull("transit")?.let {
+            Transit(FareType.valueOf(it.getString("fareType")), it.intOrNull("monthlyPassZones"))
+        },
+        lastGasPrice = json.objectOrNull("lastGasPrice")?.let {
+            GasPrice(it.getDouble("centsPerLitre"), Instant.parse(it.getString("savedAt")))
+        },
     )
 
     // parses inside the try so a malformed body (e.g. a captive portal page) becomes an IOException
@@ -254,8 +286,35 @@ object BackendApi : AuthApi, ProfileApi, TripApi, RoutesApi {
             }
         } catch (e: JSONException) {
             throw IOException("Malformed response", e)
+        } catch (e: IllegalArgumentException) {
+            throw IOException("Unknown fare type", e) // FareType.valueOf on a value this app doesn't know
+        } catch (e: DateTimeParseException) {
+            throw IOException("Malformed date", e)
         } finally {
             connection.disconnect()
         }
     }
 }
+
+// a trip from GET /api/users/me/trips, keeping only the fields the History tab shows
+private fun JSONObject.toTrip(): Trip {
+    val legs = getJSONArray("legs")
+    return Trip(
+        id = getString("id"),
+        origin = TripPlace(getJSONObject("origin").getString("label")),
+        destination = TripPlace(getJSONObject("destination").getString("label")),
+        legs = List(legs.length()) { index ->
+            val leg = legs.getJSONObject(index)
+            TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
+        },
+        totalDurationSeconds = getInt("totalDurationSeconds"),
+        totalCostCents = getInt("totalCostCents"),
+        tripDate = getString("tripDate"),
+    )
+}
+
+private fun JSONObject.stringOrNull(key: String) = if (isNull(key)) null else getString(key)
+
+private fun JSONObject.intOrNull(key: String) = if (isNull(key)) null else getInt(key)
+
+private fun JSONObject.objectOrNull(key: String) = if (isNull(key)) null else getJSONObject(key)

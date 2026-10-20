@@ -241,6 +241,10 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
            - **Purpose**: Saves the questionnaire answers.
        3. `GET /api/vehicles/makes`, `GET /api/vehicles/makes/:make/models`
            - **Purpose**: Gets the car options.
+       4. `PUT /api/users/me/gas-price { centsPerLitre }` → `{ user }`
+           - **Purpose**: Saves the last gas price a driver entered on the Profile tab.
+       5. `DELETE /api/users/me` → `204 No Content`
+           - **Purpose**: Deletes the account with its trips and sessions.
 3. **Routes**
    - **Purpose**: Chained route planning.
    - **Interfaces**:
@@ -259,19 +263,22 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 
 ### **4.2. Databases**
 1. **MongoDB (`mongo:7.0`)**
-   - **Purpose**: Stores Trailmix's accounts, sign-in sessions, and trips. It runs as a container next to the backend on the VM and is reachable only over the private docker compose network. Its data lives in the `mongo-data` volume, so it survives restarts, rebuilds, and deploys.
-   - **`users` collection**: one document per account, with `googleId` (Google's account ID), `email`, `name`, `photoUrl`, `profileComplete`, `timezone`, `vehicle`, `transit`, `createdAt`, and `updatedAt`.
-       - A **unique index on `googleId`** identifies users by the Google ID, which never changes, rather than by email, which can. The index also makes the database refuse a second account for the same Google account, even when two first sign-ins arrive at once.
-       - The email, name, and photo are refreshed from Google on every sign-in.
-       - The commute questionnaire adds `timezone`, `vehicle` (`make`, `model`, `colour`, `litresPer100km`, or `null` if the user doesn't drive), and `transit` (`fareType`, `monthlyPassZones`, or `null` if the user doesn't take transit). They sit inside the user document because there's only one of each and they're always loaded with the user. Only the fare type is stored, not the price, since fares change every year. Submitting the questionnaire replaces all three and sets `profileComplete`.
-       - The car makes and models the questionnaire offers come from `backend/src/data/vehicles.json`, a hand-picked list in the repo loaded once at startup, not from the database.
-   - **`sessions` collection**: one document per signed-in device, with `tokenHash`, `userId`, and `createdAt`.
-       - The app holds a random 256-bit token. Only its SHA-256 hash is stored (with a **unique index**), so a leaked database can't be used to sign in, and finding a session is one indexed lookup.
-       - Sessions are kept separate from users so one user can be signed in on several devices, and signing out deletes only that device's session.
-       - Sessions never expire on their own. A session ends when its device signs out, or when the account is deleted (`userId` is **indexed** so every session for the account can be removed at once). A session whose account no longer exists is rejected.
-   - **`trips` collection**: one document per trip, with its origin, split point, destination, legs, total time and cost, and date. It is indexed on `userId` and `tripDate` for the history query. For now, trips come from a seed script, and saving planned trips is a goal.
-
-
+    - **Purpose**: Stores Trailmix's accounts, saved trips, and sign-in sessions. It runs as a container next to the backend on the VM and is reachable only over the private docker compose network. Its data lives in the `mongo-data` volume, so it survives restarts, rebuilds, and deploys.
+    - **`users` collection**: one document per account, with `googleId` (Google's account ID), `email`, `name`, `photoUrl`, `profileComplete`, `timezone`, `vehicle`, `transit`, `lastGasPrice`, `createdAt`, and `updatedAt`.
+        - A **unique index on `googleId`** identifies users by the Google ID, which never changes, rather than by email, which can. The index also makes the database refuse a second account for the same Google account, even when two first sign-ins arrive at once.
+        - The email, name, and photo are refreshed from Google on every sign-in.
+        - The commute questionnaire adds `timezone`, `vehicle` (`make`, `model`, `colour`, `litresPer100km`, or `null` if the user doesn't drive), and `transit` (`fareType`, `monthlyPassZones`, or `null` if the user doesn't take transit). They sit inside the user document because there's only one of each and they're always loaded with the user. Only the fare type is stored, not the price, since fares change every year. Submitting the questionnaire replaces all three and sets `profileComplete`.
+        - `lastGasPrice` (`centsPerLitre` and `savedAt`, or `null` until the user saves one) is the last gas price a driver entered on the Profile tab. The price must be 50.0–400.0 ¢/L with at most one decimal. The server sets `savedAt`, so the date can't be faked by the phone's clock. Only the latest price is kept, since only the latest is used to estimate driving costs.
+        - Deleting an account (`DELETE /api/users/me`) removes the user document first, then every trip and every session for that `userId`, so the trip history is gone and every device the user was signed in on is signed out. Signing in again with the same Google account creates a new, empty account.
+        - The car makes and models the questionnaire offers come from `backend/src/data/vehicles.json`, a hand-picked list in the repo loaded once at startup, not from the database.
+    - **`trips` collection**: one document per saved commute, with `userId`, `origin`, `midpoint` (the transfer point, or `null`), `destination`, `legs`, `totalDurationSeconds`, `totalCostCents`, `tripDate`, `seeded`, `createdAt`, and `updatedAt`.
+        - Each place has a `label`, `lat`, `lng`, and optional `placeId`. Each leg has a `mode` (`DRIVE` or `TRANSIT`), its `from` and `to` places, `durationSeconds`, `distanceMeters`, `costCents`, an encoded `polyline`, and the `transitLines` it rides. A trip has one direct leg or two chained legs, and its totals must equal the sum of its legs.
+        - Trips are kept separate from users because a user has many, and the History tab lists them on their own. A compound **index on `userId` and `tripDate` (newest first)** makes `GET /api/users/me/trips` one indexed lookup that is already sorted.
+        - The app never sees `userId`, `seeded` (marks demo trips added by `scripts/seed-trips`), or the timestamps. The History tab filters and sorts the trips and computes the commute insights (average time and cost, and time spent driving versus on transit) on the phone.
+    - **`sessions` collection**: one document per signed-in device, with `tokenHash`, `userId`, and `createdAt`.
+        - The app holds a random 256-bit token. Only its SHA-256 hash is stored (with a **unique index**), so a leaked database can't be used to sign in, and finding a session is one indexed lookup.
+        - Sessions are kept separate from users so one user can be signed in on several devices, and signing out deletes only that device's session.
+        - Sessions never expire on their own. A session ends when its device signs out, or when the account is deleted (`userId` is **indexed** so every session for the account can be removed at once). A session whose account no longer exists is rejected.
 
 
 ### **4.3. External Modules**
@@ -298,7 +305,9 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 4. **Docker + Caddy (GCP VM)**
    - **Purpose**: Deployment and HTTPS.
    - **Reason**: Caddy renews HTTPS certificates automatically.
-
+5. **Navigation Compose (`androidx.navigation:navigation-compose`)**
+   - **Purpose**: Moves between the screens after sign-in: the Map, History (trip history and commute insights), and Profile tabs of the nav bar, and the Edit vehicle and Edit transit screens opened from Profile. It keeps each tab's back stack and scroll position when the user switches tabs, and makes Back on any tab return to Map.
+   - **Reason**: It is the official Jetpack library for navigating between Compose screens. Writing our own back stack would mean re-implementing saving and restoring each tab's state across tab switches and screen rotation.
 
 
 

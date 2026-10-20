@@ -62,6 +62,7 @@ class QuestionnaireBackTest {
     @Test
     fun backAgainClosesTheDialog() {
         pressBack()
+        rule.onNodeWithText("Leave setup?").assertIsDisplayed() // waits for the dialog, so the next Back reaches it
         pressBack()
         rule.onNodeWithText("Leave setup?").assertDoesNotExist()
         assertFalse(signedOut)

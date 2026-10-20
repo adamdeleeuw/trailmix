@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.navigation.compose)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
@@ -93,4 +94,10 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation(libs.maps.compose)
+
+    constraints {
+        // The app alone resolves 1.1.0 (via profileinstaller), but espresso-core needs 1.2.0,
+        // and Gradle's consistent resolution won't let the test classpath differ from the app's.
+        implementation(libs.androidx.concurrent.futures)
+    }
 }

@@ -4,9 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,21 +13,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.example.cpen321application.data.Trip
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -73,46 +69,48 @@ private fun String.toInstantOrNull(): Instant? = try {
     null
 }
 
+/** The two views of the History tab, both built from the same saved trips. */
+enum class HistoryView(val label: String) {
+    TRIPS("Trip history"),
+    INSIGHTS("Commute insights"),
+}
+
+/**
+ * The History tab: the user's saved trips, or insights computed from them.
+ *
+ * Trips load the first time the tab opens and stay loaded while the user switches
+ * tabs. Each view keeps its own date range.
+ *
+ * @param onUnauthorized Signs the user out when the session is no longer valid.
+ */
 @Composable
-fun TripHistoryDialog(
-    viewModel: TripHistoryViewModel,
-    insights: Boolean,
-    onDismiss: () -> Unit,
-    onUnauthorized: () -> Unit,
-) {
+fun TripHistoryScreen(viewModel: TripHistoryViewModel, onUnauthorized: () -> Unit) {
+    var view by rememberSaveable { mutableStateOf(HistoryView.TRIPS) }
     var historyPeriod by rememberSaveable { mutableStateOf(TripHistoryPeriod.LAST_14_DAYS) }
     var insightsPeriod by rememberSaveable { mutableStateOf(TripHistoryPeriod.LAST_14_DAYS) }
     var historySort by rememberSaveable { mutableStateOf(TripHistorySort.NEWEST) }
     LaunchedEffect(viewModel) { viewModel.load(onUnauthorized) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp),
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (insights) "Commute insights" else "Trip history", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text("Close") }
-                }
-                if (insights) {
-                    CommuteInsightsContent(viewModel, insightsPeriod, { insightsPeriod = it }, onUnauthorized)
-                } else {
-                    TripHistoryContent(
-                        viewModel = viewModel,
-                        selectedPeriod = historyPeriod,
-                        selectedSort = historySort,
-                        onPeriodSelected = { historyPeriod = it },
-                        onSortSelected = { historySort = it },
-                        onUnauthorized = onUnauthorized,
-                    )
-                }
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HistoryView.entries.forEach { option ->
+                FilterChip(option == view, onClick = { view = option }, label = { Text(option.label) })
             }
+        }
+        when (view) {
+            HistoryView.TRIPS -> TripHistoryContent(
+                viewModel = viewModel,
+                selectedPeriod = historyPeriod,
+                selectedSort = historySort,
+                onPeriodSelected = { historyPeriod = it },
+                onSortSelected = { historySort = it },
+                onUnauthorized = onUnauthorized,
+            )
+            HistoryView.INSIGHTS ->
+                CommuteInsightsContent(viewModel, insightsPeriod, { insightsPeriod = it }, onUnauthorized)
         }
     }
 }
@@ -126,7 +124,6 @@ private fun TripHistoryContent(
     onSortSelected: (TripHistorySort) -> Unit,
     onUnauthorized: () -> Unit,
 ) {
-    Text("Trip history", style = MaterialTheme.typography.titleLarge)
     TripHistoryOptionsMenu(selectedPeriod, selectedSort, onPeriodSelected, onSortSelected)
     val trips = sortTrips(filterTrips(viewModel.trips.orEmpty(), selectedPeriod), selectedSort)
     when {

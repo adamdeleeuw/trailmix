@@ -14,36 +14,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.cpen321application.ui.auth.SignInScreen
-import com.example.cpen321application.ui.main.MainScreen
-import com.example.cpen321application.ui.main.TripHistoryViewModel
 
 /**
  * Shows the screen for [state]. Stateless, so tests can render any state directly.
  *
+ * @param signIn The Sign-in screen, passed in so it can show the sign-in progress and messages.
  * @param questionnaire The questionnaire screen, passed in because it has its own ViewModel.
+ * @param main The main screen with the nav bar, passed in because its tabs have their own ViewModels.
  */
 @Composable
 fun TrailmixApp(
     state: AppState,
-    isSigningIn: Boolean,
-    signInError: String?,
-    onSignIn: () -> Unit,
     onRetry: () -> Unit,
-    onSignOut: () -> Unit,
-    tripHistory: TripHistoryViewModel,
+    signIn: @Composable () -> Unit,
     questionnaire: @Composable () -> Unit,
+    main: @Composable () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize()) {
         when (state) {
             AppState.Loading -> CenteredColumn { CircularProgressIndicator() }
-            AppState.SignIn -> SignInScreen(isSigningIn, signInError, onSignIn)
+            AppState.SignIn -> signIn()
             AppState.Offline -> CenteredColumn {
                 Text("Couldn't reach Trailmix. Check your connection.")
                 Button(onClick = onRetry) { Text("Retry") }
             }
             is AppState.Questionnaire -> questionnaire()
-            is AppState.Main -> MainScreen(state.user, tripHistory, onSignOut, onSignOut)
+            is AppState.Main -> main()
         }
     }
 }

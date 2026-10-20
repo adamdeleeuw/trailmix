@@ -74,7 +74,6 @@ internal fun CommuteInsightsContent(
     onPeriodSelected: (TripHistoryPeriod) -> Unit,
     onUnauthorized: () -> Unit,
 ) {
-    Text("Commute insights", style = MaterialTheme.typography.titleLarge)
     PeriodMenu(selectedPeriod, onPeriodSelected)
     when {
         viewModel.isLoading -> CircularProgressIndicator()

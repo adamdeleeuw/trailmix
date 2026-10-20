@@ -90,6 +90,7 @@ Fill in `backend/.env`:
 
 ```dotenv
 GOOGLE_BACKEND_CLIENT_ID=<your Google Web client ID>.apps.googleusercontent.com
+GOOGLE_ROUTES_API_KEY=<a Google Cloud API key with the Routes API enabled>
 MONGODB_URI=mongodb://localhost:27017/trailmix
 ```
 
@@ -121,6 +122,7 @@ Fill in `frontend/local.properties`:
 ```properties
 sdk.dir=<path to your Android SDK>
 GOOGLE_CLIENT_ID=<your Google Web client ID>.apps.googleusercontent.com
+MAPS_API_KEY=<a Google Cloud API key with the Maps SDK for Android enabled>
 
 # pick one:
 API_BASE_URL=http://10.0.2.2:3000             # backend running locally

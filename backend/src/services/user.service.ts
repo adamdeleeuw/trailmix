@@ -53,3 +53,29 @@ export async function saveUserProfile(id: Types.ObjectId, profile: Profile): Pro
     { new: true, runValidators: true },
   ).lean();
 }
+
+/**
+ * Saves a user's last gas price, stamped with the current time.
+ *
+ * @param id - The user's ID.
+ * @param centsPerLitre - A price already checked by `parseGasPrice`.
+ * @returns The updated user, or `null` if the account doesn't exist.
+ * @throws If the database operation fails.
+ */
+export async function saveGasPrice(id: Types.ObjectId, centsPerLitre: number): Promise<User | null> {
+  return UserModel.findByIdAndUpdate(
+    id,
+    { $set: { lastGasPrice: { centsPerLitre, savedAt: new Date() } } },
+    { new: true, runValidators: true },
+  ).lean();
+}
+
+/**
+ * Deletes a user's account. Their sessions are deleted separately by `deleteUserSessions`.
+ *
+ * @param id - The user's ID.
+ * @throws If the database operation fails.
+ */
+export async function deleteUser(id: Types.ObjectId): Promise<void> {
+  await UserModel.deleteOne({ _id: id });
+}
