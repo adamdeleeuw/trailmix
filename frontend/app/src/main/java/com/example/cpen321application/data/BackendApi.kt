@@ -33,7 +33,7 @@ data class User(
 data class TripPlace(val label: String)
 
 /** A leg of a saved trip. */
-data class TripLeg(val mode: String)
+data class TripLeg(val mode: String, val durationSeconds: Int)
 
 /** A saved commute returned by the backend. */
 data class Trip(
@@ -143,7 +143,8 @@ object BackendApi : AuthApi, ProfileApi, TripApi {
                     origin = TripPlace(trip.getJSONObject("origin").getString("label")),
                     destination = TripPlace(trip.getJSONObject("destination").getString("label")),
                     legs = List(trip.getJSONArray("legs").length()) { legIndex ->
-                        TripLeg(trip.getJSONArray("legs").getJSONObject(legIndex).getString("mode"))
+                        val leg = trip.getJSONArray("legs").getJSONObject(legIndex)
+                        TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
                     },
                     totalDurationSeconds = trip.getInt("totalDurationSeconds"),
                     totalCostCents = trip.getInt("totalCostCents"),
