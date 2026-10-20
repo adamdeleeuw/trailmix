@@ -12,6 +12,7 @@ import com.example.cpen321application.data.DataStoreSessionStore
 import com.example.cpen321application.data.GoogleSignInClient
 import com.example.cpen321application.ui.AuthViewModel
 import com.example.cpen321application.ui.TrailmixApp
+import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.example.cpen321application.ui.questionnaire.QuestionnaireScreen
 import com.example.cpen321application.ui.questionnaire.QuestionnaireViewModel
 import com.example.cpen321application.ui.theme.CPEN321ApplicationTheme
@@ -32,9 +33,14 @@ class MainActivity : ComponentActivity() {
         viewModelFactory { initializer { QuestionnaireViewModel(BackendApi, DataStoreSessionStore(application)) } }
     }
 
+    private val tripHistoryViewModel: TripHistoryViewModel by viewModels {
+        viewModelFactory { initializer { TripHistoryViewModel(BackendApi, DataStoreSessionStore(application)) } }
+    }
+
     // clears the questionnaire too, so the next sign-in starts it empty
     private fun signOut() {
         questionnaireViewModel.reset()
+        tripHistoryViewModel.reset()
         viewModel.signOut()
     }
 
@@ -50,6 +56,7 @@ class MainActivity : ComponentActivity() {
                     onSignIn = { viewModel.signIn { GoogleSignInClient.getIdToken(this) } },
                     onRetry = viewModel::load,
                     onSignOut = ::signOut,
+                    tripHistory = tripHistoryViewModel,
                 ) {
                     QuestionnaireScreen(questionnaireViewModel, onSaved = viewModel::profileSaved, onSignOut = ::signOut)
                 }

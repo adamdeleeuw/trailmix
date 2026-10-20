@@ -29,6 +29,23 @@ data class User(
     val profileComplete: Boolean, // whether the commute questionnaire has been submitted
 )
 
+/** A place recorded in a trip. */
+data class TripPlace(val label: String)
+
+/** A leg of a saved trip. */
+data class TripLeg(val mode: String)
+
+/** A saved commute returned by the backend. */
+data class Trip(
+    val id: String,
+    val origin: TripPlace,
+    val destination: TripPlace,
+    val legs: List<TripLeg>,
+    val totalDurationSeconds: Int,
+    val totalCostCents: Int,
+    val tripDate: String,
+)
+
 /** How a user pays for transit. The names match the backend's `fareType` values. */
 enum class FareType {
     ADULT_STORED_VALUE,
@@ -83,8 +100,14 @@ interface ProfileApi {
     suspend fun saveProfile(sessionToken: String, profile: Profile): User
 }
 
-/** [AuthApi] and [ProfileApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi {
+/** The signed-in user's saved-trip endpoint. */
+interface TripApi {
+    /** Fetches the signed-in user's trip history, newest first. */
+    suspend fun getTripHistory(sessionToken: String): List<Trip>
+}
+
+/** [AuthApi], [ProfileApi], and [TripApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, TripApi {
     private const val TIMEOUT_MS = 5_000
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -109,6 +132,25 @@ object BackendApi : AuthApi, ProfileApi {
 
     override suspend fun saveProfile(sessionToken: String, profile: Profile) =
         request("PUT", "/api/users/me/profile", sessionToken, profile.toJson()) { parseUser(it.getJSONObject("user")) }
+
+    override suspend fun getTripHistory(sessionToken: String) =
+        request("GET", "/api/users/me/trips", sessionToken) { root ->
+            val trips = root.getJSONArray("trips")
+            List(trips.length()) { index ->
+                val trip = trips.getJSONObject(index)
+                Trip(
+                    id = trip.getString("id"),
+                    origin = TripPlace(trip.getJSONObject("origin").getString("label")),
+                    destination = TripPlace(trip.getJSONObject("destination").getString("label")),
+                    legs = List(trip.getJSONArray("legs").length()) { legIndex ->
+                        TripLeg(trip.getJSONArray("legs").getJSONObject(legIndex).getString("mode"))
+                    },
+                    totalDurationSeconds = trip.getInt("totalDurationSeconds"),
+                    totalCostCents = trip.getInt("totalCostCents"),
+                    tripDate = trip.getString("tripDate"),
+                )
+            }
+        }
 
     // URLEncoder is for query strings, so its "+" for a space is swapped for the path form
     private fun encodePathSegment(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
