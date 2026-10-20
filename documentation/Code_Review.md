@@ -5,7 +5,7 @@
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
 | 2026-10-16        | 2.4 | Justified the "Promise returned in function argument" warnings on the Express routes (issue #10) |
-| 2026-10-19        | 2.4 | Justified the "Promise returned in function argument" warning on the chained route and the "Unsafe return of an error typed value" warnings in its tests (issue #7) |
+| 2026-10-19        | 2.4 | Justified the "Promise returned in function argument" warning on the chained route and the "Unsafe return of an error typed value" warning in its tests (issue #7) |
 
 ---
 
@@ -55,11 +55,6 @@ _(Placeholder for screenshots of Codacy's Issues page)_
 
      - **Location in Git:** [`backend/tests/mock/routes.chained.test.ts#L30`](../backend/tests/mock/routes.chained.test.ts#L30)
      - **Justification:** The test helper returns the request built by `supertest`. "Error typed" means Codacy couldn't work out the value's type, because, as with the Express warnings above, it can't load the installed type definitions (here `@types/supertest`). With the real types the value is a `supertest` `Test`, and `npm run typecheck` (strict mode, run in CI) passes with no errors.
-
-  2. **Issue**
-
-     - **Location in Git:** [`backend/tests/no-mock/routes.chained.test.ts#L18`](../backend/tests/no-mock/routes.chained.test.ts#L18)
-     - **Justification:** Same as above: the helper returns a `supertest` `Test`, which Codacy can't type without `@types/supertest`.
 
 ---
 
