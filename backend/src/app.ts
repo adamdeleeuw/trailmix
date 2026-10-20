@@ -4,6 +4,7 @@ import authRoute from './routes/auth.route';
 import healthRoute from './routes/health.route';
 import usersRoute from './routes/users.route';
 import vehiclesRoute from './routes/vehicles.route';
+import routesRoute from './routes/routes.route';
 
 const NOT_FOUND = 404;
 
@@ -27,6 +28,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRoute);
   app.use('/api/users', usersRoute);
   app.use('/api/vehicles', vehiclesRoute);
+  app.use('/api/routes', routesRoute);
 
   app.use((_req: Request, res: Response) => {
     res.status(NOT_FOUND).json({ error: 'Not Found' });
