@@ -1,13 +1,14 @@
 import request from 'supertest';
+import type { Types } from 'mongoose';
 
 import { createApp } from '../../src/app';
-import { TripModel } from '../../src/models/trip.model';
+import { TripModel, type Trip } from '../../src/models/trip.model';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
 
 useTestDatabase();
 
-const tripData = (userId: string, tripDate: Date, origin: string) => ({
+const tripData = (userId: Types.ObjectId, tripDate: Date, origin: string): Omit<Trip, '_id' | 'createdAt' | 'updatedAt'> => ({
   userId,
   origin: { label: origin, lat: 49.2, lng: -123.1, placeId: null },
   midpoint: null,
@@ -34,10 +35,10 @@ describe('GET /api/users/me/trips', () => {
     const otherUser = await createSignedInUser();
     const olderDate = new Date('2026-01-01T08:00:00.000Z');
     const newerDate = new Date('2026-01-03T08:00:00.000Z');
-    await TripModel.create([
-      tripData(user._id.toString(), olderDate, 'Home'),
-      tripData(user._id.toString(), newerDate, 'Office'),
-      tripData(otherUser.user._id.toString(), newerDate, 'Other home'),
+    await TripModel.insertMany([
+      tripData(user._id, olderDate, 'Home'),
+      tripData(user._id, newerDate, 'Office'),
+      tripData(otherUser.user._id, newerDate, 'Other home'),
     ]);
 
     const response = await request(createApp())
