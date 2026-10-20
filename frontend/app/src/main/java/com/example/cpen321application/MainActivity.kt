@@ -15,6 +15,8 @@ import com.example.cpen321application.ui.AuthViewModel
 import com.example.cpen321application.ui.TrailmixApp
 import com.example.cpen321application.ui.auth.SignInScreen
 import com.example.cpen321application.ui.main.MainScreen
+import com.example.cpen321application.ui.main.TripHistoryScreen
+import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.example.cpen321application.ui.profile.EditProfileScreen
 import com.example.cpen321application.ui.profile.EditProfileViewModel
 import com.example.cpen321application.ui.profile.ProfileScreen
@@ -43,11 +45,15 @@ class MainActivity : ComponentActivity() {
         viewModelFactory { initializer { ProfileViewModel(BackendApi, BackendApi, DataStoreSessionStore(application)) } }
     }
 
+    private val tripHistoryViewModel: TripHistoryViewModel by viewModels {
+        viewModelFactory { initializer { TripHistoryViewModel(BackendApi, DataStoreSessionStore(application)) } }
+    }
+
     private val editProfileViewModel: EditProfileViewModel by viewModels {
         viewModelFactory { initializer { EditProfileViewModel(BackendApi, DataStoreSessionStore(application)) } }
     }
 
-    // clears the questionnaire and profile too, so the next sign-in starts them empty
+    // clears the questionnaire, trip history and profile too, so the next sign-in starts them empty
     private fun signOut() {
         resetScreens()
         viewModel.signOut()
@@ -60,6 +66,7 @@ class MainActivity : ComponentActivity() {
 
     private fun resetScreens() {
         questionnaireViewModel.reset()
+        tripHistoryViewModel.reset()
         profileViewModel.reset()
     }
 
@@ -92,10 +99,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // the tabs, with the Profile tab and its edit screens wired to their ViewModels
+    // the tabs, with the History and Profile tabs and the edit screens wired to their ViewModels
     @Composable
     private fun Main() {
         MainScreen(
+            history = { TripHistoryScreen(tripHistoryViewModel, onUnauthorized = ::signOut) },
             profile = { onEdit ->
                 ProfileScreen(
                     profileViewModel,

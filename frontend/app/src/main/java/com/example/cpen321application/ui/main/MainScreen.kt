@@ -20,10 +20,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.cpen321application.ui.CenteredColumn
 import com.example.cpen321application.ui.route.RouteScreen
 
-/** The routes inside Main. Teammates replacing a placeholder tab keep its route name. */
+/** The routes inside Main. */
 object MainRoutes {
     const val MAP = "map"
     const val HISTORY = "history"
@@ -45,11 +44,13 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
  * Map. Each tab keeps its place when the user switches away and back. The bar is
  * hidden on the edit screens.
  *
+ * @param history The History tab, with the trip history and commute insights.
  * @param profile The Profile tab, called with a function that opens the edit screen.
  * @param editProfile The Edit vehicle or Edit transit screen, called with a function that returns to Profile.
  */
 @Composable
 fun MainScreen(
+    history: @Composable () -> Unit,
     profile: @Composable (onEdit: () -> Unit) -> Unit,
     editProfile: @Composable (onDone: () -> Unit) -> Unit,
 ) {
@@ -68,7 +69,7 @@ fun MainScreen(
             modifier = Modifier.padding(padding).consumeWindowInsets(padding), // so screens don't pad the bars twice
         ) {
             composable(MainRoutes.MAP) { RouteScreen() }
-            composable(MainRoutes.HISTORY) { ComingSoon() }
+            composable(MainRoutes.HISTORY) { history() }
             composable(MainRoutes.PROFILE) { profile { navController.navigate(MainRoutes.EDIT_PROFILE) } }
             composable(MainRoutes.EDIT_PROFILE) { editProfile { navController.popBackStack() } }
         }
@@ -97,10 +98,4 @@ private fun NavHostController.openTab(tab: Tab) {
         launchSingleTop = true
         restoreState = true
     }
-}
-
-// stands in for the History tab until its owner replaces it
-@Composable
-private fun ComingSoon() {
-    CenteredColumn { Text("Coming soon") }
 }

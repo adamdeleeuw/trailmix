@@ -35,6 +35,7 @@ class NavBarTest {
     fun setUp() {
         rule.setContent {
             MainScreen(
+                history = { Text("History screen") },
                 profile = { onEdit ->
                     // a stand-in Profile tab with a counter, to check the tab keeps its place
                     var taps by rememberSaveable { mutableIntStateOf(0) }
@@ -53,6 +54,12 @@ class NavBarTest {
     fun opensOnMapWithMapSelected() {
         rule.onNodeWithText("Tap to set start").assertIsDisplayed() // the route planner, before any point is set
         rule.onNodeWithText("Map").assertIsSelected()
+    }
+
+    @Test
+    fun historyTabShowsTheHistoryScreen() {
+        rule.onNodeWithText("History").performClick()
+        rule.onNodeWithText("History screen").assertIsDisplayed()
     }
 
     @Test

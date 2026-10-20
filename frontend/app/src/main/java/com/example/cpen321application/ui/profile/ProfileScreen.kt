@@ -87,7 +87,7 @@ fun ProfileScreen(
     ProfileDialogs(viewModel, onSignOut, onDeleted)
 }
 
-// one scrolling column: account, vehicle, transit, gas price, insights, then the account buttons
+// one scrolling column: account, vehicle, transit, gas price, then the account buttons
 @Composable
 private fun ProfileContent(user: User, viewModel: ProfileViewModel, onEdit: (ProfileSection, User) -> Unit) {
     Column(
@@ -120,9 +120,6 @@ private fun ProfileContent(user: User, viewModel: ProfileViewModel, onEdit: (Pro
                 Text(user.lastGasPrice?.let { gasPriceDescription(it, user.timezone) } ?: "Not set")
             }
         }
-        Section("Commute insights") {
-            Text("Coming soon", color = MaterialTheme.colorScheme.onSurfaceVariant) // filled in by #8
-        }
         HorizontalDivider()
         OutlinedButton(onClick = { viewModel.openDialog(ProfileDialog.SIGN_OUT) }, Modifier.fillMaxWidth()) {
             Text("Sign out")
@@ -135,18 +132,18 @@ private fun ProfileContent(user: User, viewModel: ProfileViewModel, onEdit: (Pro
     }
 }
 
-// a titled block of the profile, with an optional button beside the title
+// a titled block of the profile, with a button beside the title
 @Composable
 private fun Section(
     title: String,
-    action: String? = null,
-    onAction: () -> Unit = {},
+    action: String,
+    onAction: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            action?.let { TextButton(onClick = onAction) { Text(it) } }
+            TextButton(onClick = onAction) { Text(action) }
         }
         content()
     }

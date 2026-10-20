@@ -28,7 +28,7 @@ class BackButtonTest {
                 onRetry = {},
                 signIn = { SignInScreen(isSigningIn = false, error = null, notice = null, onSignIn = {}) },
                 questionnaire = {},
-                main = { MainScreen(profile = {}, editProfile = {}) },
+                main = { MainScreen(history = {}, profile = {}, editProfile = {}) },
             )
         }
         // with no screen handling Back, Android handles it and leaves the app
