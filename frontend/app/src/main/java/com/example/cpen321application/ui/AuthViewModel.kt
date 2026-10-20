@@ -15,10 +15,12 @@ import java.io.IOException
 import kotlinx.coroutines.launch
 
 const val SIGN_IN_FAILED = "Sign-in failed. Check your connection and try again."
+const val ACCOUNT_DELETED = "Your account was deleted."
 
 /**
  * Which screen the app shows. Each one is the only screen, so Back exits the app,
- * except on the questionnaire, where it asks before signing out.
+ * except on the questionnaire, where it asks before signing out, and inside Main,
+ * whose tabs and edit screens handle Back themselves.
  */
 sealed interface AppState {
     data object Loading : AppState
@@ -48,6 +50,9 @@ class AuthViewModel(
         private set
 
     var signInError by mutableStateOf<String?>(null)
+        private set
+
+    var signInNotice by mutableStateOf<String?>(null) // a message for Sign-in that isn't an error
         private set
 
     init {
@@ -80,6 +85,7 @@ class AuthViewModel(
         if (isSigningIn) return
         isSigningIn = true
         signInError = null
+        signInNotice = null
         endPendingSessions()
         viewModelScope.launch {
             try {
@@ -104,6 +110,12 @@ class AuthViewModel(
             endPendingSessions()
             forgetGoogleAccount()
         }
+    }
+
+    /** Signs out after the account is deleted, and tells the user on Sign-in. */
+    fun accountDeleted() {
+        signInNotice = ACCOUNT_DELETED
+        signOut()
     }
 
     /** Moves to Main once the questionnaire is saved. Main replaces it, so Back can't return to it. */
