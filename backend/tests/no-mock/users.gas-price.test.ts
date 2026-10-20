@@ -25,7 +25,7 @@ describe('Unmocked: PUT /api/users/me/gas-price', () => {
     const after = Date.now();
     expect(response.status).toBe(200);
     expect(response.body.user.lastGasPrice.centsPerLitre).toBe(189.9);
-    const savedAt = Date.parse(response.body.user.lastGasPrice.savedAt);
+    const savedAt = Date.parse(String(response.body.user.lastGasPrice.savedAt));
     expect(savedAt).toBeGreaterThanOrEqual(before);
     expect(savedAt).toBeLessThanOrEqual(after);
     const stored = await UserModel.findById(user._id).lean();
