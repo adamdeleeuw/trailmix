@@ -9,6 +9,7 @@
 | 2026-10-16        | 2.1.1, 2.1.3, 2.6 | Added the vehicle list and "save my profile" API tests, and labelled each HTML coverage report with its run (issue #10) |
 | 2026-10-16        | 2.1.2, 2.2, 2.3, 2.4, 2.5 | Updated the CI run and coverage screenshots and the commit the tests run on for issue #10 |
 | 2026-10-19        | 2.1.1, 2.6 | Added the chained route API tests (issue #7) |
+| 2026-10-19        | 2.1.1, 2.6 | Added the "save my gas price" and "delete my account" API tests (issue #11) |
 
 ---
 
@@ -24,6 +25,8 @@
 | **POST /api/auth/sign-out** | [`backend/tests/no-mock/auth.sign-out.test.ts#L12`](../backend/tests/no-mock/auth.sign-out.test.ts#L12) | [`backend/tests/mock/auth.sign-out.test.ts#L19`](../backend/tests/mock/auth.sign-out.test.ts#L19) | Session DB |
 | **GET /api/users/me** | [`backend/tests/no-mock/users.me.test.ts#L11`](../backend/tests/no-mock/users.me.test.ts#L11) | [`backend/tests/mock/users.me.test.ts#L20`](../backend/tests/mock/users.me.test.ts#L20) | Session DB, User DB |
 | **PUT /api/users/me/profile** | [`backend/tests/no-mock/users.profile.test.ts#L31`](../backend/tests/no-mock/users.profile.test.ts#L31) | [`backend/tests/mock/users.profile.test.ts#L21`](../backend/tests/mock/users.profile.test.ts#L21) | User DB |
+| **PUT /api/users/me/gas-price** | [`backend/tests/no-mock/users.gas-price.test.ts#L11`](../backend/tests/no-mock/users.gas-price.test.ts#L11) | [`backend/tests/mock/users.gas-price.test.ts#L19`](../backend/tests/mock/users.gas-price.test.ts#L19) | User DB |
+| **DELETE /api/users/me** | [`backend/tests/no-mock/users.delete.test.ts#L13`](../backend/tests/no-mock/users.delete.test.ts#L13) | [`backend/tests/mock/users.delete.test.ts#L21`](../backend/tests/mock/users.delete.test.ts#L21) | User DB, Session DB, Google ID token verification (`OAuth2Client.verifyIdToken`, to sign in again after deleting) |
 | **GET /api/vehicles/makes** | [`backend/tests/no-mock/vehicles.test.ts#L14`](../backend/tests/no-mock/vehicles.test.ts#L14) | _None: nothing external can fail_ | _None_ |
 | **GET /api/vehicles/makes/:make/models** | [`backend/tests/no-mock/vehicles.test.ts#L43`](../backend/tests/no-mock/vehicles.test.ts#L43) | _None: nothing external can fail_ | _None_ |
 | **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
@@ -82,7 +85,7 @@ Each run posts a coverage table for all three runs on its summary page and uploa
 
 ### 2.6. Lines API Tests Can't Reach
 
-The combined run covers 100% of the statements, branches, functions, and lines in every file issues #9, #10 and #7 add or change, except for the lines below. API tests build the app with `createApp()` and never start the server process.
+The combined run covers 100% of the statements, branches, functions, and lines in every file issues #7, #9, #10, and #11 add or change, except for the lines below. API tests build the app with `createApp()` and never start the server process.
 
 | **File** | **Lines** | **Reason** |
 | -------- | --------- | ---------- |
