@@ -10,3 +10,4 @@ API_BASE_URL=https://136-67-54-50.sslip.io
 GOOGLE_CLIENT_ID=
 
 # Other API keys, secrets, and configurations
+MAPS_API_KEY=

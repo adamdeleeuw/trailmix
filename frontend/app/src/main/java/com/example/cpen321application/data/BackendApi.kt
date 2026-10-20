@@ -1,6 +1,7 @@
 package com.example.cpen321application.data
 
 import com.example.cpen321application.BuildConfig
+import com.google.android.gms.maps.model.LatLng
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.HttpURLConnection.HTTP_NO_CONTENT
@@ -18,7 +19,7 @@ import org.json.JSONObject
 class UnauthorizedException : IOException("Unauthorized")
 
 /** Thrown when the backend responds with an error status other than 401, so it was reached but failed. */
-class HttpException(code: Int) : IOException("HTTP $code")
+class HttpException(val code: Int) : IOException("HTTP $code")
 
 /** The signed-in user's account, as returned by the backend. */
 data class User(
@@ -65,6 +66,17 @@ data class Transit(val fareType: FareType, val monthlyPassZones: Int?)
 /** The commute questionnaire's answers. A `null` vehicle or transit means the user doesn't drive or take transit. */
 data class Profile(val timezone: String, val vehicle: Vehicle?, val transit: Transit?)
 
+/** One leg of a commute. [polyline] is in Google's encoded polyline format (see `decodePolyline`). */
+data class RouteLeg(
+    val mode: String, // "DRIVE" or "TRANSIT"
+    val durationSeconds: Int,
+    val distanceMeters: Int,
+    val polyline: String,
+)
+
+/** A planned chained commute: the drive leg, then the transit leg. */
+data class ChainedRoute(val legs: List<RouteLeg>, val totalDurationSeconds: Int)
+
 /** A new session from signing in. */
 data class SignInResponse(val sessionToken: String, val user: User)
 
@@ -106,9 +118,15 @@ interface TripApi {
     suspend fun getTripHistory(sessionToken: String): List<Trip>
 }
 
-/** [AuthApi], [ProfileApi], and [TripApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, TripApi {
-    private const val TIMEOUT_MS = 5_000
+/** The backend's route planning endpoints. Throws like [AuthApi], and [HttpException] with code 404 when there is no route. */
+interface RoutesApi {
+    /** Plans driving from [start] to [split], then transit from [split] to [destination]. */
+    suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng): ChainedRoute
+}
+
+/** [AuthApi], [ProfileApi] and [RoutesApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, RoutesApi {
+    private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
     override suspend fun signIn(idToken: String) =
@@ -173,6 +191,31 @@ object BackendApi : AuthApi, ProfileApi, TripApi {
                 .put("fareType", it.fareType.name)
                 .put("monthlyPassZones", it.monthlyPassZones ?: JSONObject.NULL)
         } ?: JSONObject.NULL)
+
+    override suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng) =
+        request(
+            "POST",
+            "/api/routes/chained",
+            sessionToken,
+            body = JSONObject().put("start", start.toJson()).put("split", split.toJson()).put("destination", destination.toJson()),
+        ) {
+            ChainedRoute(
+                legs = parseLegs(it.getJSONArray("legs")),
+                totalDurationSeconds = it.getInt("totalDurationSeconds"),
+            )
+        }
+
+    private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
+
+    private fun parseLegs(json: JSONArray) = (0 until json.length()).map { i ->
+        val leg = json.getJSONObject(i)
+        RouteLeg(
+            mode = leg.getString("mode"),
+            durationSeconds = leg.getInt("durationSeconds"),
+            distanceMeters = leg.getInt("distanceMeters"),
+            polyline = leg.getString("polyline"),
+        )
+    }
 
     private fun parseUser(json: JSONObject) = User(
         id = json.getString("id"),
