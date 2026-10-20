@@ -6,13 +6,10 @@
 
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
-| Oct 15, 2026 | 4.2 | Added MongoDB for Google sign-in with persistent sessions (#9). |
-| Oct 16, 2026 | 4.2 | Added commute profile fields to `users` for the questionnaire (#10). |
-| Oct 19, 2026 | 2, 3, 4 | Filled in requirements and design for the implemented features, and added the `trips` collection for trip history (#20). |
-| Oct 19, 2026 | 4.2, 4.4 | Added the user's last gas price to the `users` collection, described what deleting an account removes, and listed Navigation Compose, which the app's nav bar uses (#11). |
-| Oct 19, 2026 | 4.2, 4.4 | Added the `trips` collection behind the trip history and commute insights (#20), and noted that the History tab shows them. |
-| Oct 19, 2026 | 4.2 | Deleting an account now also deletes the user's saved trips, which the trip history feature (#20) added, as the delete confirmation promises. |
-| Oct 19, 2026 | 4.1 | Listed `PUT /api/users/me/gas-price` and `DELETE /api/users/me` under the Users component, so the interfaces match the backend (#11). |
+| Oct 15, 2026 | 4.2 | Added the MongoDB `users` and `sessions` collections for Google sign-in (#9). |
+| Oct 16, 2026 | 4.2 | Added the commute profile fields to `users` for the questionnaire (#10). |
+| Oct 19, 2026 | 2, 3, 4 | Filled in the project description, requirements, and design for sign-in, the commute questionnaire, chained commute planning, and trip history, and added the `trips` collection (#20). |
+| Oct 19, 2026 | 3.6 | Added rough screen mock-ups for sign-in, the main screen, trip history, profile, settings, and preferences. |
 
 
 ---
@@ -196,7 +193,18 @@ Trailmix is an Android app for **chained commutes**: driving partway, then takin
 
 ### **3.6. Screen Mock-ups**
 
+These are rough hand-drawn sketches of the planned layout, and the details will change.
 
+1. **Sign-in**: Shown when the app is first downloaded or the user is signed out, with Sign up, Log in, and an About button.
+2. **Main screen**: A map with a search bar (details still to be decided) and a bottom bar for Map, Trip history, and Profile.
+
+![Sketches of the sign-in screen and the main map screen](images/mockup-sign-in-and-main.png)
+
+3. **Trip history**: A sort bar and a list of trips, each showing the route, total time, and wait time.
+4. **Profile**: The user's name, email, and photo, buttons for Settings and Preferences, and a Commute insights section.
+5. **Settings** and **Preferences**: Separate screens opened from Profile, not designed yet.
+
+![Sketches of the trip history, profile, settings, and preferences screens](images/mockup-history-profile-settings.png)
 
 
 ### **3.7. Non-Functional Requirements**
