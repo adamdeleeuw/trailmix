@@ -125,7 +125,7 @@ interface RoutesApi {
 }
 
 /** [AuthApi], [ProfileApi] and [RoutesApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, RoutesApi {
+object BackendApi : AuthApi, ProfileApi, TripApi, RoutesApi {
     private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 

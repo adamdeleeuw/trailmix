@@ -15,7 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.cpen321application.ui.auth.SignInScreen
-import com.example.cpen321application.ui.main.TripHistoryScreen
+import com.example.cpen321application.ui.main.MainScreen
 import com.example.cpen321application.ui.main.TripHistoryViewModel
 
 /**
@@ -43,7 +43,7 @@ fun TrailmixApp(
                 Button(onClick = onRetry) { Text("Retry") }
             }
             is AppState.Questionnaire -> questionnaire()
-            is AppState.Main -> TripHistoryScreen(state.user, tripHistory, onSignOut, onSignOut)
+            is AppState.Main -> MainScreen(state.user, tripHistory, onSignOut, onSignOut)
         }
     }
 }
