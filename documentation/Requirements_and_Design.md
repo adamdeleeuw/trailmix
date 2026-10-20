@@ -5,6 +5,7 @@
 | **Change Date**   | **Modified Sections** | **Rationale** |
 | ----------------- | --------------------- | ------------- |
 | 2026-10-19        | 4.2, 4.4 | Added the user's last gas price to the `users` collection, described what deleting an account removes, and listed Navigation Compose, which the app's nav bar uses (issue #11) |
+| 2026-10-19        | 4.2 | Deleting an account now also deletes the user's saved trips, which the trip history feature (PR #20) added, as the delete confirmation promises |
 
 ---
 
@@ -100,7 +101,7 @@
         - The email, name, and photo are refreshed from Google on every sign-in.
         - The commute questionnaire adds `timezone`, `vehicle` (`make`, `model`, `colour`, `litresPer100km`, or `null` if the user doesn't drive), and `transit` (`fareType`, `monthlyPassZones`, or `null` if the user doesn't take transit). They sit inside the user document because there's only one of each and they're always loaded with the user. Only the fare type is stored, not the price, since fares change every year. Submitting the questionnaire replaces all three and sets `profileComplete`.
         - `lastGasPrice` (`centsPerLitre` and `savedAt`, or `null` until the user saves one) is the last gas price a driver entered on the Profile tab. The price must be 50.0–400.0 ¢/L with at most one decimal. The server sets `savedAt`, so the date can't be faked by the phone's clock. Only the latest price is kept, since only the latest is used to estimate driving costs.
-        - Deleting an account (`DELETE /api/users/me`) removes the user document first and then every session for that `userId`, so every device the user was signed in on is signed out. Signing in again with the same Google account creates a new, empty account.
+        - Deleting an account (`DELETE /api/users/me`) removes the user document first, then every trip and every session for that `userId`, so the trip history is gone and every device the user was signed in on is signed out. Signing in again with the same Google account creates a new, empty account.
         - The car makes and models the questionnaire offers come from `backend/src/data/vehicles.json`, a hand-picked list in the repo loaded once at startup, not from the database.
     - **`sessions` collection**: one document per signed-in device, with `tokenHash`, `userId`, and `createdAt`.
         - The app holds a random 256-bit token. Only its SHA-256 hash is stored (with a **unique index**), so a leaked database can't be used to sign in, and finding a session is one indexed lookup.

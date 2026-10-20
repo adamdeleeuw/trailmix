@@ -3,9 +3,11 @@ import request from 'supertest';
 
 import { createApp } from '../../src/app';
 import { SessionModel } from '../../src/models/session.model';
+import { TripModel } from '../../src/models/trip.model';
 import { UserModel } from '../../src/models/user.model';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
+import { createTrip } from '../helpers/trips';
 
 useTestDatabase();
 
@@ -65,6 +67,29 @@ describe('Mocked: DELETE /api/users/me', () => {
     expect(response.body).toStrictEqual({ error: 'Internal Server Error' });
     expect(await UserModel.findById(user._id).lean()).not.toBeNull();
     expect(await SessionModel.countDocuments({ userId: user._id })).toBe(1);
+  });
+
+  // Mocked behavior: deleting the trips fails after the user is deleted
+  // Input: Authorization header with a valid session token, for a user with a saved trip
+  // Expected status code: 500
+  // Expected behavior: error is handled without crashing, the sessions are not deleted, and the leftover session no longer works because its account is gone
+  // Expected output: { error: "Internal Server Error" }, and GET /api/users/me with the same token then returns 401
+  test('Database error while deleting the trips', async () => {
+    const { user, token } = await createSignedInUser();
+    await createTrip(user._id);
+    const app = createApp();
+    const deleteTrips = jest.spyOn(TripModel, 'deleteMany').mockRejectedValueOnce(new Error('Simulated database error'));
+    const deleteSessions = jest.spyOn(SessionModel, 'deleteMany');
+
+    const response = await request(app).delete('/api/users/me').set('Authorization', bearer(token));
+
+    expect(response.status).toBe(500);
+    expect(response.body).toStrictEqual({ error: 'Internal Server Error' });
+    expect(deleteTrips).toHaveBeenCalledWith({ userId: user._id });
+    expect(deleteSessions).not.toHaveBeenCalled();
+    expect(await UserModel.findById(user._id).lean()).toBeNull();
+    const after = await request(app).get('/api/users/me').set('Authorization', bearer(token));
+    expect(after.status).toBe(401);
   });
 
   // Mocked behavior: deleting the sessions fails after the user is deleted

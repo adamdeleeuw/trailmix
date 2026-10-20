@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthLocals } from '../middleware/require-session.middleware';
 import { toUserResponse } from '../models/user.model';
 import { deleteUserSessions } from '../services/session.service';
-import { findTripsByUserId } from '../services/trip.service';
+import { deleteUserTrips, findTripsByUserId } from '../services/trip.service';
 import { deleteUser, saveGasPrice as saveUserGasPrice, saveUserProfile } from '../services/user.service';
 import { parseGasPrice } from '../validation/gas-price.validation';
 import { parseProfile } from '../validation/profile.validation';
@@ -84,12 +84,12 @@ export async function saveGasPrice(req: Request, res: Response<unknown, AuthLoca
 }
 
 /**
- * Permanently deletes the signed-in user's account and signs them out on every device.
+ * Permanently deletes the signed-in user's account and trip history, and signs them out on every device.
  *
  * @remarks
- * `DELETE /api/users/me`, requires a session. The user is deleted before their
- * sessions, so if deleting the sessions fails they already stop working:
- * `requireSession` rejects a session whose account no longer exists.
+ * `DELETE /api/users/me`, requires a session. The user is deleted first, then
+ * their trips, then their sessions, so if a later step fails the sessions already
+ * stop working: `requireSession` rejects a session whose account no longer exists.
  * - `204`: deleted.
  * - `401 { error }`: no valid session.
  * - `500 { error }`: database error.
@@ -97,6 +97,7 @@ export async function saveGasPrice(req: Request, res: Response<unknown, AuthLoca
 export async function deleteMe(_req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
   const userId = res.locals.auth.user._id;
   await deleteUser(userId);
+  await deleteUserTrips(userId);
   await deleteUserSessions(userId);
   res.status(NO_CONTENT).end();
 }
