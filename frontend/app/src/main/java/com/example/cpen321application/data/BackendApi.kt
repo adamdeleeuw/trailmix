@@ -30,6 +30,23 @@ data class User(
     val profileComplete: Boolean, // whether the commute questionnaire has been submitted
 )
 
+/** A place recorded in a trip. */
+data class TripPlace(val label: String)
+
+/** A leg of a saved trip. */
+data class TripLeg(val mode: String, val durationSeconds: Int)
+
+/** A saved commute returned by the backend. */
+data class Trip(
+    val id: String,
+    val origin: TripPlace,
+    val destination: TripPlace,
+    val legs: List<TripLeg>,
+    val totalDurationSeconds: Int,
+    val totalCostCents: Int,
+    val tripDate: String,
+)
+
 /** How a user pays for transit. The names match the backend's `fareType` values. */
 enum class FareType {
     ADULT_STORED_VALUE,
@@ -95,6 +112,12 @@ interface ProfileApi {
     suspend fun saveProfile(sessionToken: String, profile: Profile): User
 }
 
+/** The signed-in user's saved-trip endpoint. */
+interface TripApi {
+    /** Fetches the signed-in user's trip history, newest first. */
+    suspend fun getTripHistory(sessionToken: String): List<Trip>
+}
+
 /** The backend's route planning endpoints. Throws like [AuthApi], and [HttpException] with code 404 when there is no route. */
 interface RoutesApi {
     /** Plans driving from [start] to [split], then transit from [split] to [destination]. */
@@ -102,7 +125,7 @@ interface RoutesApi {
 }
 
 /** [AuthApi], [ProfileApi] and [RoutesApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, RoutesApi {
+object BackendApi : AuthApi, ProfileApi, TripApi, RoutesApi {
     private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -127,6 +150,26 @@ object BackendApi : AuthApi, ProfileApi, RoutesApi {
 
     override suspend fun saveProfile(sessionToken: String, profile: Profile) =
         request("PUT", "/api/users/me/profile", sessionToken, profile.toJson()) { parseUser(it.getJSONObject("user")) }
+
+    override suspend fun getTripHistory(sessionToken: String) =
+        request("GET", "/api/users/me/trips", sessionToken) { root ->
+            val trips = root.getJSONArray("trips")
+            List(trips.length()) { index ->
+                val trip = trips.getJSONObject(index)
+                Trip(
+                    id = trip.getString("id"),
+                    origin = TripPlace(trip.getJSONObject("origin").getString("label")),
+                    destination = TripPlace(trip.getJSONObject("destination").getString("label")),
+                    legs = List(trip.getJSONArray("legs").length()) { legIndex ->
+                        val leg = trip.getJSONArray("legs").getJSONObject(legIndex)
+                        TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
+                    },
+                    totalDurationSeconds = trip.getInt("totalDurationSeconds"),
+                    totalCostCents = trip.getInt("totalCostCents"),
+                    tripDate = trip.getString("tripDate"),
+                )
+            }
+        }
 
     // URLEncoder is for query strings, so its "+" for a space is swapped for the path form
     private fun encodePathSegment(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")

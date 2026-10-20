@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.cpen321application.ui.auth.SignInScreen
 import com.example.cpen321application.ui.main.MainScreen
+import com.example.cpen321application.ui.main.TripHistoryViewModel
 
 /**
  * Shows the screen for [state]. Stateless, so tests can render any state directly.
@@ -30,6 +31,7 @@ fun TrailmixApp(
     onSignIn: () -> Unit,
     onRetry: () -> Unit,
     onSignOut: () -> Unit,
+    tripHistory: TripHistoryViewModel,
     questionnaire: @Composable () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize()) {
@@ -41,7 +43,7 @@ fun TrailmixApp(
                 Button(onClick = onRetry) { Text("Retry") }
             }
             is AppState.Questionnaire -> questionnaire()
-            is AppState.Main -> MainScreen(state.user, onSignOut)
+            is AppState.Main -> MainScreen(state.user, tripHistory, onSignOut, onSignOut)
         }
     }
 }
