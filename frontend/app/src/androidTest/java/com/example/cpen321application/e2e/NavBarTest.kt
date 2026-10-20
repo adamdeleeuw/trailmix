@@ -51,7 +51,7 @@ class NavBarTest {
 
     @Test
     fun opensOnMapWithMapSelected() {
-        rule.onNodeWithText("Coming soon").assertIsDisplayed()
+        rule.onNodeWithText("Tap to set start").assertIsDisplayed() // the route planner, before any point is set
         rule.onNodeWithText("Map").assertIsSelected()
     }
 
