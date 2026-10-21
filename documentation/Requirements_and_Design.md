@@ -322,11 +322,181 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 
 
 ### **4.6. Use Case Sequence Diagram (5 Most Major Use Cases)**
-1. [**[WRITE_NAME_HERE]**](#uc1)\
-[SEQUENCE_DIAGRAM_HERE]
-2. ...
+1. [**Sign In with Google**](#uc1)
 
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as :Frontend
+    participant GSI as :Google Sign-In
+    participant Auth as :Auth
+    participant Users as :Users
+    participant DB as :MongoDB
 
+    User->>App: tap "Sign in with Google"
+    App->>GSI: getCredential()
+    GSI-->>User: show account picker
+    alt user closes the picker
+        GSI-->>App: GetCredentialCancellationException
+        App-->>User: stay on sign-in screen
+    else user picks an account
+        GSI-->>App: idToken
+        App->>Auth: POST /api/auth/google { idToken }
+        Auth->>GSI: verifyIdToken(idToken)
+        alt token invalid
+            GSI-->>Auth: error
+            Auth-->>App: 401 { error }
+            App-->>User: show sign-in error
+        else token valid
+            GSI-->>Auth: { googleId, email, name, photoUrl }
+            Auth->>Users: upsertGoogleUser(profile)
+            Users->>DB: users.findOneAndUpdate({ googleId }, upsert)
+            DB-->>Users: user
+            Users-->>Auth: user
+            Auth->>DB: sessions.insertOne({ tokenHash, userId })
+            Auth-->>App: 200 { sessionToken, user }
+            App->>App: save sessionToken
+            alt user.profileComplete
+                App-->>User: show main screen
+            else
+                App-->>User: show questionnaire
+            end
+        end
+    end
+    Note over App,Auth: Network failure on POST also shows the sign-in error
+```
+
+2. [**Complete Questionnaire**](#uc2)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as :Frontend
+    participant Users as :Users
+    participant DB as :MongoDB
+
+    App->>Users: GET /api/vehicles/makes
+    Users-->>App: 200 { makes }
+    User->>App: pick a make
+    App->>Users: GET /api/vehicles/makes/:make/models
+    Users-->>App: 200 { models }
+    User->>App: enter car details and transit fare type
+    User->>App: tap "Submit"
+    App->>App: validate answers
+    alt an answer is missing or invalid
+        App-->>User: mark the field, don't submit
+    else answers valid
+        App->>Users: PUT /api/users/me/profile { timezone, vehicle, transit }
+        Users->>Users: parseProfile(body)
+        alt profile invalid
+            Users-->>App: 400 { error }
+            App-->>User: show error, keep answers
+        else profile valid
+            Users->>DB: users.findByIdAndUpdate(userId, { timezone, vehicle, transit, profileComplete: true })
+            alt save fails
+                DB-->>Users: error
+                Users-->>App: 500 { error }
+                App-->>User: show error, keep answers
+            else saved
+                DB-->>Users: updated user
+                Users-->>App: 200 { user }
+                App-->>User: show main screen
+            end
+        end
+    end
+```
+
+3. [**Plan Chained Commute**](#uc3)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as :Frontend
+    participant Routes as :Routes
+    participant GR as :Google Routes API
+
+    User->>App: tap start, split point, destination on map
+    App->>Routes: POST /api/routes/chained { start, split, destination }
+    par drive leg
+        Routes->>GR: computeRoutes(start, split, DRIVE)
+        GR-->>Routes: drive route or {}
+    and transit leg
+        Routes->>GR: computeRoutes(split, destination, TRANSIT)
+        GR-->>Routes: transit route or {}
+    end
+    alt request fails or times out (10 s)
+        Routes-->>App: 500 { error }
+        App-->>User: show error with Retry
+    else a leg has no route
+        Routes-->>App: 404 { error: "No route found" }
+        App-->>User: show "No route found."
+    else both legs found
+        Routes-->>App: 200 { legs, totalDurationSeconds }
+        App->>App: decode polylines
+        App-->>User: draw both legs, show each leg's time and the total
+    end
+    Note over App,Routes: Saving the trip to history (step 4) is a goal and not implemented yet
+```
+
+4. [**View Trip History**](#uc4)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as :Frontend
+    participant Trips as :Trips
+    participant DB as :MongoDB
+
+    User->>App: open Trip history
+    App->>Trips: GET /api/users/me/trips
+    Trips->>DB: trips.find({ userId }).sort({ tripDate: -1 })
+    alt loading fails
+        DB-->>Trips: error
+        Trips-->>App: 500 { error }
+        App-->>User: show error with Retry
+    else loaded
+        DB-->>Trips: trips
+        Trips-->>App: 200 { trips }
+        alt no trips
+            App-->>User: show "No trips yet."
+        else has trips
+            App-->>User: list trips, newest first
+            User->>App: change date range or sort
+            App->>App: filter and sort trips
+            App-->>User: show updated list
+        end
+    end
+```
+
+5. [**View Commute Insights**](#uc5)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as :Frontend
+    participant Trips as :Trips
+    participant DB as :MongoDB
+
+    User->>App: open the History tab
+    App->>Trips: GET /api/users/me/trips
+    Trips->>DB: trips.find({ userId }).sort({ tripDate: -1 })
+    alt loading fails
+        DB-->>Trips: error
+        Trips-->>App: 500 { error }
+        App-->>User: show error with Retry
+    else loaded
+        DB-->>Trips: trips
+        Trips-->>App: 200 { trips }
+        User->>App: open Commute insights and pick a period
+        App->>App: calculateCommuteInsights(trips in period)
+        alt no trips in the period
+            App-->>User: show "No trips found" message
+        else has trips
+            App-->>User: show trip count, average time, average cost, driving vs transit pie chart
+        end
+    end
+    Note over App,Trips: Insights reuse the trips History already loaded, so changing the period makes no new request
+```
 ### **4.7. Design of Non-Functional Requirements**
 1. [**Response Time**](#nfr1)
    - **Implementation**: Both legs are requested in parallel, and each request times out after 10 s.
