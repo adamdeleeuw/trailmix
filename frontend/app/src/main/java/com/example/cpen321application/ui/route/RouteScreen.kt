@@ -6,14 +6,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,11 +54,28 @@ private enum class Stop(val label: String, val hue: Float) {
     DESTINATION("Destination", BitmapDescriptorFactory.HUE_RED),
 }
 
-/** Map for planning a chained commute (#7): tap to set start, split point, then destination. */
+/**
+ * Map for planning a chained commute (#7): tap to set start, split point, then destination.
+ *
+ * Also has the "Load demo trips" button, so anyone (such as a TA on the release build)
+ * can fill History and Commute Insights.
+ *
+ * @param onTripsSeeded Called after demo trips are added, so History reloads.
+ * @param onUnauthorized Called when the session is no longer valid.
+ */
 @Composable
-fun RouteScreen(modifier: Modifier = Modifier) {
+fun RouteScreen(onTripsSeeded: () -> Unit, onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current.applicationContext
     val viewModel = viewModel { RouteViewModel(BackendApi, DataStoreSessionStore(context)) }
+    val demoTrips = viewModel { DemoTripsViewModel(BackendApi, DataStoreSessionStore(context)) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val message = demoTrips.message
+    LaunchedEffect(message) {
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            demoTrips.messageShown()
+        }
+    }
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(VANCOUVER, 12f)
     }
@@ -98,6 +123,27 @@ fun RouteScreen(modifier: Modifier = Modifier) {
                     TextButton(onClick = viewModel::reset) { Text("Reset") }
                 }
             }
+        }
+
+        // bottom centre, clear of the map's zoom buttons (bottom right) and Google logo (bottom left)
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SnackbarHost(snackbarHostState)
+            ExtendedFloatingActionButton(
+                onClick = { demoTrips.seed(onTripsSeeded, onUnauthorized) },
+                icon = {
+                    if (demoTrips.isSeeding) {
+                        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.DateRange, contentDescription = null) // the History tab's icon
+                    }
+                },
+                text = { Text("Load demo trips") },
+            )
         }
     }
 }

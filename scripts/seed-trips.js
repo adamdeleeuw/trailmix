@@ -1,4 +1,6 @@
 // Seeds 10 demo trips for one user. Run through mongosh (see seed-trips.ps1).
+// The app's "Load demo trips" button (POST /api/users/me/trips/seed) adds the same
+// trips from backend/src/data/demo-trips.ts; keep the two in step.
 // Expects FILTER to be defined before this runs, e.g.
 //   const FILTER = { googleId: "123..." };   or   { email: "me@gmail.com" }
 // Matches src/models/trip.model.ts: integer cents/seconds/metres, non-empty

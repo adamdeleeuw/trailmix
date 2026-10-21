@@ -20,7 +20,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.cpen321application.ui.route.RouteScreen
 
 /** The routes inside Main. */
 object MainRoutes {
@@ -44,12 +43,14 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
  * Map. Each tab keeps its place when the user switches away and back. The bar is
  * hidden on the edit screens.
  *
+ * @param map The Map tab, for planning a commute and loading demo trips.
  * @param history The History tab, with the trip history and commute insights.
  * @param profile The Profile tab, called with a function that opens the edit screen.
  * @param editProfile The Edit vehicle or Edit transit screen, called with a function that returns to Profile.
  */
 @Composable
 fun MainScreen(
+    map: @Composable () -> Unit,
     history: @Composable () -> Unit,
     profile: @Composable (onEdit: () -> Unit) -> Unit,
     editProfile: @Composable (onDone: () -> Unit) -> Unit,
@@ -68,7 +69,7 @@ fun MainScreen(
             startDestination = MainRoutes.MAP,
             modifier = Modifier.padding(padding).consumeWindowInsets(padding), // so screens don't pad the bars twice
         ) {
-            composable(MainRoutes.MAP) { RouteScreen() }
+            composable(MainRoutes.MAP) { map() }
             composable(MainRoutes.HISTORY) { history() }
             composable(MainRoutes.PROFILE) { profile { navController.navigate(MainRoutes.EDIT_PROFILE) } }
             composable(MainRoutes.EDIT_PROFILE) { editProfile { navController.popBackStack() } }

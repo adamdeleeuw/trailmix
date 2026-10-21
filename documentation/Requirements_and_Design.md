@@ -10,6 +10,7 @@
 | Oct 16, 2026 | 4.2 | Added the commute profile fields to `users` for the questionnaire (#10). |
 | Oct 19, 2026 | 2, 3, 4 | Filled in the project description, requirements, and design for sign-in, the commute questionnaire, chained commute planning, and trip history, and added the `trips` collection (#20). |
 | Oct 19, 2026 | 3.6 | Added rough screen mock-ups for sign-in, the main screen, trip history, profile, settings, and preferences. |
+| Oct 20, 2026 | 4.1, 4.2 | Added `POST /api/users/me/trips/seed` and the Map tab's "Load demo trips" button, so any user can fill History and Commute Insights on the release build. |
 
 
 ---
@@ -257,6 +258,8 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
            - **Purpose**: Gets the user's trips, newest first.
        2. An endpoint to save a planned trip (goal).
            - **Purpose**: Adds a planned trip to the user's history.
+       3. `POST /api/users/me/trips/seed` → `{ trips }`
+           - **Purpose**: Replaces the user's demo trips with 10 fresh ones, for the Map tab's "Load demo trips" button, and returns the whole history. It only touches the caller's `seeded` trips, so any user (such as a TA on the release build) can fill History and Commute Insights without duplicating demo trips or losing real ones.
 
 
 
@@ -274,7 +277,7 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
     - **`trips` collection**: one document per saved commute, with `userId`, `origin`, `midpoint` (the transfer point, or `null`), `destination`, `legs`, `totalDurationSeconds`, `totalCostCents`, `tripDate`, `seeded`, `createdAt`, and `updatedAt`.
         - Each place has a `label`, `lat`, `lng`, and optional `placeId`. Each leg has a `mode` (`DRIVE` or `TRANSIT`), its `from` and `to` places, `durationSeconds`, `distanceMeters`, `costCents`, an encoded `polyline`, and the `transitLines` it rides. A trip has one direct leg or two chained legs, and its totals must equal the sum of its legs.
         - Trips are kept separate from users because a user has many, and the History tab lists them on their own. A compound **index on `userId` and `tripDate` (newest first)** makes `GET /api/users/me/trips` one indexed lookup that is already sorted.
-        - The app never sees `userId`, `seeded` (marks demo trips added by `scripts/seed-trips`), or the timestamps. The History tab filters and sorts the trips and computes the commute insights (average time and cost, and time spent driving versus on transit) on the phone.
+        - The app never sees `userId`, `seeded` (marks demo trips added by the Map tab's "Load demo trips" button or `scripts/seed-trips`), or the timestamps. The History tab filters and sorts the trips and computes the commute insights (average time and cost, and time spent driving versus on transit) on the phone.
     - **`sessions` collection**: one document per signed-in device, with `tokenHash`, `userId`, and `createdAt`.
         - The app holds a random 256-bit token. Only its SHA-256 hash is stored (with a **unique index**), so a leaked database can't be used to sign in, and finding a session is one indexed lookup.
         - Sessions are kept separate from users so one user can be signed in on several devices, and signing out deletes only that device's session.
