@@ -12,6 +12,7 @@
 | 2026-10-19        | 2.1.1, 2.6 | Added the "save my gas price" and "delete my account" API tests (issue #11) |
 | 2026-10-19        | 2.1.1 | The "delete my account" tests now check that the user's trips are deleted, and mock a Trip DB failure |
 | 2026-10-19        | 2.1.1, 2.5, 2.6 | Added the "get my trips" API tests for the trip history feature (PR #20), and listed the trip total checks API tests can't reach |
+| 2026-10-20        | 2.1.1, 2.1.2, 2.1.3, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 4.2 | Added the demo trips API tests (PR #24), updated the commit the tests run on and the CI run and coverage screenshots for CP1, switched the install step to `npm ci`, and marked the non-functional and front-end test specifications as coming in a later checkpoint |
 
 ---
 
@@ -27,6 +28,7 @@
 | **POST /api/auth/sign-out** | [`backend/tests/no-mock/auth.sign-out.test.ts#L12`](../backend/tests/no-mock/auth.sign-out.test.ts#L12) | [`backend/tests/mock/auth.sign-out.test.ts#L19`](../backend/tests/mock/auth.sign-out.test.ts#L19) | Session DB |
 | **GET /api/users/me** | [`backend/tests/no-mock/users.me.test.ts#L11`](../backend/tests/no-mock/users.me.test.ts#L11) | [`backend/tests/mock/users.me.test.ts#L20`](../backend/tests/mock/users.me.test.ts#L20) | Session DB, User DB |
 | **GET /api/users/me/trips** | [`backend/tests/no-mock/users.trips.test.ts#L13`](../backend/tests/no-mock/users.trips.test.ts#L13) | [`backend/tests/mock/users.trips.test.ts#L19`](../backend/tests/mock/users.trips.test.ts#L19) | Trip DB |
+| **POST /api/users/me/trips/seed** | [`backend/tests/no-mock/users.trips-seed.test.ts#L24`](../backend/tests/no-mock/users.trips-seed.test.ts#L24) | [`backend/tests/mock/users.trips-seed.test.ts#L19`](../backend/tests/mock/users.trips-seed.test.ts#L19) | Trip DB |
 | **PUT /api/users/me/profile** | [`backend/tests/no-mock/users.profile.test.ts#L31`](../backend/tests/no-mock/users.profile.test.ts#L31) | [`backend/tests/mock/users.profile.test.ts#L21`](../backend/tests/mock/users.profile.test.ts#L21) | User DB |
 | **PUT /api/users/me/gas-price** | [`backend/tests/no-mock/users.gas-price.test.ts#L11`](../backend/tests/no-mock/users.gas-price.test.ts#L11) | [`backend/tests/mock/users.gas-price.test.ts#L19`](../backend/tests/mock/users.gas-price.test.ts#L19) | User DB |
 | **DELETE /api/users/me** | [`backend/tests/no-mock/users.delete.test.ts#L13`](../backend/tests/no-mock/users.delete.test.ts#L13) | [`backend/tests/mock/users.delete.test.ts#L21`](../backend/tests/mock/users.delete.test.ts#L21) | User DB, Trip DB, Session DB, Google ID token verification (`OAuth2Client.verifyIdToken`, to sign in again after deleting) |
@@ -42,7 +44,9 @@ The vehicle list endpoints have no mocked group. Their data is `backend/src/data
 
 #### 2.1.2. Commit Hash Where Tests Run
 
-`cb7edbe7a5f04f1fc0f1d959136ea53a1660c402`
+`f0aefbfc15f9685c0e419d9e059d21525dcdd53e`
+
+This is the last commit that changes code. Later commits only change documentation.
 
 #### 2.1.3. Explanation on How to Run the Tests
 
@@ -52,7 +56,7 @@ The vehicle list endpoints have no mocked group. Their data is `backend/src/data
    ```
    git clone https://github.com/adamdeleeuw/trailmix.git
    cd trailmix/backend
-   npm install
+   npm ci
    ```
 
 3. **Run the tests:** from the repository root, run one of these:
@@ -88,7 +92,7 @@ Each run posts a coverage table for all three runs on its summary page and uploa
 
 ### 2.6. Lines API Tests Can't Reach
 
-The combined run covers 100% of the statements, branches, functions, and lines in every file issues #7, #9, #10, and #11 and the trip history feature (PR #20) add or change, except for the lines below. API tests build the app with `createApp()` and never start the server process.
+The combined run covers 100% of the statements, branches, functions, and lines in every file issues #7, #9, #10, and #11, the trip history feature (PR #20), and the demo trips button (PR #24) add or change, except for the lines below. API tests build the app with `createApp()` and never start the server process.
 
 | **File** | **Lines** | **Reason** |
 | -------- | --------- | ---------- |
@@ -96,7 +100,7 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 | `backend/src/config/env.ts` | 15–20 | Reading a `PORT` that is set, and rejecting an invalid one. This runs once when the module is first loaded, and tests can't change the environment before that. |
 | `backend/src/config/env.ts` | 25–26 | Throwing when a required variable is missing. The test setup always provides `GOOGLE_BACKEND_CLIENT_ID` and `GOOGLE_ROUTES_API_KEY`, and `MONGODB_URI` is only read at startup. |
 | `backend/src/config/env.ts` | 36–38, 49–52 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
-| `backend/src/models/trip.model.ts` | 117, 120 | Rejecting a trip whose `totalDurationSeconds` or `totalCostCents` doesn't equal the sum of its legs. No API saves trips yet (they are added by `scripts/seed-trips`), so no request can reach this check. |
+| `backend/src/models/trip.model.ts` | 117, 120 | Rejecting a trip whose `totalDurationSeconds` or `totalCostCents` doesn't equal the sum of its legs. The only API that saves trips, `POST /api/users/me/trips/seed`, works out both totals from the legs (`seedDemoTrips`), so no request can fail this check. |
 | `backend/src/middleware/error-handler.middleware.ts` | 17–19 | Handing the error to Express when the response has already started. Every route sends its response in a single call after all of its work succeeds, so no request can fail after headers have gone out. |
 
 ---
@@ -105,27 +109,11 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 
 ### 3.1. Test Locations in Git
 
-| **Non-Functional Requirement**  | **Location in Git**                              |
-| ------------------------------- | ------------------------------------------------ |
-| **Performance (Response Time)** | [`backend/tests/nfr/response_time.test.js`](#) |
-| **Chat Data Security**          | [`backend/tests/nfr/chat_security.test.js`](#) |
+The non-functional requirement tests will be added in a later checkpoint.
 
 ### 3.2. Test Verification and Logs
 
-- **Performance (Response Time)**
-
-  - **Verification:** This test suite simulates multiple concurrent API calls using Jest along with a load-testing utility to mimic real-world user behavior. The focus is on key endpoints such as user login and study group search to ensure that each call completes within the target response time of 2 seconds under normal load. The test logs capture metrics such as average response time, maximum response time, and error rates. These logs are then analyzed to identify any performance bottlenecks, ensuring the system can handle expected traffic without degradation in user experience.
-  - **Log Output**
-    ```
-    [Placeholder for response time test logs]
-    ```
-
-- **Chat Data Security**
-  - **Verification:** ...
-  - **Log Output**
-    ```
-    [Placeholder for chat security test logs]
-    ```
+The verification steps and logs will be added with the tests in a later checkpoint.
 
 ---
 
@@ -139,36 +127,4 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
 
 ### 4.2. Tests
 
-- **Use Case: Login**
-
-  - **Expected Behaviors:**
-    | **Scenario Steps** | **Test Case Steps** |
-    | ------------------ | ------------------- |
-    | 1. The user opens "Add Todo Items" screen. | Open "Add Todo Items" screen. |
-    | 2. The app shows an input text field and an "Add" button. The add button is disabled. | Check that the text field is present on screen.<br>Check that the button labelled "Add" is present on screen.<br>Check that the "Add" button is disabled. |
-    | 3a. The user inputs an ill-formatted string. | Input "_^_^^OQ#$" in the text field. |
-    | 3a1. The app displays an error message prompting the user for the expected format. | Check that a dialog is opened with the text: "Please use only alphanumeric characters ". |
-    | 3. The user inputs a new item for the list and the add button becomes enabled. | Input "buy milk" in the text field.<br>Check that the button labelled "add" is enabled. |
-    | 4. The user presses the "Add" button. | Click the button labelled "add ". |
-    | 5. The screen refreshes and the new item is at the bottom of the todo list. | Check that a text box with the text "buy milk" is present on screen.<br>Input "buy chocolate" in the text field.<br>Click the button labelled "add".<br>Check that two text boxes are present on the screen with "buy milk" on top and "buy chocolate" at the bottom. |
-    | 5a. The list exceeds the maximum todo-list size. | Repeat steps 3 to 5 ten times.<br>Check that a dialog is opened with the text: "You have too many items, try completing one first". |
-
-  - **Test Logs:**
-    ```
-    [Placeholder for Espresso test execution logs]
-    ```
-
-- **Use Case: ...**
-
-  - **Expected Behaviors:**
-
-    | **Scenario Steps** | **Test Case Steps** |
-    | ------------------ | ------------------- |
-    | ...                | ...                 |
-
-  - **Test Logs:**
-    ```
-    [Placeholder for Espresso test execution logs]
-    ```
-
-- **...**
+The front-end test specifications for each use case will be added in a later checkpoint.
