@@ -126,10 +126,13 @@ interface ProfileApi {
     suspend fun saveProfile(sessionToken: String, profile: Profile): User
 }
 
-/** The signed-in user's saved-trip endpoint. */
+/** The signed-in user's saved-trip endpoints. Fails the same way as [ProfileApi]. */
 interface TripApi {
     /** Fetches the signed-in user's trip history, newest first. */
     suspend fun getTripHistory(sessionToken: String): List<Trip>
+
+    /** Replaces the user's demo trips with a fresh set, and returns the whole history, newest first. */
+    suspend fun seedDemoTrips(sessionToken: String): List<Trip>
 }
 
 /** The backend's account endpoints used by the Profile tab. Fails the same way as [ProfileApi]. */
@@ -175,10 +178,10 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
         request("PUT", "/api/users/me/profile", sessionToken, profile.toJson()) { parseUser(it.getJSONObject("user")) }
 
     override suspend fun getTripHistory(sessionToken: String) =
-        request("GET", "/api/users/me/trips", sessionToken) { root ->
-            val trips = root.getJSONArray("trips")
-            List(trips.length()) { trips.getJSONObject(it).toTrip() }
-        }
+        request("GET", "/api/users/me/trips", sessionToken) { it.toTrips() }
+
+    override suspend fun seedDemoTrips(sessionToken: String) =
+        request("POST", "/api/users/me/trips/seed", sessionToken) { it.toTrips() }
 
     override suspend fun saveGasPrice(sessionToken: String, centsPerLitre: Double) =
         request("PUT", "/api/users/me/gas-price", sessionToken, JSONObject().put("centsPerLitre", centsPerLitre)) {
@@ -294,6 +297,12 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
             connection.disconnect()
         }
     }
+}
+
+// the { trips } body of GET /api/users/me/trips and POST /api/users/me/trips/seed
+private fun JSONObject.toTrips(): List<Trip> {
+    val trips = getJSONArray("trips")
+    return List(trips.length()) { trips.getJSONObject(it).toTrip() }
 }
 
 // a trip from GET /api/users/me/trips, keeping only the fields the History tab shows

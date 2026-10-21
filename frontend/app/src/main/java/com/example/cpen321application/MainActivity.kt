@@ -23,6 +23,7 @@ import com.example.cpen321application.ui.profile.ProfileScreen
 import com.example.cpen321application.ui.profile.ProfileViewModel
 import com.example.cpen321application.ui.questionnaire.QuestionnaireScreen
 import com.example.cpen321application.ui.questionnaire.QuestionnaireViewModel
+import com.example.cpen321application.ui.route.RouteScreen
 import com.example.cpen321application.ui.theme.CPEN321ApplicationTheme
 
 /** The app's only activity. [AuthViewModel] decides which screen it shows. */
@@ -103,7 +104,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Main() {
         MainScreen(
-            history = { TripHistoryScreen(tripHistoryViewModel, onUnauthorized = ::signOut) },
+            // reset so History reloads with the demo trips instead of showing its cached list
+            map = { RouteScreen(onTripsSeeded = tripHistoryViewModel::reset, onUnauthorized = ::signOut) },
+            history ={ TripHistoryScreen(tripHistoryViewModel, onUnauthorized = ::signOut) },
             profile = { onEdit ->
                 ProfileScreen(
                     profileViewModel,
