@@ -11,6 +11,7 @@
 | Oct 19, 2026 | 2, 3, 4 | Filled in the project description, requirements, and design for sign-in, the commute questionnaire, chained commute planning, and trip history, and added the `trips` collection (#20). |
 | Oct 19, 2026 | 3.6 | Added rough screen mock-ups for sign-in, the main screen, trip history, profile, settings, and preferences. |
 | Oct 20, 2026 | 4.1, 4.2 | Added `POST /api/users/me/trips/seed` and the Map tab's "Load demo trips" button, so any user can fill History and Commute Insights on the release build. |
+| Oct 20, 2026 | 3.2 | Added the use case diagram for the current implementation (CP1). |
 
 
 ---
@@ -38,7 +39,7 @@ Trailmix is an Android app for **chained commutes**: driving partway, then takin
 
 ### **3.2. Use Case Diagram**
 
-
+![Use case diagram of Trailmix's current implementation](images/use-case-diagram.png)
 
 
 ### **3.3. Actors Description**
