@@ -3,7 +3,7 @@
 
 # Trailmix
 
- *Note: No changes have been made since Adam's implementation of M1. This README will be updated as Trailmix takes its shape.*
+ *Note: This README does not reflect the current progress of Trailmix. It will be updated shortly, likely for CP2.*
 
 ## Overview
 
