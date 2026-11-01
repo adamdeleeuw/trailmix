@@ -101,10 +101,11 @@ export async function saveGasPrice(req: Request, res: Response<unknown, AuthLoca
 }
 
 /**
- * Permanently deletes the signed-in user's account and trip history, and signs them out on every device.
+ * Permanently deletes the signed-in user's account, parking spots and trip history, and signs them out on every device.
  *
  * @remarks
- * `DELETE /api/users/me`, requires a session. The user is deleted first, then
+ * `DELETE /api/users/me`, requires a session. Parking spots live inside the user
+ * document, so they go with it. The user is deleted first, then
  * their trips, then their sessions, so if a later step fails the sessions already
  * stop working: `requireSession` rejects a session whose account no longer exists.
  * - `204`: deleted.
