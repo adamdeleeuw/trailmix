@@ -23,6 +23,16 @@ export const PASS_ZONES = [1, 2, 3] as const;
 export const MIN_CENTS_PER_LITRE = 50;
 export const MAX_CENTS_PER_LITRE = 400;
 
+/** The most parking spots a user can save, which keeps the Planner's candidate list bounded. */
+export const MAX_PARKING_SPOTS = 20;
+
+/** The shortest and longest name a parking spot can have. */
+export const MIN_PARKING_LABEL_LENGTH = 1;
+export const MAX_PARKING_LABEL_LENGTH = 60;
+
+/** What a parking spot's rate is charged per. */
+export const RATE_UNITS = ['HOUR', 'DAY'] as const;
+
 /** The car a user drives. */
 export interface Vehicle {
   make: string; // one of the makes in data/vehicles.json
@@ -41,6 +51,45 @@ export interface Transit {
 export interface GasPrice {
   centsPerLitre: number; // 50.0 to 400.0, one decimal at most
   savedAt: Date; // set by the server when the price is saved
+}
+
+/** A point on the map, in the WGS84 coordinate system. */
+export interface LatLng {
+  lat: number; // -90 to 90
+  lng: number; // -180 to 180
+}
+
+/** What a parking spot costs, as the user entered it. */
+export interface ParkingRate {
+  rateCents: number | null; // whole cents, null when the cost is unknown
+  ratePer: (typeof RATE_UNITS)[number] | null; // null exactly when rateCents is null
+}
+
+/** The parts of a parking spot the user can change after saving it. */
+export interface ParkingSpotDetails extends ParkingRate {
+  label: string; // 1 to 60 characters, without leading or trailing spaces
+  overnightAllowed: boolean; // false when the user turned on "No overnight parking"
+}
+
+/** A new parking spot, before the server gives it an ID and a time. */
+export interface NewParkingSpot extends ParkingSpotDetails {
+  location: LatLng;
+  placeId: string | null; // Google place ID when it came from search, null for a dropped pin
+}
+
+/**
+ * A place where the user parks before switching to transit. The Planner only
+ * hands off from driving at these.
+ */
+export interface ParkingSpot extends NewParkingSpot {
+  _id: Types.ObjectId; // used in the edit and delete paths
+  createdAt: Date; // set by the server when the spot is saved
+}
+
+/** The parking spot fields the app is allowed to see. */
+export interface ParkingSpotResponse extends NewParkingSpot {
+  id: string;
+  createdAt: string; // ISO 8601 date
 }
 
 /** The commute questionnaire's answers. Saving always replaces all of them. */
@@ -70,6 +119,7 @@ export interface User {
   vehicle: Vehicle | null;
   transit: Transit | null;
   lastGasPrice: GasPrice | null; // null until a price is saved
+  parkingSpots: ParkingSpot[]; // newest first, at most MAX_PARKING_SPOTS
   createdAt: Date;
   updatedAt: Date;
 }
@@ -114,6 +164,25 @@ const gasPriceSchema = new Schema<GasPrice>(
   { _id: false },
 );
 
+const latLngSchema = new Schema<LatLng>(
+  {
+    lat: { type: Number, required: true, min: -90, max: 90 },
+    lng: { type: Number, required: true, min: -180, max: 180 },
+  },
+  { _id: false },
+);
+
+// keeps an _id, unlike the schemas above, because the app edits and deletes spots by ID
+const parkingSpotSchema = new Schema<ParkingSpot>({
+  label: { type: String, required: true, minlength: MIN_PARKING_LABEL_LENGTH, maxlength: MAX_PARKING_LABEL_LENGTH },
+  location: { type: latLngSchema, required: true },
+  placeId: { type: String, default: null },
+  rateCents: { type: Number, default: null, min: 0 },
+  ratePer: { type: String, enum: RATE_UNITS, default: null },
+  overnightAllowed: { type: Boolean, required: true },
+  createdAt: { type: Date, required: true },
+});
+
 const userSchema = new Schema<User>(
   {
     googleId: { type: String, required: true, unique: true },
@@ -125,6 +194,7 @@ const userSchema = new Schema<User>(
     vehicle: { type: vehicleSchema, default: null },
     transit: { type: transitSchema, default: null },
     lastGasPrice: { type: gasPriceSchema, default: null },
+    parkingSpots: { type: [parkingSpotSchema], default: [] },
   },
   { timestamps: true },
 );
@@ -159,5 +229,24 @@ export function toUserResponse(user: User): UserResponse {
       centsPerLitre: user.lastGasPrice.centsPerLitre,
       savedAt: user.lastGasPrice.savedAt.toISOString(),
     },
+  };
+}
+
+/**
+ * Converts a stored parking spot into the shape sent to the app.
+ *
+ * @param spot - The stored parking spot.
+ * @returns The spot with its ID as a string and its time as an ISO 8601 date.
+ */
+export function toParkingSpotResponse(spot: ParkingSpot): ParkingSpotResponse {
+  return {
+    id: spot._id.toString(),
+    label: spot.label,
+    location: { lat: spot.location.lat, lng: spot.location.lng },
+    placeId: spot.placeId,
+    rateCents: spot.rateCents,
+    ratePer: spot.ratePer,
+    overnightAllowed: spot.overnightAllowed,
+    createdAt: spot.createdAt.toISOString(),
   };
 }
