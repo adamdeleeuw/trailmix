@@ -1,6 +1,7 @@
 import request from 'supertest';
 
 import { createApp } from '../../src/app';
+import { UserModel } from '../../src/models/user.model';
 import { getParkingSpots } from '../../src/services/parking-spot.service';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
@@ -237,6 +238,25 @@ describe('Unmocked: POST /api/users/me/parking-spots', () => {
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(201);
+  });
+
+  // Input: a valid session for an account made before parking spots existed, so it has no parkingSpots field,
+  // listing its spots and then saving a valid spot
+  // Expected status code: 200, then 201
+  // Expected behavior: the missing field counts as no spots, and the spot is saved
+  // Expected output: { parkingSpots: [] }, then { parkingSpot }, and the account then has that one spot
+  test('Accounts made before parking spots can list and save', async () => {
+    const { user, token } = await createSignedInUser();
+    await UserModel.collection.updateOne({ _id: user._id }, { $unset: { parkingSpots: '' } });
+    const app = createApp();
+
+    const listed = await request(app).get(PATH).set('Authorization', bearer(token));
+    const saved = await request(app).post(PATH).set('Authorization', bearer(token)).send(parkingSpotBody());
+
+    expect(listed.status).toBe(200);
+    expect(listed.body).toStrictEqual({ parkingSpots: [] });
+    expect(saved.status).toBe(201);
+    expect((await getParkingSpots(user._id)).map((spot) => spot.label)).toStrictEqual(['UBC North Parkade']);
   });
 
   // Input: no Authorization header and a valid spot

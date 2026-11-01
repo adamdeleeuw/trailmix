@@ -41,8 +41,10 @@ async function explainRejectedSave(userId: Types.ObjectId): Promise<ParkingSpotR
 
 /** Returns a user's spots, or `null` if the account doesn't exist. */
 async function getUserSpotsOrNull(userId: Types.ObjectId): Promise<ParkingSpot[] | null> {
-  const user = await UserModel.findById(userId, { parkingSpots: 1 }).lean();
-  return user === null ? null : user.parkingSpots;
+  // parkingSpots is missing on accounts made before parking spots existed, which counts as none
+  const user = await UserModel.findById(userId, { parkingSpots: 1 }).lean<{ parkingSpots?: ParkingSpot[] }>();
+  if (user === null) return null;
+  return user.parkingSpots ?? [];
 }
 
 /**
@@ -62,7 +64,8 @@ export async function saveParkingSpot(userId: Types.ObjectId, newSpot: NewParkin
   const spot: ParkingSpot = { _id: new Types.ObjectId(), ...newSpot, createdAt: new Date() };
   const filter = {
     _id: userId,
-    $expr: { $lt: [{ $size: '$parkingSpots' }, MAX_PARKING_SPOTS] },
+    // accounts made before parking spots existed have no array yet, which counts as empty
+    $expr: { $lt: [{ $size: { $ifNull: ['$parkingSpots', []] } }, MAX_PARKING_SPOTS] },
     ...(newSpot.placeId === null ? {} : { 'parkingSpots.placeId': { $ne: newSpot.placeId } }),
   };
   const user = await UserModel.findOneAndUpdate(
