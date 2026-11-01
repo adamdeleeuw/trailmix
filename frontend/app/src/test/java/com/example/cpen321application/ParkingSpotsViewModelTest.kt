@@ -10,6 +10,7 @@ import com.example.cpen321application.data.PlaceDetails
 import com.example.cpen321application.data.RateUnit
 import com.example.cpen321application.data.SessionStore
 import com.example.cpen321application.data.UnauthorizedException
+import com.example.cpen321application.ui.SAVE_FAILED
 import com.example.cpen321application.ui.SAVE_OFFLINE
 import com.example.cpen321application.ui.map.DROPPED_PIN
 import com.example.cpen321application.ui.map.MAX_PARKING_SPOTS
@@ -17,6 +18,7 @@ import com.example.cpen321application.ui.map.ParkingSpotsViewModel
 import com.example.cpen321application.ui.map.REMOVE_FAILED
 import com.example.cpen321application.ui.map.SPOTS_LOAD_FAILED
 import com.example.cpen321application.ui.map.SPOT_ALREADY_SAVED
+import com.example.cpen321application.ui.map.SPOT_GONE
 import com.example.cpen321application.ui.map.SPOT_LIMIT
 import com.example.cpen321application.ui.map.SPOT_REMOVED
 import com.example.cpen321application.ui.map.SPOT_SAVED
@@ -245,6 +247,28 @@ class ParkingSpotsViewModelTest {
             assertEquals(shown, viewModel.saveError)
             viewModel.closeDialog()
         }
+    }
+
+    @Test
+    fun notFoundMeansGoneOnlyWhenEditing() {
+        // a new save to a backend without the parking spot endpoints
+        api.failure = HttpException(HTTP_NOT_FOUND, "Not Found")
+        viewModel.dropPin(SIDE_STREET)
+        viewModel.openSaveDialog()
+        save()
+        assertEquals(SAVE_FAILED, viewModel.saveError)
+        viewModel.closeDialog()
+
+        // editing a spot another device already deleted
+        api.failure = null
+        val saved = spot("a")
+        api.spots += saved
+        load()
+        api.spots.clear()
+        viewModel.tapSpot(saved)
+        viewModel.openEditDialog()
+        save()
+        assertEquals(SPOT_GONE, viewModel.saveError)
     }
 
     @Test

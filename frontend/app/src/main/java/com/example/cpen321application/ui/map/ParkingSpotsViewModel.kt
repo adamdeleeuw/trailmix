@@ -200,7 +200,7 @@ class ParkingSpotsViewModel(
             } catch (e: UnauthorizedException) {
                 onUnauthorized()
             } catch (e: HttpException) {
-                saveError = saveErrorFor(e)
+                saveError = saveErrorFor(e, isEdit = current.editingId != null)
             } catch (e: IOException) {
                 saveError = SAVE_OFFLINE
             } finally {
@@ -277,10 +277,11 @@ class ParkingSpotsViewModel(
         }
     }
 
-    private fun saveErrorFor(e: HttpException) = when {
+    // a 404 only means the spot is gone when editing one; on a new save it's a backend without these endpoints
+    private fun saveErrorFor(e: HttpException, isEdit: Boolean) = when {
         e.code == HTTP_CONFLICT && e.error == PARKING_LIMIT_ERROR -> SPOT_LIMIT
         e.code == HTTP_CONFLICT && e.error == PARKING_DUPLICATE_ERROR -> SPOT_ALREADY_SAVED
-        e.code == HTTP_NOT_FOUND -> SPOT_GONE
+        e.code == HTTP_NOT_FOUND && isEdit -> SPOT_GONE
         else -> SAVE_FAILED
     }
 }
