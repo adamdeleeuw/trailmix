@@ -13,6 +13,7 @@
 | Oct 20, 2026 | 4.1, 4.2 | Added `POST /api/users/me/trips/seed` and the Map tab's "Load demo trips" button, so any user can fill History and Commute Insights on the release build. |
 | Oct 20, 2026 | 3.2 | Added the use case diagram for the current implementation (CP1). |
 | Nov 1, 2026 | 3.1, 4.1, 4.2, 4.3, 4.4 | Added parking spots and place search on the Map tab (#71): the parking spot endpoints, `parkingSpots` in `users`, the Places API, and the Places SDK for Android. Parking spots are the places the Planner (#72) will switch from driving to transit. |
+| Nov 1, 2026 | 3.1, 4.3 | Places on the map can now be tapped to open their sheet, and the sheet can be closed, to match Google Maps (#71). The Places API also looks up a tapped place's address. |
 
 
 ---
@@ -35,7 +36,7 @@ Trailmix is an Android app for **chained commutes**: driving partway, then takin
 1. **Authentication**: Sign in with Google and sign out.
 2. **Commute Profile**: A first-time questionnaire about the user's car (make, model, fuel use) and transit fare type. It will be used to estimate trip costs (goal).
 3. **Chained Commute Planning**: Pick a start, split point, and destination on a map, and get a drive leg plus a transit leg with their times. Trailmix will choose the split point automatically (goal).
-4. **Parking Spots and Place Search**: Search for places on the Map tab, and save up to 20 parking spots (a name, an optional cost per hour or per day, and whether overnight parking is allowed) from search or by long-pressing the map. Saved spots show as P markers, and are where a planned trip will switch from driving to transit (goal).
+4. **Parking Spots and Place Search**: Search for places on the Map tab, and save up to 20 parking spots (a name, an optional cost per hour or per day, and whether overnight parking is allowed) from search, by tapping a place on the map, or by long-pressing the map. Each place opens in a sheet like Google Maps', which closes with its X, a tap on the map, a swipe down, or Back. Saved spots show as P markers, and are where a planned trip will switch from driving to transit (goal).
 5. **Trip History and Insights**: View past trips by date and cost, and see average time, average cost, and driving vs transit time. Planned trips will be saved here automatically (goal).
 
 
@@ -304,9 +305,9 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 2. **Google Routes API**
 - **Purpose**: Computes the drive and transit legs.
 3. **Google Maps SDK**
-- **Purpose**: Displays the map and routes.
+- **Purpose**: Displays the map and routes, and reports taps on its place labels (with their Google place IDs) and long-presses.
 4. **Google Places API (New)**
-- **Purpose**: Suggests places as the user types on the Map tab, biased to Metro Vancouver, and gets the name, address and location of the one they pick. Called from the app with a key restricted to the app's package and signing certificate.
+- **Purpose**: Suggests places as the user types on the Map tab, biased to Metro Vancouver, and gets the name, address and location of the one they pick, or the address of a place label tapped on the map. Called from the app with a key restricted to the app's package and signing certificate.
 
 
 

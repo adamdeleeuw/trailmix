@@ -14,6 +14,7 @@
 | 2026-10-19        | 2.1.1, 2.5, 2.6 | Added the "get my trips" API tests for the trip history feature (PR #20), and listed the trip total checks API tests can't reach |
 | 2026-10-20        | 2.1.1, 2.1.2, 2.1.3, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 4.2 | Added the demo trips API tests (PR #24), updated the commit the tests run on and the CI run and coverage screenshots for CP1, switched the install step to `npm ci`, and marked the non-functional and front-end test specifications as coming in a later checkpoint |
 | 2026-11-01        | 2.1.1, 2.6, 4.1 | Added the parking spot API tests (issue #71). The "delete my account" tests now check that the user's parking spots are deleted. Added the Map tab's unit tests |
+| 2026-11-01        | 4.1 | `ParkingSpotsViewModelTest` now also covers tapping a place or a P marker on the map, including the address lookup and its fallback (issue #71) |
 
 ---
 
@@ -128,7 +129,7 @@ The verification steps and logs will be added with the tests in a later checkpoi
 
 `frontend/app/src/androidTest/java/com/example/cpen321application/e2e/` (end-to-end UI tests, run on the emulator)
 
-Unit tests for the app's logic, such as sign-in routing and sign-out, are in `frontend/app/src/test/java/com/example/cpen321application/`. The Map tab's search, parking spots and location prompts are covered by `MapSearchViewModelTest`, `ParkingSpotsViewModelTest`, `LocationStateTest` and `ParkingSpotFormatTest` there.
+Unit tests for the app's logic, such as sign-in routing and sign-out, are in `frontend/app/src/test/java/com/example/cpen321application/`. The Map tab's search, parking spots, tapped places and location prompts are covered by `MapSearchViewModelTest`, `ParkingSpotsViewModelTest`, `LocationStateTest` and `ParkingSpotFormatTest` there.
 
 ### 4.2. Tests
 
