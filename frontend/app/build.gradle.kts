@@ -42,6 +42,12 @@ android {
             "\"${localProperty("GOOGLE_CLIENT_ID")}\""
         )
         manifestPlaceholders["MAPS_API_KEY"] = localProperty("MAPS_API_KEY")
+        // Places API (New) for the Map tab's search; falls back to the Maps key if that one has both APIs
+        buildConfigField(
+            "String",
+            "PLACES_API_KEY",
+            "\"${localProperty("PLACES_API_KEY").ifBlank { localProperty("MAPS_API_KEY") }}\""
+        )
     }
 
     buildTypes {
@@ -98,6 +104,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation(libs.maps.compose)
+    implementation(libs.places)
 
     constraints {
         // The app alone resolves 1.1.0 (via profileinstaller), but espresso-core needs 1.2.0,
