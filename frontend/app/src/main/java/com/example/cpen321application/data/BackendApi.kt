@@ -4,6 +4,7 @@ import com.example.cpen321application.BuildConfig
 import com.google.android.gms.maps.model.LatLng
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.HttpURLConnection.HTTP_CREATED
 import java.net.HttpURLConnection.HTTP_NO_CONTENT
 import java.net.HttpURLConnection.HTTP_OK
 import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -20,8 +21,12 @@ import org.json.JSONObject
 /** Thrown when the backend responds 401, meaning the token or session is not valid. */
 class UnauthorizedException : IOException("Unauthorized")
 
-/** Thrown when the backend responds with an error status other than 401, so it was reached but failed. */
-class HttpException(val code: Int) : IOException("HTTP $code")
+/**
+ * Thrown when the backend responds with an error status other than 401, so it was reached but failed.
+ *
+ * @property error The `error` message from the response body, or `null` if it had none.
+ */
+class HttpException(val code: Int, val error: String? = null) : IOException("HTTP $code")
 
 /**
  * The signed-in user's account, as returned by the backend.
@@ -91,6 +96,25 @@ data class RouteLeg(
 /** A planned chained commute: the drive leg, then the transit leg. */
 data class ChainedRoute(val legs: List<RouteLeg>, val totalDurationSeconds: Int)
 
+/** What a parking spot's cost is charged per. The names match the backend's `ratePer` values. */
+enum class RateUnit { HOUR, DAY }
+
+/** What a user enters for a parking spot, and can edit later. */
+data class ParkingSpotDetails(
+    val label: String, // 1 to 60 characters
+    val rateCents: Int?, // null when the cost is unknown
+    val ratePer: RateUnit?, // null exactly when rateCents is null
+    val overnightAllowed: Boolean,
+)
+
+/** A place the user parks before switching to transit, shown on the Map as a P marker. */
+data class ParkingSpot(
+    val id: String,
+    val location: LatLng,
+    val placeId: String?, // Google place ID when saved from search, null for a dropped pin
+    val details: ParkingSpotDetails,
+)
+
 /** A new session from signing in. */
 data class SignInResponse(val sessionToken: String, val user: User)
 
@@ -150,8 +174,39 @@ interface RoutesApi {
     suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng): ChainedRoute
 }
 
-/** [AuthApi], [ProfileApi], [AccountApi], [TripApi] and [RoutesApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
+/**
+ * The signed-in user's parking spot endpoints. Fails the same way as [ProfileApi]; a
+ * 409 [HttpException] carries [PARKING_LIMIT_ERROR] or [PARKING_DUPLICATE_ERROR].
+ */
+interface ParkingSpotApi {
+    /** Fetches the user's parking spots, newest first. */
+    suspend fun getParkingSpots(sessionToken: String): List<ParkingSpot>
+
+    /** Saves a new spot and returns it with its ID. */
+    suspend fun saveParkingSpot(
+        sessionToken: String,
+        location: LatLng,
+        placeId: String?,
+        details: ParkingSpotDetails,
+    ): ParkingSpot
+
+    /** Changes a spot's name, cost and overnight rule, and returns the updated spot. */
+    suspend fun updateParkingSpot(sessionToken: String, id: String, details: ParkingSpotDetails): ParkingSpot
+
+    /** Deletes a spot. Throws [HttpException] with code 404 if the user has no such spot. */
+    suspend fun deleteParkingSpot(sessionToken: String, id: String)
+}
+
+/** The backend's 409 error when the user already has 20 parking spots. */
+const val PARKING_LIMIT_ERROR = "Parking spot limit reached"
+
+/** The backend's 409 error when the user already saved this Google place. */
+const val PARKING_DUPLICATE_ERROR = "Parking spot already saved"
+
+/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [RoutesApi] and [ParkingSpotApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, ParkingSpotApi {
+    private const val PARKING_SPOTS_PATH = "/api/users/me/parking-spots"
+
     private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -190,6 +245,39 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
 
     override suspend fun deleteAccount(sessionToken: String) =
         request("DELETE", "/api/users/me", sessionToken) {}
+
+    override suspend fun getParkingSpots(sessionToken: String) =
+        request("GET", PARKING_SPOTS_PATH, sessionToken) {
+            val spots = it.getJSONArray("parkingSpots")
+            List(spots.length()) { index -> spots.getJSONObject(index).toParkingSpot() }
+        }
+
+    override suspend fun saveParkingSpot(
+        sessionToken: String,
+        location: LatLng,
+        placeId: String?,
+        details: ParkingSpotDetails,
+    ) = request(
+        "POST",
+        PARKING_SPOTS_PATH,
+        sessionToken,
+        details.toJson().put("location", location.toJson()).put("placeId", placeId ?: JSONObject.NULL),
+    ) { it.getJSONObject("parkingSpot").toParkingSpot() }
+
+    override suspend fun updateParkingSpot(sessionToken: String, id: String, details: ParkingSpotDetails) =
+        request("PUT", "$PARKING_SPOTS_PATH/${encodePathSegment(id)}", sessionToken, details.toJson()) {
+            it.getJSONObject("parkingSpot").toParkingSpot()
+        }
+
+    override suspend fun deleteParkingSpot(sessionToken: String, id: String) =
+        request("DELETE", "$PARKING_SPOTS_PATH/${encodePathSegment(id)}", sessionToken) {}
+
+    // JSONObject.NULL so an unknown cost is sent as an explicit null
+    private fun ParkingSpotDetails.toJson() = JSONObject()
+        .put("label", label)
+        .put("rateCents", rateCents ?: JSONObject.NULL)
+        .put("ratePer", ratePer?.name ?: JSONObject.NULL)
+        .put("overnightAllowed", overnightAllowed)
 
     // URLEncoder is for query strings, so its "+" for a space is swapped for the path form
     private fun encodePathSegment(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
@@ -281,22 +369,48 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi {
             }
 
             when (val code = connection.responseCode) {
-                HTTP_OK, HTTP_NO_CONTENT -> {
+                HTTP_OK, HTTP_CREATED, HTTP_NO_CONTENT -> {
                     val text = connection.inputStream.bufferedReader().use { it.readText() }
                     parse(JSONObject(text.ifEmpty { "{}" })) // a 204 has no body
                 }
-                else -> throw if (code == HTTP_UNAUTHORIZED) UnauthorizedException() else HttpException(code)
+                HTTP_UNAUTHORIZED -> throw UnauthorizedException()
+                else -> throw HttpException(code, connection.errorMessage())
             }
         } catch (e: JSONException) {
             throw IOException("Malformed response", e)
         } catch (e: IllegalArgumentException) {
-            throw IOException("Unknown fare type", e) // FareType.valueOf on a value this app doesn't know
+            throw IOException("Unknown enum value", e) // FareType or RateUnit valueOf on a value this app doesn't know
         } catch (e: DateTimeParseException) {
             throw IOException("Malformed date", e)
         } finally {
             connection.disconnect()
         }
     }
+}
+
+// the `error` of an error response's { error } body, or null if there's none or it isn't JSON
+private fun HttpURLConnection.errorMessage(): String? = try {
+    errorStream?.bufferedReader()?.use { it.readText() }?.let { JSONObject(it).optString("error").ifEmpty { null } }
+} catch (e: JSONException) {
+    null
+} catch (e: IOException) {
+    null
+}
+
+// a spot from the parking spot endpoints
+private fun JSONObject.toParkingSpot(): ParkingSpot {
+    val location = getJSONObject("location")
+    return ParkingSpot(
+        id = getString("id"),
+        location = LatLng(location.getDouble("lat"), location.getDouble("lng")),
+        placeId = stringOrNull("placeId"),
+        details = ParkingSpotDetails(
+            label = getString("label"),
+            rateCents = intOrNull("rateCents"),
+            ratePer = stringOrNull("ratePer")?.let { RateUnit.valueOf(it) },
+            overnightAllowed = getBoolean("overnightAllowed"),
+        ),
+    )
 }
 
 // the { trips } body of GET /api/users/me/trips and POST /api/users/me/trips/seed
