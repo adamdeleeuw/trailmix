@@ -12,15 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetState
@@ -57,7 +53,6 @@ import com.example.cpen321application.data.GooglePlaceSearch
 import com.example.cpen321application.data.LOCATION_PERMISSIONS
 import com.example.cpen321application.data.currentLocation
 import com.example.cpen321application.data.hasLocationPermission
-import com.example.cpen321application.ui.route.DemoTripsViewModel
 import com.example.cpen321application.ui.route.RouteScreen
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -78,7 +73,6 @@ private val SEARCH_BAR_SPACE = 88.dp // the search bar and its margins, so the c
 private class MapModels(
     val search: MapSearchViewModel,
     val spots: ParkingSpotsViewModel,
-    val demoTrips: DemoTripsViewModel,
 )
 
 /**
@@ -87,19 +81,16 @@ private class MapModels(
  *
  * Directions opens the chained-route planner until Planning (#73) replaces it. Back
  * closes the sheet first, then clears the search, then leaves it to the nav bar's rules.
- * Also keeps the "Load demo trips" button, so anyone can fill History and Commute Insights.
  *
- * @param onTripsSeeded Called after demo trips are added, so History reloads.
  * @param onUnauthorized Called when the session is no longer valid.
  */
 @Composable
-fun MapHomeScreen(onTripsSeeded: () -> Unit, onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
+fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current.applicationContext
     val places = remember { GooglePlaceSearch(context) }
     val models = MapModels(
         search = viewModel { MapSearchViewModel(places) },
         spots = viewModel { ParkingSpotsViewModel(BackendApi, places, DataStoreSessionStore(context)) },
-        demoTrips = viewModel { DemoTripsViewModel(BackendApi, DataStoreSessionStore(context)) },
     )
     var planning by rememberSaveable { mutableStateOf(false) }
 
@@ -114,7 +105,7 @@ fun MapHomeScreen(onTripsSeeded: () -> Unit, onUnauthorized: () -> Unit, modifie
     BackHandler(enabled = spots.selected != null || models.search.isActive) {
         if (spots.selected != null) spots.closeSheet() else models.search.clear()
     }
-    MapHome(models, onDirections = { planning = true }, onTripsSeeded, onUnauthorized, modifier)
+    MapHome(models, onDirections = { planning = true }, modifier)
     spots.form?.let { ParkingSpotDialog(spots, it, onUnauthorized) }
     if (spots.isConfirmingRemove) RemoveSpotDialog(spots, onUnauthorized)
 }
@@ -122,13 +113,7 @@ fun MapHomeScreen(onTripsSeeded: () -> Unit, onUnauthorized: () -> Unit, modifie
 // the map with the sheet under it and the search bar and buttons over it
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MapHome(
-    models: MapModels,
-    onDirections: () -> Unit,
-    onTripsSeeded: () -> Unit,
-    onUnauthorized: () -> Unit,
-    modifier: Modifier,
-) {
+private fun MapHome(models: MapModels, onDirections: () -> Unit, modifier: Modifier) {
     val search = models.search
     val spots = models.spots
     val location = rememberLocationState()
@@ -146,7 +131,6 @@ private fun MapHome(
     CameraEffects(location, camera, spots)
     SheetEffects(sheetState.bottomSheetState, isOpen, spots::closeSheet)
     ShowMessage(snackbar, spots.message, spots::messageShown)
-    ShowMessage(snackbar, models.demoTrips.message, models.demoTrips::messageShown)
 
     val gestures = mapGestures(search, spots, LocalFocusManager.current)
     BottomSheetScaffold(
@@ -167,13 +151,8 @@ private fun MapHome(
                 onClear = gestures.closePlace,
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(16.dp).fillMaxWidth(),
             )
-            // the buttons ride above the sheet; Load demo trips steps aside while it's open, as in Google Maps
-            MapButtons(
-                location,
-                camera,
-                demoTrips = DemoTripsButton(models.demoTrips, onTripsSeeded, onUnauthorized).takeUnless { isOpen },
-                Modifier.align(Alignment.BottomCenter).padding(bottom = peekHeight),
-            )
+            // the buttons ride above the sheet, as in Google Maps
+            MapButtons(location, camera, Modifier.align(Alignment.BottomEnd).padding(bottom = peekHeight))
         }
     }
 }
@@ -270,28 +249,11 @@ private fun ShowMessage(snackbar: SnackbarHostState, message: String?, onShown: 
     }
 }
 
-/** Load demo trips, kept on the Map so anyone can fill History and Commute Insights. */
-private class DemoTripsButton(
-    val viewModel: DemoTripsViewModel,
-    val onTripsSeeded: () -> Unit,
-    val onUnauthorized: () -> Unit,
-)
-
-// zoom and recenter at the bottom right, and Load demo trips (when given) at the bottom centre,
-// clear of the Google logo
+// zoom and recenter at the bottom right, clear of the Google logo
 @Composable
-private fun MapButtons(
-    location: LocationState,
-    camera: CameraPositionState,
-    demoTrips: DemoTripsButton?,
-    modifier: Modifier,
-) {
+private fun MapButtons(location: LocationState, camera: CameraPositionState, modifier: Modifier) {
     val scope = rememberCoroutineScope()
-    Column(
-        modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.End,
-    ) {
+    Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ZoomButtons(camera)
         SmallFloatingActionButton(onClick = {
             scope.launch {
@@ -300,24 +262,7 @@ private fun MapButtons(
         }) {
             Icon(Icons.Filled.LocationOn, contentDescription = "Recenter on my location")
         }
-        demoTrips?.let { LoadDemoTrips(it, Modifier.align(Alignment.CenterHorizontally)) }
     }
-}
-
-@Composable
-private fun LoadDemoTrips(button: DemoTripsButton, modifier: Modifier) {
-    ExtendedFloatingActionButton(
-        onClick = { button.viewModel.seed(button.onTripsSeeded, button.onUnauthorized) },
-        modifier = modifier,
-        icon = {
-            if (button.viewModel.isSeeding) {
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(Icons.Filled.DateRange, contentDescription = null) // the History tab's icon
-            }
-        },
-        text = { Text("Load demo trips") },
-    )
 }
 
 // + and -, for zooming without a pinch (e.g. with a mouse on the emulator)

@@ -104,8 +104,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Main() {
         MainScreen(
-            // reset so History reloads with the demo trips instead of showing its cached list
-            map = { MapHomeScreen(onTripsSeeded = tripHistoryViewModel::reset, onUnauthorized = ::signOut) },
+            map = { MapHomeScreen(onUnauthorized = ::signOut) },
             history ={ TripHistoryScreen(tripHistoryViewModel, onUnauthorized = ::signOut) },
             profile = { onEdit ->
                 ProfileScreen(

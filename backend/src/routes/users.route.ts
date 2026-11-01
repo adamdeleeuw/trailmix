@@ -5,7 +5,7 @@ import {
   getMyParkingSpots,
   removeParkingSpot,
 } from '../controllers/parking-spots.controller';
-import { deleteMe, getMe, getMyTrips, saveGasPrice, saveProfile, seedMyTrips } from '../controllers/users.controller';
+import { deleteMe, getMe, getMyTrips, saveGasPrice, saveProfile } from '../controllers/users.controller';
 import { requireSession } from '../middleware/require-session.middleware';
 
 const router = Router(); // routes under /api/users
@@ -19,9 +19,6 @@ router.put('/me/gas-price', requireSession, (req, res, next) => {
 });
 router.delete('/me', requireSession, (req, res, next) => {
   deleteMe(req, res).catch(next);
-});
-router.post('/me/trips/seed', requireSession, (req, res, next) => {
-  seedMyTrips(req, res).catch(next);
 });
 router.get('/me/parking-spots', requireSession, (req, res, next) => {
   getMyParkingSpots(req, res).catch((err: unknown) => {

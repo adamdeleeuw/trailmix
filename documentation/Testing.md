@@ -14,6 +14,7 @@
 | 2026-10-19        | 2.1.1, 2.5, 2.6 | Added the "get my trips" API tests for the trip history feature (PR #20), and listed the trip total checks API tests can't reach |
 | 2026-10-20        | 2.1.1, 2.1.2, 2.1.3, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 4.2 | Added the demo trips API tests (PR #24), updated the commit the tests run on and the CI run and coverage screenshots for CP1, switched the install step to `npm ci`, and marked the non-functional and front-end test specifications as coming in a later checkpoint |
 | 2026-11-01        | 2.1.1, 2.6, 4.1 | Added the parking spot API tests (issue #71). The "delete my account" tests now check that the user's parking spots are deleted. Added the Map tab's unit tests |
+| 2026-11-01        | 2.1.1, 2.6 | Removed the `POST /api/users/me/trips/seed` API tests along with the endpoint and the Map tab's "Load demo trips" button, and updated the `trip.model.ts` coverage note, since no API saves trips now |
 | 2026-11-01        | 4.1 | `ParkingSpotsViewModelTest` now also covers tapping a place or a P marker on the map, including the address lookup and its fallback (issue #71) |
 
 ---
@@ -30,7 +31,6 @@
 | **POST /api/auth/sign-out** | [`backend/tests/no-mock/auth.sign-out.test.ts#L12`](../backend/tests/no-mock/auth.sign-out.test.ts#L12) | [`backend/tests/mock/auth.sign-out.test.ts#L19`](../backend/tests/mock/auth.sign-out.test.ts#L19) | Session DB |
 | **GET /api/users/me** | [`backend/tests/no-mock/users.me.test.ts#L11`](../backend/tests/no-mock/users.me.test.ts#L11) | [`backend/tests/mock/users.me.test.ts#L20`](../backend/tests/mock/users.me.test.ts#L20) | Session DB, User DB |
 | **GET /api/users/me/trips** | [`backend/tests/no-mock/users.trips.test.ts#L13`](../backend/tests/no-mock/users.trips.test.ts#L13) | [`backend/tests/mock/users.trips.test.ts#L19`](../backend/tests/mock/users.trips.test.ts#L19) | Trip DB |
-| **POST /api/users/me/trips/seed** | [`backend/tests/no-mock/users.trips-seed.test.ts#L24`](../backend/tests/no-mock/users.trips-seed.test.ts#L24) | [`backend/tests/mock/users.trips-seed.test.ts#L19`](../backend/tests/mock/users.trips-seed.test.ts#L19) | Trip DB |
 | **PUT /api/users/me/profile** | [`backend/tests/no-mock/users.profile.test.ts#L31`](../backend/tests/no-mock/users.profile.test.ts#L31) | [`backend/tests/mock/users.profile.test.ts#L21`](../backend/tests/mock/users.profile.test.ts#L21) | User DB |
 | **PUT /api/users/me/gas-price** | [`backend/tests/no-mock/users.gas-price.test.ts#L11`](../backend/tests/no-mock/users.gas-price.test.ts#L11) | [`backend/tests/mock/users.gas-price.test.ts#L19`](../backend/tests/mock/users.gas-price.test.ts#L19) | User DB |
 | **DELETE /api/users/me** | [`backend/tests/no-mock/users.delete.test.ts#L17`](../backend/tests/no-mock/users.delete.test.ts#L17) | [`backend/tests/mock/users.delete.test.ts#L23`](../backend/tests/mock/users.delete.test.ts#L23) | User DB, Trip DB, Session DB, Google ID token verification (`OAuth2Client.verifyIdToken`, to sign in again after deleting) |
@@ -98,7 +98,7 @@ Each run posts a coverage table for all three runs on its summary page and uploa
 
 ### 2.6. Lines API Tests Can't Reach
 
-The combined run covers 100% of the statements, branches, functions, and lines in every file issues #7, #9, #10, #11 and #71, the trip history feature (PR #20), and the demo trips button (PR #24) add or change, except for the lines below. Issue #71's files (`parking-spot.service.ts`, `parking-spots.controller.ts`, `parking-spot.validation.ts`, and its changes to `user.model.ts` and `users.route.ts`) have no gaps. API tests build the app with `createApp()` and never start the server process.
+The combined run covers 100% of the statements, branches, functions, and lines in every file issues #7, #9, #10, #11 and #71, and the trip history feature (PR #20) add or change, except for the lines below. Issue #71's files (`parking-spot.service.ts`, `parking-spots.controller.ts`, `parking-spot.validation.ts`, and its changes to `user.model.ts` and `users.route.ts`) have no gaps. API tests build the app with `createApp()` and never start the server process.
 
 | **File** | **Lines** | **Reason** |
 | -------- | --------- | ---------- |
@@ -106,7 +106,7 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 | `backend/src/config/env.ts` | 15–20 | Reading a `PORT` that is set, and rejecting an invalid one. This runs once when the module is first loaded, and tests can't change the environment before that. |
 | `backend/src/config/env.ts` | 25–26 | Throwing when a required variable is missing. The test setup always provides `GOOGLE_BACKEND_CLIENT_ID` and `GOOGLE_ROUTES_API_KEY`, and `MONGODB_URI` is only read at startup. |
 | `backend/src/config/env.ts` | 36–38, 49–52 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
-| `backend/src/models/trip.model.ts` | 117, 120 | Rejecting a trip whose `totalDurationSeconds` or `totalCostCents` doesn't equal the sum of its legs. The only API that saves trips, `POST /api/users/me/trips/seed`, works out both totals from the legs (`seedDemoTrips`), so no request can fail this check. |
+| `backend/src/models/trip.model.ts` | 117, 120 | Rejecting a trip whose `totalDurationSeconds` or `totalCostCents` doesn't equal the sum of its legs. No API saves trips yet (saving a planned trip is a goal), and the tests add trips through the model with totals that match their legs, so no request can fail this check. |
 | `backend/src/middleware/error-handler.middleware.ts` | 17–19 | Handing the error to Express when the response has already started. Every route sends its response in a single call after all of its work succeeds, so no request can fail after headers have gone out. |
 
 ---
