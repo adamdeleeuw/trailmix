@@ -361,4 +361,52 @@ class ParkingSpotsViewModelTest {
         viewModel.closeSheet()
         assertNull(viewModel.selected)
     }
+
+    @Test
+    fun tappedPlaceOpensTheSheetPansThereAndGetsGooglesAddress() {
+        viewModel.showPoi("north", "UBC North Parkade", PARKADE.location)
+        assertEquals("UBC North Parkade", viewModel.selected?.name)
+        assertEquals("north", viewModel.selected?.placeId)
+        assertEquals(PARKADE.location, viewModel.focus)
+        assertEquals("6115 Student Union Blvd", viewModel.selected?.address) // from the place's details
+        assertNull(viewModel.selectedSpot)
+    }
+
+    @Test
+    fun tappedPlaceFallsBackToTheNearestAddressWhenPlacesFails() {
+        places.failure = IOException()
+        viewModel.showPoi("north", "UBC North Parkade", PARKADE.location)
+        assertEquals("UBC North Parkade", viewModel.selected?.name) // the sheet still opens
+        assertEquals("123 Side St", viewModel.selected?.address)
+    }
+
+    @Test
+    fun tappedPlaceThatIsSavedShowsItsSpot() {
+        api.spots += spot("a", placeId = "north")
+        load()
+        viewModel.showPoi("north", "UBC North Parkade", PARKADE.location)
+        assertEquals("a", viewModel.selectedSpot?.id) // so the sheet shows Remove parking spot
+    }
+
+    @Test
+    fun tappedSpotPansThereAndGetsTheNearestAddress() {
+        val saved = spot("a")
+        api.spots += saved
+        load()
+        viewModel.tapSpot(saved)
+        assertEquals(saved.location, viewModel.focus)
+        assertEquals("123 Side St", viewModel.selected?.address)
+        assertEquals("a", viewModel.selectedSpot?.id)
+    }
+
+    @Test
+    fun lateAddressIsDroppedAfterAnotherPlaceIsPicked() {
+        val lookup = CompletableDeferred<Unit>()
+        places.pendingAddress = lookup
+        viewModel.dropPin(SIDE_STREET)
+        viewModel.showPlace(PARKADE)
+        lookup.complete(Unit)
+        assertEquals("UBC North Parkade", viewModel.selected?.name)
+        assertEquals("6115 Student Union Blvd", viewModel.selected?.address) // not the pin's address
+    }
 }

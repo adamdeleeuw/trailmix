@@ -8,6 +8,7 @@ import com.example.cpen321application.ui.map.MapSearchViewModel
 import com.example.cpen321application.ui.map.SearchStatus
 import com.google.android.gms.maps.model.LatLng
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -30,6 +31,7 @@ class FakePlaceSearch : PlaceSearch {
     var results = listOf(NORTH_PARKADE)
     var failure: IOException? = null
     var address: String? = "123 Side St"
+    var pendingAddress: CompletableDeferred<Unit>? = null // holds address lookups open until completed
     val queries = mutableListOf<String>()
 
     override suspend fun suggest(query: String): List<PlaceSuggestion> {
@@ -43,7 +45,10 @@ class FakePlaceSearch : PlaceSearch {
         return NORTH_PARKADE_DETAILS
     }
 
-    override suspend fun nearestAddress(location: LatLng) = address
+    override suspend fun nearestAddress(location: LatLng): String? {
+        pendingAddress?.await()
+        return address
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

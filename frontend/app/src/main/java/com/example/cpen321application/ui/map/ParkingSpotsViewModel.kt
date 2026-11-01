@@ -130,17 +130,28 @@ class ParkingSpotsViewModel(
     fun dropPin(location: LatLng) {
         val pin = SelectedPlace(DROPPED_PIN, address = null, location, placeId = null)
         selected = pin
-        viewModelScope.launch {
-            val address = places.nearestAddress(location)
-            if (selected == pin) selected = pin.copy(address = address)
-        }
+        fillAddress(pin) { places.nearestAddress(location) }
     }
 
-    /** Opens the sheet for a tapped P marker. */
+    /**
+     * Opens the sheet for a place label tapped on the map, like a business or a station,
+     * pans to it, then fills in its address.
+     */
+    fun showPoi(placeId: String, name: String, location: LatLng) {
+        val place = SelectedPlace(name, address = null, location, placeId)
+        selected = place
+        focus = location
+        fillAddress(place) { places.poiAddress(placeId, location) }
+    }
+
+    /** Opens the sheet for a tapped P marker, pans to it, then fills in the nearest address. */
     fun tapSpot(spot: ParkingSpot) {
-        selected = SelectedPlace(
+        val place = SelectedPlace(
             spot.details.label, address = null, spot.location, spot.placeId, spotId = spot.id, fromMarker = true,
         )
+        selected = place
+        focus = spot.location
+        fillAddress(place) { places.nearestAddress(spot.location) }
     }
 
     fun closeSheet() {
@@ -224,7 +235,7 @@ class ParkingSpotsViewModel(
         isRemoving = true
         viewModelScope.launch {
             try {
-                deleteIgnoringMissing(spot.id)
+                api.deleteIgnoringMissing(token(), spot.id)
                 spots = spots.filterNot { it.id == spot.id }
                 // a spot opened from its marker has nothing left to show; a searched place goes back to unsaved
                 selected = selected?.takeUnless { it.fromMarker }?.copy(spotId = null)
@@ -248,9 +259,15 @@ class ParkingSpotsViewModel(
         message = null
     }
 
-    private suspend fun token() = store.token() ?: throw UnauthorizedException()
+    // looks the address up after the sheet is open, and drops it if the user picked another place meanwhile
+    private fun fillAddress(place: SelectedPlace, lookup: suspend () -> String?) {
+        viewModelScope.launch {
+            val address = lookup()
+            if (selected == place) selected = place.copy(address = address)
+        }
+    }
 
-    private fun SpotForm.isValid() = labelError(label) == null && costError(cost) == null
+    private suspend fun token() = store.token() ?: throw UnauthorizedException()
 
     // a new spot is saved with the selected place's location; an edit only sends the details
     private suspend fun upload(form: SpotForm, place: SelectedPlace): ParkingSpot {
@@ -268,20 +285,32 @@ class ParkingSpotsViewModel(
             api.updateParkingSpot(token(), id, details)
         }
     }
+}
 
-    private suspend fun deleteIgnoringMissing(id: String) {
-        try {
-            api.deleteParkingSpot(token(), id)
-        } catch (e: HttpException) {
-            if (e.code != HTTP_NOT_FOUND) throw e // 404: deleted on another device
-        }
-    }
+private fun SpotForm.isValid() = labelError(label) == null && costError(cost) == null
 
-    // a 404 only means the spot is gone when editing one; on a new save it's a backend without these endpoints
-    private fun saveErrorFor(e: HttpException, isEdit: Boolean) = when {
-        e.code == HTTP_CONFLICT && e.error == PARKING_LIMIT_ERROR -> SPOT_LIMIT
-        e.code == HTTP_CONFLICT && e.error == PARKING_DUPLICATE_ERROR -> SPOT_ALREADY_SAVED
-        e.code == HTTP_NOT_FOUND && isEdit -> SPOT_GONE
-        else -> SAVE_FAILED
+// Google's address for a tapped place, or the nearest street address if Places can't be reached
+private suspend fun PlaceSearch.poiAddress(placeId: String, location: LatLng): String? {
+    val address = try {
+        details(placeId).address
+    } catch (e: IOException) {
+        null
     }
+    return address ?: nearestAddress(location)
+}
+
+private suspend fun ParkingSpotApi.deleteIgnoringMissing(token: String, id: String) {
+    try {
+        deleteParkingSpot(token, id)
+    } catch (e: HttpException) {
+        if (e.code != HTTP_NOT_FOUND) throw e // 404: deleted on another device
+    }
+}
+
+// a 404 only means the spot is gone when editing one; on a new save it's a backend without these endpoints
+private fun saveErrorFor(e: HttpException, isEdit: Boolean) = when {
+    e.code == HTTP_CONFLICT && e.error == PARKING_LIMIT_ERROR -> SPOT_LIMIT
+    e.code == HTTP_CONFLICT && e.error == PARKING_DUPLICATE_ERROR -> SPOT_ALREADY_SAVED
+    e.code == HTTP_NOT_FOUND && isEdit -> SPOT_GONE
+    else -> SAVE_FAILED
 }
