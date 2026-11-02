@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { Types } from 'mongoose';
 import type { AuthLocals } from '../middleware/require-session.middleware';
 import { toParkingSpotResponse } from '../models/user.model';
 import {
@@ -9,6 +8,7 @@ import {
   updateParkingSpot,
   type ParkingSpotResult,
 } from '../services/parking-spot.service';
+import { parseObjectId } from '../validation/common.validation';
 import { parseNewParkingSpot, parseParkingSpotDetails } from '../validation/parking-spot.validation';
 
 const OK = 200;
@@ -18,8 +18,6 @@ const BAD_REQUEST = 400;
 const UNAUTHORIZED = 401;
 const NOT_FOUND = 404;
 const CONFLICT = 409;
-
-const OBJECT_ID_PATTERN = /^[0-9a-f]{24}$/i; // stricter than Types.ObjectId.isValid, which accepts any 12-character string
 
 const NOT_FOUND_ERROR = 'Parking spot not found';
 
@@ -35,12 +33,6 @@ function rejectionFor(status: Exclude<ParkingSpotResult['status'], 'SAVED'>): { 
     case 'DUPLICATE':
       return { status: CONFLICT, error: 'Parking spot already saved' };
   }
-}
-
-/** Reads the `:id` path parameter, or `undefined` if it isn't a MongoDB ID. */
-function parseSpotId(req: Request): Types.ObjectId | undefined {
-  const { id } = req.params;
-  return typeof id === 'string' && OBJECT_ID_PATTERN.test(id) ? new Types.ObjectId(id) : undefined;
 }
 
 /** Sends a saved spot with the given status, or the error for why it wasn't saved. */
@@ -103,7 +95,7 @@ export async function createParkingSpot(req: Request, res: Response<unknown, Aut
  * - `500 { error }`: database error.
  */
 export async function editParkingSpot(req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
-  const spotId = parseSpotId(req);
+  const spotId = parseObjectId(req.params.id);
   if (spotId === undefined) {
     res.status(NOT_FOUND).json({ error: NOT_FOUND_ERROR });
     return;
@@ -127,7 +119,7 @@ export async function editParkingSpot(req: Request, res: Response<unknown, AuthL
  * - `500 { error }`: database error.
  */
 export async function removeParkingSpot(req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
-  const spotId = parseSpotId(req);
+  const spotId = parseObjectId(req.params.id);
   const deleted = spotId !== undefined && await deleteParkingSpot(res.locals.auth.user._id, spotId);
   if (!deleted) {
     res.status(NOT_FOUND).json({ error: NOT_FOUND_ERROR });

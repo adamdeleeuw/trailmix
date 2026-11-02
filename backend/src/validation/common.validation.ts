@@ -1,3 +1,12 @@
+import { Types } from 'mongoose';
+
+const OBJECT_ID_PATTERN = /^[0-9a-f]{24}$/i; // stricter than Types.ObjectId.isValid, which accepts any 12-character string
+
+/** Reads a MongoDB ID, like a `:id` route parameter, or returns `undefined` if it isn't one. */
+export function parseObjectId(value: unknown): Types.ObjectId | undefined {
+  return typeof value === 'string' && OBJECT_ID_PATTERN.test(value) ? new Types.ObjectId(value) : undefined;
+}
+
 /** Narrows an unknown value to a plain object whose fields can be read. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
