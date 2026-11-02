@@ -4,12 +4,12 @@ import { Schema, model, type HydratedDocument, type Types } from 'mongoose';
 export const TRIP_MODES = ['DRIVE', 'TRANSIT', 'WALK'] as const;
 
 /** Where a trip is in its lifecycle, from saved for later to finished. */
-export const TRIP_STATUSES = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
+const TRIP_STATUSES = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
 
-export type TripMode = typeof TRIP_MODES[number];
+type TripMode = typeof TRIP_MODES[number];
 export type TripStatus = typeof TRIP_STATUSES[number];
 
-const MAX_LEGS = 8; // Bound # of legs, but allow for realistic uses
+export const MAX_LEGS = 8; // Bound # of legs, but allow for realistic uses
 
 /** A place included in a saved trip. */
 export interface Place {
@@ -76,6 +76,24 @@ export interface Trip {
   seeded: boolean; // whether the trip was generated as demo data
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** A trip the app saves from a planned route, before the server adds its owner and date. */
+export type NewTrip = Pick<
+  Trip,
+  'origin' | 'destination' | 'transferPoints' | 'legs' | 'totalDurationSeconds' | 'totalCostCents'
+  | 'costBreakdown' | 'costEstimated' | 'baselineDriveCostCents' | 'arriveBy' | 'actualStart'
+> & {
+  status: 'PLANNED' | 'ACTIVE'; // a trip can't be saved already finished
+  totalDistanceMeters: number;
+  plannedStart: Date;
+  plannedEnd: Date;
+};
+
+/** A status change the app asks for on a saved trip, and when it happened. */
+export interface TripStatusChange {
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  at: Date; // becomes actualStart when starting, actualEnd when ending
 }
 
 /** The trip fields the app is allowed to see. */

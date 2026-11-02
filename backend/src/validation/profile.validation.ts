@@ -1,15 +1,10 @@
 import { COLOURS, FARE_TYPES, PASS_ZONES, type Profile, type Transit, type Vehicle } from '../models/user.model';
 import { isKnownVehicle } from '../services/vehicle.service';
-import { isOneDecimalInRange, isRecord } from './common.validation';
+import { isOneDecimalInRange, isOneOf, isRecord } from './common.validation';
 
 const MAX_TIMEZONE_LENGTH = 64; // the longest IANA names are around 30 characters
 const MIN_LITRES_PER_100KM = 1;
 const MAX_LITRES_PER_100KM = 40;
-
-/** Checks that a value is one of a fixed list, without trusting its type. */
-function isOneOf<T>(list: readonly T[], value: unknown): value is T {
-  return list.includes(value as T);
-}
 
 /** Checks a timezone name, like "America/Vancouver", against the ones Node knows, and returns its standard spelling. */
 function parseTimezone(value: unknown): string | undefined {
