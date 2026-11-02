@@ -35,6 +35,7 @@ class NavBarTest {
     fun setUp() {
         rule.setContent {
             MainScreen(
+                map = { Text("Map screen") }, // a stand-in, so the test needs no maps, location or backend
                 history = { Text("History screen") },
                 profile = { onEdit ->
                     // a stand-in Profile tab with a counter, to check the tab keeps its place
@@ -52,7 +53,7 @@ class NavBarTest {
 
     @Test
     fun opensOnMapWithMapSelected() {
-        rule.onNodeWithText("Tap to set start").assertIsDisplayed() // the route planner, before any point is set
+        rule.onNodeWithText("Map screen").assertIsDisplayed()
         rule.onNodeWithText("Map").assertIsSelected()
     }
 
