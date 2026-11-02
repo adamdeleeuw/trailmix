@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { deleteMe, getMe, getMyTrips, saveGasPrice, saveProfile, seedMyTrips } from '../controllers/users.controller';
+import {
+  createParkingSpot,
+  editParkingSpot,
+  getMyParkingSpots,
+  removeParkingSpot,
+} from '../controllers/parking-spots.controller';
+import { deleteMe, getMe, getMyTrips, saveGasPrice, saveProfile } from '../controllers/users.controller';
 import { requireSession } from '../middleware/require-session.middleware';
 
 const router = Router(); // routes under /api/users
@@ -14,8 +20,25 @@ router.put('/me/gas-price', requireSession, (req, res, next) => {
 router.delete('/me', requireSession, (req, res, next) => {
   deleteMe(req, res).catch(next);
 });
-router.post('/me/trips/seed', requireSession, (req, res, next) => {
-  seedMyTrips(req, res).catch(next);
+router.get('/me/parking-spots', requireSession, (req, res, next) => {
+  getMyParkingSpots(req, res).catch((err: unknown) => {
+    next(err);
+  });
+});
+router.post('/me/parking-spots', requireSession, (req, res, next) => {
+  createParkingSpot(req, res).catch((err: unknown) => {
+    next(err);
+  });
+});
+router.put('/me/parking-spots/:id', requireSession, (req, res, next) => {
+  editParkingSpot(req, res).catch((err: unknown) => {
+    next(err);
+  });
+});
+router.delete('/me/parking-spots/:id', requireSession, (req, res, next) => {
+  removeParkingSpot(req, res).catch((err: unknown) => {
+    next(err);
+  });
 });
 
 export default router;

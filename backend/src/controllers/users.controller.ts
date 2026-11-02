@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthLocals } from '../middleware/require-session.middleware';
 import { toUserResponse } from '../models/user.model';
 import { deleteUserSessions } from '../services/session.service';
-import { deleteUserTrips, findTripsByUserId, seedDemoTrips } from '../services/trip.service';
+import { deleteUserTrips, findTripsByUserId } from '../services/trip.service';
 import { deleteUser, saveGasPrice as saveUserGasPrice, saveUserProfile } from '../services/user.service';
 import { parseGasPrice } from '../validation/gas-price.validation';
 import { parseProfile } from '../validation/profile.validation';
@@ -28,23 +28,6 @@ export function getMe(_req: Request, res: Response<unknown, AuthLocals>): void {
 /** Returns the signed-in user's trip history, newest first. */
 export async function getMyTrips(_req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
   const trips = await findTripsByUserId(res.locals.auth.user._id);
-  res.status(OK).json({ trips });
-}
-
-/**
- * Gives the signed-in user a fresh set of demo trips, for the Map tab's "Load demo trips" button.
- *
- * @remarks
- * `POST /api/users/me/trips/seed`, requires a session, no body. Replaces only the
- * user's earlier demo trips (see `seedDemoTrips`), so repeating it doesn't add duplicates.
- * - `200 { trips }`: the user's whole trip history after seeding, newest first, as in `GET /api/users/me/trips`.
- * - `401 { error }`: no valid session, or the account was deleted.
- * - `500 { error }`: database error.
- */
-export async function seedMyTrips(_req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
-  const userId = res.locals.auth.user._id;
-  await seedDemoTrips(userId);
-  const trips = await findTripsByUserId(userId);
   res.status(OK).json({ trips });
 }
 
@@ -101,10 +84,11 @@ export async function saveGasPrice(req: Request, res: Response<unknown, AuthLoca
 }
 
 /**
- * Permanently deletes the signed-in user's account and trip history, and signs them out on every device.
+ * Permanently deletes the signed-in user's account, parking spots and trip history, and signs them out on every device.
  *
  * @remarks
- * `DELETE /api/users/me`, requires a session. The user is deleted first, then
+ * `DELETE /api/users/me`, requires a session. Parking spots live inside the user
+ * document, so they go with it. The user is deleted first, then
  * their trips, then their sessions, so if a later step fails the sessions already
  * stop working: `requireSession` rejects a session whose account no longer exists.
  * - `204`: deleted.

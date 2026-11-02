@@ -15,6 +15,8 @@
 agp = "8.13.2"
 kotlin = "2.1.21"
 mapsCompose = "6.4.4"
+# 4.1.0: the last release before 4.2 needs Material Components and 5.x raises minSdk; has Autocomplete (New)
+places = "4.1.0"
 
 # Android SDK levels (mirrored in app/build.gradle.kts)
 compileSdk = "35"
@@ -62,6 +64,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 androidx-concurrent-futures = { group = "androidx.concurrent", name = "concurrent-futures", version.ref = "concurrentFutures" }
 maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
+places = { group = "com.google.android.libraries.places", name = "places", version.ref = "places" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -12,6 +12,9 @@
 | Oct 19, 2026 | 3.6 | Added rough screen mock-ups for sign-in, the main screen, trip history, profile, settings, and preferences. |
 | Oct 20, 2026 | 4.1, 4.2 | Added `POST /api/users/me/trips/seed` and the Map tab's "Load demo trips" button, so any user can fill History and Commute Insights on the release build. |
 | Oct 20, 2026 | 3.2 | Added the use case diagram for the current implementation (CP1). |
+| Nov 1, 2026 | 3.1, 4.1, 4.2, 4.3, 4.4 | Added parking spots and place search on the Map tab (#71): the parking spot endpoints, `parkingSpots` in `users`, the Places API, and the Places SDK for Android. Parking spots are the places the Planner (#72) will switch from driving to transit. |
+| Nov 1, 2026 | 4.1, 4.2 | Removed `POST /api/users/me/trips/seed` and the Map tab's "Load demo trips" button, which isn't part of the app's features. Demo trips can still be added to a local database with `scripts/seed-trips`. |
+| Nov 1, 2026 | 3.1, 4.3 | Places on the map can now be tapped to open their sheet, and the sheet can be closed, to match Google Maps (#71). The Places API also looks up a tapped place's address. |
 
 
 ---
@@ -34,7 +37,8 @@ Trailmix is an Android app for **chained commutes**: driving partway, then takin
 1. **Authentication**: Sign in with Google and sign out.
 2. **Commute Profile**: A first-time questionnaire about the user's car (make, model, fuel use) and transit fare type. It will be used to estimate trip costs (goal).
 3. **Chained Commute Planning**: Pick a start, split point, and destination on a map, and get a drive leg plus a transit leg with their times. Trailmix will choose the split point automatically (goal).
-4. **Trip History and Insights**: View past trips by date and cost, and see average time, average cost, and driving vs transit time. Planned trips will be saved here automatically (goal).
+4. **Parking Spots and Place Search**: Search for places on the Map tab, and save up to 20 parking spots (a name, an optional cost per hour or per day, and whether overnight parking is allowed) from search, by tapping a place on the map, or by long-pressing the map. Each place opens in a sheet like Google Maps', which closes with its X, a tap on the map, a swipe down, or Back. Saved spots show as P markers, and are where a planned trip will switch from driving to transit (goal).
+5. **Trip History and Insights**: View past trips by date and cost, and see average time, average cost, and driving vs transit time. Planned trips will be saved here automatically (goal).
 
 
 ### **3.2. Use Case Diagram**
@@ -246,7 +250,17 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
        4. `PUT /api/users/me/gas-price { centsPerLitre }` → `{ user }`
            - **Purpose**: Saves the last gas price a driver entered on the Profile tab.
        5. `DELETE /api/users/me` → `204 No Content`
-           - **Purpose**: Deletes the account with its trips and sessions.
+           - **Purpose**: Deletes the account with its parking spots, trips and sessions.
+       6. `GET /api/users/me/parking-spots` → `{ parkingSpots }`
+           - **Purpose**: Gets the user's parking spots, newest first, for the Map tab's P markers.
+       7. `POST /api/users/me/parking-spots { label, location, placeId?, rateCents?, ratePer?, overnightAllowed? }` → `201 { parkingSpot }`
+           - **Purpose**: Saves a parking spot from search or a dropped pin. Returns `409` when the user already has 20 spots or already saved the same `placeId`.
+       8. `PUT /api/users/me/parking-spots/:id { label, rateCents?, ratePer?, overnightAllowed? }` → `{ parkingSpot }`
+           - **Purpose**: Edits a spot's name, cost and overnight rule from the place sheet. The spot's place can't change.
+       9. `DELETE /api/users/me/parking-spots/:id` → `204 No Content`
+           - **Purpose**: Removes a parking spot. Another user's or an unknown spot returns `404`.
+       10. `getParkingSpots(userId): ParkingSpot[]` (internal)
+           - **Purpose**: Gives the Planner (#72) the user's parking spots, the only places a driving trip can hand off to transit.
 3. **Routes**
    - **Purpose**: Chained route planning.
    - **Interfaces**:
@@ -259,8 +273,6 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
            - **Purpose**: Gets the user's trips, newest first.
        2. An endpoint to save a planned trip (goal).
            - **Purpose**: Adds a planned trip to the user's history.
-       3. `POST /api/users/me/trips/seed` → `{ trips }`
-           - **Purpose**: Replaces the user's demo trips with 10 fresh ones, for the Map tab's "Load demo trips" button, and returns the whole history. It only touches the caller's `seeded` trips, so any user (such as a TA on the release build) can fill History and Commute Insights without duplicating demo trips or losing real ones.
 
 
 
@@ -268,17 +280,18 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 ### **4.2. Databases**
 1. **MongoDB (`mongo:7.0`)**
     - **Purpose**: Stores Trailmix's accounts, saved trips, and sign-in sessions. It runs as a container next to the backend on the VM and is reachable only over the private docker compose network. Its data lives in the `mongo-data` volume, so it survives restarts, rebuilds, and deploys.
-    - **`users` collection**: one document per account, with `googleId` (Google's account ID), `email`, `name`, `photoUrl`, `profileComplete`, `timezone`, `vehicle`, `transit`, `lastGasPrice`, `createdAt`, and `updatedAt`.
+    - **`users` collection**: one document per account, with `googleId` (Google's account ID), `email`, `name`, `photoUrl`, `profileComplete`, `timezone`, `vehicle`, `transit`, `lastGasPrice`, `parkingSpots`, `createdAt`, and `updatedAt`.
         - A **unique index on `googleId`** identifies users by the Google ID, which never changes, rather than by email, which can. The index also makes the database refuse a second account for the same Google account, even when two first sign-ins arrive at once.
         - The email, name, and photo are refreshed from Google on every sign-in.
         - The commute questionnaire adds `timezone`, `vehicle` (`make`, `model`, `colour`, `litresPer100km`, or `null` if the user doesn't drive), and `transit` (`fareType`, `monthlyPassZones`, or `null` if the user doesn't take transit). They sit inside the user document because there's only one of each and they're always loaded with the user. Only the fare type is stored, not the price, since fares change every year. Submitting the questionnaire replaces all three and sets `profileComplete`.
         - `lastGasPrice` (`centsPerLitre` and `savedAt`, or `null` until the user saves one) is the last gas price a driver entered on the Profile tab. The price must be 50.0–400.0 ¢/L with at most one decimal. The server sets `savedAt`, so the date can't be faked by the phone's clock. Only the latest price is kept, since only the latest is used to estimate driving costs.
-        - Deleting an account (`DELETE /api/users/me`) removes the user document first, then every trip and every session for that `userId`, so the trip history is gone and every device the user was signed in on is signed out. Signing in again with the same Google account creates a new, empty account.
+        - `parkingSpots` holds at most 20 spots, newest first. Each has its own `_id` (used to edit and delete it), a `label` (1–60 characters), a `location` (`lat`, `lng`), a `placeId` (the Google place it came from, or `null` for a dropped pin), the cost as entered (`rateCents` and `ratePer` of `HOUR` or `DAY`, both `null` when unknown), `overnightAllowed`, and `createdAt`. They live inside the user document like `vehicle` and `transit`, because there are few of them, they belong to one user, and the Planner loads them with the profile. The 20-spot cap keeps the Planner's candidate list, and its Google API cost, bounded. The limit and the duplicate `placeId` check are part of the save's update filter, so two saves at once can't break either rule.
+        - Deleting an account (`DELETE /api/users/me`) removes the user document, and with it the parking spots, first, then every trip and every session for that `userId`, so the trip history is gone and every device the user was signed in on is signed out. Signing in again with the same Google account creates a new, empty account.
         - The car makes and models the questionnaire offers come from `backend/src/data/vehicles.json`, a hand-picked list in the repo loaded once at startup, not from the database.
     - **`trips` collection**: one document per saved commute, with `userId`, `origin`, `midpoint` (the transfer point, or `null`), `destination`, `legs`, `totalDurationSeconds`, `totalCostCents`, `tripDate`, `seeded`, `createdAt`, and `updatedAt`.
         - Each place has a `label`, `lat`, `lng`, and optional `placeId`. Each leg has a `mode` (`DRIVE` or `TRANSIT`), its `from` and `to` places, `durationSeconds`, `distanceMeters`, `costCents`, an encoded `polyline`, and the `transitLines` it rides. A trip has one direct leg or two chained legs, and its totals must equal the sum of its legs.
         - Trips are kept separate from users because a user has many, and the History tab lists them on their own. A compound **index on `userId` and `tripDate` (newest first)** makes `GET /api/users/me/trips` one indexed lookup that is already sorted.
-        - The app never sees `userId`, `seeded` (marks demo trips added by the Map tab's "Load demo trips" button or `scripts/seed-trips`), or the timestamps. The History tab filters and sorts the trips and computes the commute insights (average time and cost, and time spent driving versus on transit) on the phone.
+        - The app never sees `userId`, `seeded` (marks demo trips added by `scripts/seed-trips`), or the timestamps. The History tab filters and sorts the trips and computes the commute insights (average time and cost, and time spent driving versus on transit) on the phone.
     - **`sessions` collection**: one document per signed-in device, with `tokenHash`, `userId`, and `createdAt`.
         - The app holds a random 256-bit token. Only its SHA-256 hash is stored (with a **unique index**), so a leaked database can't be used to sign in, and finding a session is one indexed lookup.
         - Sessions are kept separate from users so one user can be signed in on several devices, and signing out deletes only that device's session.
@@ -291,7 +304,9 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 2. **Google Routes API**
 - **Purpose**: Computes the drive and transit legs.
 3. **Google Maps SDK**
-- **Purpose**: Displays the map and routes.
+- **Purpose**: Displays the map and routes, and reports taps on its place labels (with their Google place IDs) and long-presses.
+4. **Google Places API (New)**
+- **Purpose**: Suggests places as the user types on the Map tab, biased to Metro Vancouver, and gets the name, address and location of the one they pick, or the address of a place label tapped on the map. Called from the app with a key restricted to the app's package and signing certificate.
 
 
 
@@ -312,6 +327,9 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 5. **Navigation Compose (`androidx.navigation:navigation-compose`)**
    - **Purpose**: Moves between the screens after sign-in: the Map, History (trip history and commute insights), and Profile tabs of the nav bar, and the Edit vehicle and Edit transit screens opened from Profile. It keeps each tab's back stack and scroll position when the user switches tabs, and makes Back on any tab return to Map.
    - **Reason**: It is the official Jetpack library for navigating between Compose screens. Writing our own back stack would mean re-implementing saving and restoring each tab's state across tab switches and screen rotation.
+6. **Places SDK for Android (`com.google.android.libraries.places:places`)**
+   - **Purpose**: The Map tab's search suggestions (Autocomplete New) and the picked place's details.
+   - **Reason**: It is Google's official client for the Places API, and handles session tokens so suggestions and the picked place are billed as one search. Version 4.1.0 is the newest that builds with the project's pinned toolchain (compileSdk 35, Kotlin 2.1).
 
 
 

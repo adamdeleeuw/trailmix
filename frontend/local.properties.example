@@ -11,3 +11,7 @@ GOOGLE_CLIENT_ID=
 
 # Other API keys, secrets, and configurations
 MAPS_API_KEY=
+
+# Key with Places API (New) enabled, for the Map tab's search. Restrict it to this app's
+# package and signing certificate. Leave empty to use MAPS_API_KEY if that key has Places too.
+PLACES_API_KEY=

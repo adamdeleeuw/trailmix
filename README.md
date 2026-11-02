@@ -123,6 +123,7 @@ Fill in `frontend/local.properties`:
 sdk.dir=<path to your Android SDK>
 GOOGLE_CLIENT_ID=<your Google Web client ID>.apps.googleusercontent.com
 MAPS_API_KEY=<a Google Cloud API key with the Maps SDK for Android enabled>
+PLACES_API_KEY=<a key with Places API (New) enabled, restricted to this app; empty uses MAPS_API_KEY>
 
 # pick one:
 API_BASE_URL=http://10.0.2.2:3000             # backend running locally

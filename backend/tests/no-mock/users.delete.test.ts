@@ -4,9 +4,11 @@ import { createApp } from '../../src/app';
 import { SessionModel } from '../../src/models/session.model';
 import { TripModel } from '../../src/models/trip.model';
 import { UserModel } from '../../src/models/user.model';
+import { getParkingSpots } from '../../src/services/parking-spot.service';
 import { createSession } from '../../src/services/session.service';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
+import { addParkingSpots } from '../helpers/parking-spots';
 import { createTrip } from '../helpers/trips';
 
 useTestDatabase();
@@ -35,6 +37,24 @@ describe('Unmocked: DELETE /api/users/me', () => {
       const after = await request(app).get('/api/users/me').set('Authorization', bearer(token));
       expect(after.status).toBe(401);
     }
+  });
+
+  // Input: a valid session token for a user with three saved parking spots, and another user with one
+  // Expected status code: 204
+  // Expected behavior: the user's parking spots are deleted with their account, and the other user's are kept
+  // Expected output: no parking spots left for the deleted user, so the Planner gets an empty list for them
+  test('Parking spots are deleted with the account', async () => {
+    const { user, token } = await createSignedInUser();
+    const { user: other } = await createSignedInUser();
+    const spots = await addParkingSpots(user._id, 3);
+    const otherSpots = await addParkingSpots(other._id, 1);
+
+    const response = await request(createApp()).delete('/api/users/me').set('Authorization', bearer(token));
+
+    expect(response.status).toBe(204);
+    expect(await UserModel.countDocuments({ 'parkingSpots._id': { $in: spots.map((spot) => spot._id) } })).toBe(0);
+    expect(await getParkingSpots(user._id)).toStrictEqual([]);
+    expect(await getParkingSpots(other._id)).toStrictEqual(otherSpots);
   });
 
   // Input: a valid session token for one of two users
