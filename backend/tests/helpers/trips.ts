@@ -35,7 +35,9 @@ export async function createTrip(
       transitLines: [],
     }],
     totalDurationSeconds: DRIVE_SECONDS,
+    totalDistanceMeters: DRIVE_METRES,
     totalCostCents: DRIVE_CENTS,
+    costBreakdown: { fuelCents: DRIVE_CENTS, parkingCents: 0, fareCents: 0 },
     tripDate: new Date('2026-01-01T08:00:00.000Z'),
     ...overrides,
   });
