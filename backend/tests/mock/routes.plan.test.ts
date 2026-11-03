@@ -6,6 +6,7 @@ import { UserModel } from '../../src/models/user.model';
 import { SessionModel } from '../../src/models/session.model';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { failingQuery, useTestDatabase } from '../helpers/db';
+import { decodePolyline } from '../helpers/polyline';
 
 useTestDatabase();
 
@@ -15,17 +16,21 @@ const BODY = {
   arriveBy: null,
   modes: ['TRANSIT'],
 };
+const ROUTE_POLYLINE = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
 const MATRIX = [{ originIndex: 0, destinationIndex: 0, duration: '1200s', distanceMeters: 5000, condition: 'ROUTE_EXISTS' }];
 const DETAIL = {
   routes: [{
     duration: '1200s',
     distanceMeters: 5000,
-    polyline: { encodedPolyline: 'transit-polyline' },
+    polyline: { encodedPolyline: ROUTE_POLYLINE },
     legs: [{
-      startTime: '2026-11-02T08:00:00Z',
-      endTime: '2026-11-02T08:20:00Z',
       steps: [{
         travelMode: 'TRANSIT',
+        staticDuration: '1200s',
+        distanceMeters: 5000,
+        polyline: { encodedPolyline: ROUTE_POLYLINE },
+        startLocation: { latLng: { latitude: 49.2606, longitude: -123.246 } },
+        endLocation: { latLng: { latitude: 49.2827, longitude: -123.1207 } },
         transitDetails: {
           headsign: 'Waterfront',
           stopDetails: { departureStop: { name: 'UBC Exchange' }, arrivalStop: { name: 'Waterfront' }, stopCount: 8 },
@@ -35,6 +40,19 @@ const DETAIL = {
     }],
   }],
 };
+
+function expectEveryLegHasDecodedGeometry(response: request.Response): void {
+  expect(response.body.options.length).toBeGreaterThan(0);
+  for (const option of response.body.options as Array<{ legs: Array<{ mode: string; polyline: string }> }>) {
+    expect(option.legs.length).toBeGreaterThan(0);
+    for (const leg of option.legs) {
+      expect(leg.mode).toBeTruthy();
+      expect(leg.polyline.length).toBeGreaterThan(0);
+      const points = decodePolyline(leg.polyline);
+      expect(points.length).toBeGreaterThan(2);
+    }
+  }
+}
 
 function googleSays(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
@@ -113,12 +131,15 @@ describe('Mocked: POST /api/routes/plan', () => {
         routes: [{
           duration: isDrive ? '900s' : '1800s',
           distanceMeters: isDrive ? 10000 : 15000,
-          polyline: { encodedPolyline: isDrive ? 'drive-line' : 'transit-line' },
+          polyline: { encodedPolyline: ROUTE_POLYLINE },
           legs: [{
-            startTime: '2026-11-02T08:00:00Z',
-            endTime: '2026-11-02T08:45:00Z',
             steps: isDrive ? [] : [{
               travelMode: 'TRANSIT',
+              staticDuration: '1800s',
+              distanceMeters: 15000,
+              polyline: { encodedPolyline: ROUTE_POLYLINE },
+              startLocation: { latLng: { latitude: BODY.origin.lat, longitude: BODY.origin.lng } },
+              endLocation: { latLng: { latitude: BODY.destination.lat, longitude: BODY.destination.lng } },
               transitDetails: {
                 transitLine: { name: '99', color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
                 stopDetails: { departureStop: { name: 'UBC Exchange' }, arrivalStop: { name: 'Waterfront' }, stopCount: 8 },
@@ -137,6 +158,7 @@ describe('Mocked: POST /api/routes/plan', () => {
     });
 
     expect(response.status).toBe(200);
+    expectEveryLegHasDecodedGeometry(response);
     expect(response.body.options).toHaveLength(3);
     expect(response.body.options.map((option: { label: string }) => option.label)).toEqual([
       'CHEAPEST', 'FASTEST', 'BALANCED',
@@ -186,24 +208,22 @@ describe('Mocked: POST /api/routes/plan', () => {
         routes: [{
           duration: body.travelMode === 'DRIVE' ? '900s' : '1800s',
           distanceMeters: body.travelMode === 'DRIVE' ? 12000 : 14000,
-          polyline: { encodedPolyline: `${body.travelMode?.toLowerCase()}-line` },
+          polyline: { encodedPolyline: ROUTE_POLYLINE },
           legs: [{
-            startTime: '2026-11-02T08:00:00Z',
-            endTime: '2026-11-02T08:30:00Z',
             steps: body.travelMode === 'TRANSIT' ? [
               {
                 travelMode: 'WALK',
-                duration: '120s',
+                staticDuration: '120s',
                 distanceMeters: 100,
-                polyline: { encodedPolyline: 'walk-line' },
+                polyline: { encodedPolyline: ROUTE_POLYLINE },
                 startLocation: { latLng: { latitude: 49.271, longitude: -123.187 } },
                 endLocation: { latLng: { latitude: 49.272, longitude: -123.186 } },
               },
               {
                 travelMode: 'TRANSIT',
-                duration: '1680s',
+                staticDuration: '1680s',
                 distanceMeters: 13900,
-                polyline: { encodedPolyline: 'transit-step-line' },
+                polyline: { encodedPolyline: ROUTE_POLYLINE },
                 startLocation: { latLng: { latitude: 49.272, longitude: -123.186 } },
                 endLocation: { latLng: { latitude: 49.285, longitude: -123.111 } },
                 transitDetails: {
@@ -226,6 +246,7 @@ describe('Mocked: POST /api/routes/plan', () => {
     });
 
     expect(response.status).toBe(200);
+    expectEveryLegHasDecodedGeometry(response);
     expect(response.body.options).toHaveLength(3);
     expect(response.body.options.some((option: { transferPoints: unknown[]; legs: Array<{ mode: string }> }) =>
       option.transferPoints.length === 1 && option.legs.length === 3 && option.legs[1]?.mode === 'WALK')).toBe(true);
@@ -247,8 +268,17 @@ describe('Mocked: POST /api/routes/plan', () => {
       .mockResolvedValueOnce(googleSays(DETAIL));
 
     const response = await submitPlan();
+    const matrixRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      origins: Array<{ waypoint?: { location?: { latLng?: { latitude?: number; longitude?: number } } } }>;
+      destinations: Array<{ waypoint?: { location?: { latLng?: { latitude?: number; longitude?: number } } } }>;
+    };
 
     expect(response.status).toBe(200);
+    expect(matrixRequest.origins[0]?.waypoint?.location?.latLng).toEqual({ latitude: BODY.origin.lat, longitude: BODY.origin.lng });
+    expect(matrixRequest.destinations[0]?.waypoint?.location?.latLng).toEqual({
+      latitude: BODY.destination.lat,
+      longitude: BODY.destination.lng,
+    });
     expect(response.body.warnings).toEqual([]);
     expect(response.body.options).toHaveLength(1);
     expect(response.body.options[0]).toMatchObject({
@@ -257,8 +287,9 @@ describe('Mocked: POST /api/routes/plan', () => {
       totalDurationSeconds: 1200,
       transferPoints: [],
       transfers: 0,
-      legs: [{ mode: 'TRANSIT', polyline: 'transit-polyline', transitLines: [{ name: '99', colour: '#00843D', headsign: 'Waterfront' }] }],
+      legs: [{ mode: 'TRANSIT', polyline: ROUTE_POLYLINE, transitLines: [{ name: '99', colour: '#00843D', headsign: 'Waterfront' }] }],
     });
+    expectEveryLegHasDecodedGeometry(response);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -276,6 +307,7 @@ describe('Mocked: POST /api/routes/plan', () => {
     const response = await submitPlan();
 
     expect(response.status).toBe(200);
+    expectEveryLegHasDecodedGeometry(response);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

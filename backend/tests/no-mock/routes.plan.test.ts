@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
+import { decodePolyline } from '../helpers/polyline';
 
 useTestDatabase();
 
@@ -15,6 +16,13 @@ function sendPlan(body: object | undefined, authorization?: string): request.Tes
   if (authorization !== undefined) test.set('Authorization', authorization);
   return test.send(body);
 }
+
+const liveRouteGeometryTest =
+  process.env.RUN_LIVE_ROUTE_GEOMETRY_TESTS === 'true' &&
+  process.env.GOOGLE_ROUTES_API_KEY !== undefined &&
+  process.env.GOOGLE_ROUTES_API_KEY !== 'test-routes-api-key'
+    ? test
+    : test.skip;
 
 // Interface POST /api/routes/plan
 describe('Unmocked: POST /api/routes/plan', () => {
@@ -49,4 +57,26 @@ describe('Unmocked: POST /api/routes/plan', () => {
       expect(response.body.error).toContain(field);
     }
   });
+
+  // Mocked behavior: none; MongoDB and Google Routes API are real
+  // Input: valid session, UBC-to-Downtown request with DRIVE mode
+  // Expected status code: 200
+  // Expected behavior: fetch live route details without stubbing the route service
+  // Expected output: every returned leg has a non-empty polyline decoding to more than two points
+  liveRouteGeometryTest('Returns decoded geometry for every live route leg', async () => {
+    const { token } = await createSignedInUser();
+    const response = await sendPlan({ ...validBody, modes: ['DRIVE'] }, bearer(token));
+
+    expect(response.status).toBe(200);
+    expect(response.body.options.length).toBeGreaterThan(0);
+    for (const option of response.body.options as Array<{ legs: Array<{ mode: string; polyline: string }> }>) {
+      expect(option.legs.length).toBeGreaterThan(0);
+      for (const leg of option.legs) {
+        expect(leg.mode).toBeTruthy();
+        expect(leg.polyline.length).toBeGreaterThan(0);
+        const points = decodePolyline(leg.polyline);
+        expect(points.length).toBeGreaterThan(2);
+      }
+    }
+  }, 30_000);
 });

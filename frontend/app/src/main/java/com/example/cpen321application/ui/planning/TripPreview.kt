@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import com.example.cpen321application.data.PlanLeg
 import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.data.TripMode
-import com.example.cpen321application.ui.route.decodePolyline
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -142,7 +141,7 @@ private fun PreviewMap(route: RouteOption, camera: com.google.maps.android.compo
 // one leg's line: drive solid blue, transit solid in its line's colour, walking dotted grey
 @Composable
 private fun LegLine(leg: PlanLeg) {
-    val points = remember(leg.polyline) { decodePolyline(leg.polyline) }
+    val points = remember(leg.polyline) { legPoints(leg) }
     when (leg.mode) {
         TripMode.DRIVE -> Polyline(points = points, color = DRIVE_BLUE, width = DRIVE_WIDTH)
         TripMode.TRANSIT -> Polyline(points = points, color = lineColour(leg.transitLines.firstOrNull()?.colour), width = TRANSIT_WIDTH, zIndex = 1f)

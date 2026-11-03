@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cpen321application.data.BackendApi
 import com.example.cpen321application.data.DataStoreSessionStore
-import com.example.cpen321application.data.FakePlannerApi
 import com.example.cpen321application.data.GooglePlaceSearch
 import com.example.cpen321application.data.LOCATION_PERMISSIONS
 import com.example.cpen321application.data.PlanPlace
@@ -98,8 +97,7 @@ fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     val models = MapModels(
         search = viewModel { MapSearchViewModel(places) },
         spots = viewModel { ParkingSpotsViewModel(BackendApi, places, DataStoreSessionStore(context)) },
-        // the fake Planner until #72's endpoint merges; then FakePlannerApi() becomes BackendApi
-        planner = viewModel { PlanningViewModel(FakePlannerApi(), DataStoreSessionStore(context)) },
+        planner = viewModel { PlanningViewModel(BackendApi, DataStoreSessionStore(context)) },
         planningSearch = viewModel(key = "planning-search") { MapSearchViewModel(places) },
     )
     var planning by rememberSaveable { mutableStateOf(false) }

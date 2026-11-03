@@ -53,8 +53,6 @@ const DETAILS_FIELD_MASK = [
   'routes.duration',
   'routes.distanceMeters',
   'routes.polyline.encodedPolyline',
-  'routes.legs.startTime',
-  'routes.legs.endTime',
   'routes.legs.steps.transitDetails.transitLine.name',
   'routes.legs.steps.transitDetails.transitLine.color',
   'routes.legs.steps.transitDetails.transitLine.vehicle.name',
@@ -62,7 +60,7 @@ const DETAILS_FIELD_MASK = [
   'routes.legs.steps.transitDetails.headsign',
   'routes.legs.steps.transitDetails.stopDetails',
   'routes.legs.steps.travelMode',
-  'routes.legs.steps.duration',
+  'routes.legs.steps.staticDuration',
   'routes.legs.steps.distanceMeters',
   'routes.legs.steps.polyline.encodedPolyline',
   'routes.legs.steps.startLocation.latLng',
@@ -115,8 +113,8 @@ export async function computeRouteMatrix(
   time: { departureTime?: string; arrivalTime?: string } = {},
 ): Promise<MatrixElement[]> {
   const response = await postGoogle<unknown>(MATRIX_URL, MATRIX_FIELD_MASK, {
-    origins: origins.map(waypoint),
-    destinations: destinations.map(waypoint),
+    origins: origins.map((place) => ({ waypoint: waypoint(place) })),
+    destinations: destinations.map((place) => ({ waypoint: waypoint(place) })),
     travelMode: mode,
     ...(mode === 'DRIVE' ? { routingPreference: 'TRAFFIC_AWARE' } : {}),
     ...time,
@@ -147,11 +145,9 @@ interface GoogleDetailsResponse {
     distanceMeters?: number;
     polyline?: { encodedPolyline?: string };
     legs?: {
-      startTime?: string;
-      endTime?: string;
       steps?: {
         travelMode?: string;
-        duration?: string;
+        staticDuration?: string;
         distanceMeters?: number;
         polyline?: { encodedPolyline?: string };
         startLocation?: { latLng?: { latitude?: number; longitude?: number } };
@@ -210,11 +206,10 @@ export async function computeRouteDetails(
   });
   const walkSeconds = (route.legs ?? []).flatMap((leg) => leg.steps ?? []).reduce((total, step) => {
     if (step.travelMode !== 'WALK') return total;
-    return total + (seconds(step.duration) ?? 0);
+    return total + (seconds(step.staticDuration) ?? 0);
   }, 0);
-  const leg = route.legs?.[0];
-  let departAt = isoTimestamp(leg?.startTime) ?? isoTimestamp(time.departureTime);
-  let arriveAt = isoTimestamp(leg?.endTime) ?? isoTimestamp(time.arrivalTime);
+  let departAt = isoTimestamp(time.departureTime);
+  let arriveAt = isoTimestamp(time.arrivalTime);
   if (departAt === undefined && arriveAt !== undefined) {
     departAt = new Date(Date.parse(arriveAt) - durationSeconds * 1000).toISOString();
   }
@@ -226,7 +221,7 @@ export async function computeRouteDetails(
   for (const routeLeg of route.legs ?? []) {
     for (const step of routeLeg.steps ?? []) {
       if (step.travelMode !== 'TRANSIT' && step.travelMode !== 'WALK') continue;
-      const stepDuration = seconds(step.duration);
+      const stepDuration = seconds(step.staticDuration);
       const start = step.startLocation?.latLng;
       const end = step.endLocation?.latLng;
       if (

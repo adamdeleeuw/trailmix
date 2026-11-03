@@ -13,8 +13,7 @@ private const val CANADA_LINE_TEAL = "#009AC8"
 private const val DRIVE_ALL_THE_WAY_CENTS = 390 // fuel for the Fastest route, also the "cheaper than driving" baseline
 
 /**
- * A stand-in for the Planner (#72) until its endpoint is merged, so the Planning and
- * Trip Preview screens can be built and tried now.
+ * A deterministic stand-in for the Planner endpoint, used by tests that need sample routes.
  *
  * Always answers with the same 3 sample routes between the requested places:
  * - Cheapest: transit only, with one transfer, and a bus with no colour (to show the fallback)
@@ -23,7 +22,6 @@ private const val DRIVE_ALL_THE_WAY_CENTS = 390 // fuel for the Fastest route, a
  *
  * Routes needing a mode the request turned off are left out, like the real Planner.
  * With an arrive-by time the routes are scheduled backward from it, otherwise they leave now.
- * Swap `FakePlannerApi()` for `BackendApi` where the screen is built once #72 merges.
  */
 class FakePlannerApi(private val delayMs: Long = FAKE_DELAY_MS, private val clock: () -> Instant = Instant::now) : PlannerApi {
 

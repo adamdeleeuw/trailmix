@@ -25,6 +25,7 @@ import {
 import { zonesForTransitLines } from './transit-zones';
 
 const PARKING_BUFFER_SECONDS = 300;
+const GOOGLE_DEPARTURE_BUFFER_MS = 60_000;
 const MAX_WALK_SECONDS = 600;
 const BASELINE_DRIVE_ID = 'BASELINE_DRIVE';
 const BASELINE_TRANSIT_ID = 'BASELINE_TRANSIT';
@@ -244,7 +245,8 @@ async function getDetailedCandidate(
   if (candidate.kind === 'CHAIN') {
     if (candidate.spot === null || candidate.drive === null || candidate.transit === null) return null;
     const transfer = spotPlace(candidate.spot);
-    const estimate = scheduleChain(candidate.drive.durationSeconds, candidate.transit.durationSeconds, request.arriveBy, now);
+    const routingNow = new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS);
+    const estimate = scheduleChain(candidate.drive.durationSeconds, candidate.transit.durationSeconds, request.arriveBy, routingNow);
     const [driveDetail, transitDetail] = await Promise.all([
       computeRouteDetails(request.origin, transfer, 'DRIVE', { departureTime: estimate.leaveAt.toISOString() }),
       computeRouteDetails(transfer, request.destination, 'TRANSIT', request.arriveBy === null
@@ -287,8 +289,10 @@ async function getDetailedCandidate(
   }
 
   const mode = candidate.kind;
-  const estimatedLeaveAt = request.arriveBy === null || request.arriveBy.getTime() - candidate.totalDurationSeconds * 1000 < now.getTime()
-    ? now
+  const earliestDeparture = new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS);
+  const estimatedLeaveAt = request.arriveBy === null ||
+    request.arriveBy.getTime() - candidate.totalDurationSeconds * 1000 < earliestDeparture.getTime()
+    ? earliestDeparture
     : new Date(request.arriveBy.getTime() - candidate.totalDurationSeconds * 1000);
   const detail = await computeRouteDetails(request.origin, request.destination, mode, mode === 'DRIVE' || request.arriveBy === null
     ? { departureTime: estimatedLeaveAt.toISOString() }
@@ -353,7 +357,9 @@ export async function planTrip(userId: Types.ObjectId, user: User, request: Plan
     ? { departureTime: new Date(now.getTime() + PARKING_BUFFER_SECONDS * 1000).toISOString() }
     : { arrivalTime: request.arriveBy.toISOString() };
   const [driveMatrix, transitMatrix] = await Promise.all([
-    canDrive ? computeRouteMatrix([request.origin], driveDestinations, 'DRIVE', { departureTime: now.toISOString() }) : Promise.resolve([]),
+    canDrive ? computeRouteMatrix([request.origin], driveDestinations, 'DRIVE', {
+      departureTime: new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS).toISOString(),
+    }) : Promise.resolve([]),
     canTransit ? computeRouteMatrix(transitOrigins, [request.destination], 'TRANSIT', transitTime) : Promise.resolve([]),
   ]);
   const driveByDestination = new Map(driveMatrix.map((element) => [element.destinationIndex, element]));
