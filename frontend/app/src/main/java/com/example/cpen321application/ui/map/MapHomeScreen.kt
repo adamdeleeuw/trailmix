@@ -49,11 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cpen321application.data.BackendApi
 import com.example.cpen321application.data.DataStoreSessionStore
+import com.example.cpen321application.data.FakePlannerApi
 import com.example.cpen321application.data.GooglePlaceSearch
 import com.example.cpen321application.data.LOCATION_PERMISSIONS
+import com.example.cpen321application.data.PlanPlace
 import com.example.cpen321application.data.currentLocation
 import com.example.cpen321application.data.hasLocationPermission
-import com.example.cpen321application.ui.route.RouteScreen
+import com.example.cpen321application.ui.planning.PlanningScreen
+import com.example.cpen321application.ui.planning.PlanningViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -67,20 +70,24 @@ private const val DOWNTOWN_LAT = 49.2827
 private const val DOWNTOWN_LNG = -123.1207
 private const val CITY_ZOOM = 12f
 private const val STREET_ZOOM = 16f
+private const val YOUR_LOCATION = "Your location"
 private val SEARCH_BAR_SPACE = 88.dp // the search bar and its margins, so the compass shows below it
 
 /** The Map tab's view models, made once per tab so they survive switching tabs. */
 private class MapModels(
     val search: MapSearchViewModel,
     val spots: ParkingSpotsViewModel,
+    val planner: PlanningViewModel,
+    val planningSearch: MapSearchViewModel, // Planning's own search box, apart from the tab's search bar
 )
 
 /**
  * The Map tab's home, like Google Maps: a search bar, the user's parking spots as P
  * markers, a sheet for the chosen place, and the location dot with a recenter button.
  *
- * Directions opens the chained-route planner until Planning (#73) replaces it. Back
- * closes the sheet first, then clears the search, then leaves it to the nav bar's rules.
+ * Directions opens Planning (#73) to the chosen place, from the user's location when
+ * known. Back closes Planning's search box, then Trip Preview, then Planning, then the
+ * sheet, then clears the search, then leaves it to the nav bar's rules.
  *
  * @param onUnauthorized Called when the session is no longer valid.
  */
@@ -91,21 +98,41 @@ fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     val models = MapModels(
         search = viewModel { MapSearchViewModel(places) },
         spots = viewModel { ParkingSpotsViewModel(BackendApi, places, DataStoreSessionStore(context)) },
+        // the fake Planner until #72's endpoint merges; then FakePlannerApi() becomes BackendApi
+        planner = viewModel { PlanningViewModel(FakePlannerApi(), DataStoreSessionStore(context)) },
+        planningSearch = viewModel(key = "planning-search") { MapSearchViewModel(places) },
     )
     var planning by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { models.spots.loadSpots(onUnauthorized) }
 
     if (planning) {
-        BackHandler { planning = false }
-        RouteScreen(onClose = { planning = false }, modifier)
+        val planner = models.planner
+        BackHandler {
+            when {
+                planner.editingEnd != null -> {
+                    models.planningSearch.clear()
+                    planner.closeSearch()
+                }
+                planner.isPreviewing -> planner.closePreview()
+                else -> planning = false
+            }
+        }
+        PlanningScreen(planner, models.planningSearch, onClose = { planning = false }, onUnauthorized, modifier)
         return
     }
     val spots = models.spots
     BackHandler(enabled = spots.selected != null || models.search.isActive) {
         if (spots.selected != null) spots.closeSheet() else models.search.clear()
     }
-    MapHome(models, onDirections = { planning = true }, modifier)
+    val openPlanning = { place: SelectedPlace, here: LatLng? ->
+        models.planner.start(
+            to = PlanPlace(place.name, place.location, place.placeId),
+            from = here?.let { PlanPlace(YOUR_LOCATION, it) },
+        )
+        planning = true
+    }
+    MapHome(models, onDirections = openPlanning, modifier)
     spots.form?.let { ParkingSpotDialog(spots, it, onUnauthorized) }
     if (spots.isConfirmingRemove) RemoveSpotDialog(spots, onUnauthorized)
 }
@@ -113,7 +140,7 @@ fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
 // the map with the sheet under it and the search bar and buttons over it
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MapHome(models: MapModels, onDirections: () -> Unit, modifier: Modifier) {
+private fun MapHome(models: MapModels, onDirections: (SelectedPlace, LatLng?) -> Unit, modifier: Modifier) {
     val search = models.search
     val spots = models.spots
     val location = rememberLocationState()
@@ -190,7 +217,7 @@ private fun mapGestures(search: MapSearchViewModel, spots: ParkingSpotsViewModel
 private fun SheetContent(
     spots: ParkingSpotsViewModel,
     location: LocationState,
-    onDirections: () -> Unit,
+    onDirections: (SelectedPlace, LatLng?) -> Unit,
     onClose: () -> Unit,
     onSummaryHeight: (Int) -> Unit,
 ) {
@@ -200,7 +227,7 @@ private fun SheetContent(
         return
     }
     val actions = PlaceSheetActions(
-        onDirections,
+        { onDirections(selected, location.position) },
         spots::openSaveDialog,
         spots::openEditDialog,
         spots::askToRemove,

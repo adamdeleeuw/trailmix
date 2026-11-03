@@ -85,17 +85,6 @@ data class Transit(val fareType: FareType, val monthlyPassZones: Int?)
 /** The commute questionnaire's answers. A `null` vehicle or transit means the user doesn't drive or take transit. */
 data class Profile(val timezone: String, val vehicle: Vehicle?, val transit: Transit?)
 
-/** One leg of a commute. [polyline] is in Google's encoded polyline format (see `decodePolyline`). */
-data class RouteLeg(
-    val mode: String, // "DRIVE" or "TRANSIT"
-    val durationSeconds: Int,
-    val distanceMeters: Int,
-    val polyline: String,
-)
-
-/** A planned chained commute: the drive leg, then the transit leg. */
-data class ChainedRoute(val legs: List<RouteLeg>, val totalDurationSeconds: Int)
-
 /** What a parking spot's cost is charged per. The names match the backend's `ratePer` values. */
 enum class RateUnit { HOUR, DAY }
 
@@ -165,12 +154,6 @@ interface AccountApi {
     suspend fun deleteAccount(sessionToken: String)
 }
 
-/** The backend's route planning endpoints. Throws like [AuthApi], and [HttpException] with code 404 when there is no route. */
-interface RoutesApi {
-    /** Plans driving from [start] to [split], then transit from [split] to [destination]. */
-    suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng): ChainedRoute
-}
-
 /**
  * The signed-in user's parking spot endpoints. Fails the same way as [ProfileApi]; a
  * 409 [HttpException] carries [PARKING_LIMIT_ERROR] or [PARKING_DUPLICATE_ERROR].
@@ -200,11 +183,11 @@ const val PARKING_LIMIT_ERROR = "Parking spot limit reached"
 /** The backend's 409 error when the user already saved this Google place. */
 const val PARKING_DUPLICATE_ERROR = "Parking spot already saved"
 
-/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [RoutesApi] and [ParkingSpotApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, ParkingSpotApi {
+/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [ParkingSpotApi] and [PlannerApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, PlannerApi {
     private const val PARKING_SPOTS_PATH = "/api/users/me/parking-spots"
 
-    private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
+    private const val TIMEOUT_MS = 10_000
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
     override suspend fun signIn(idToken: String) =
@@ -294,30 +277,10 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, Parking
                 .put("monthlyPassZones", it.monthlyPassZones ?: JSONObject.NULL)
         } ?: JSONObject.NULL)
 
-    override suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng) =
-        request(
-            "POST",
-            "/api/routes/chained",
-            sessionToken,
-            body = JSONObject().put("start", start.toJson()).put("split", split.toJson()).put("destination", destination.toJson()),
-        ) {
-            ChainedRoute(
-                legs = parseLegs(it.getJSONArray("legs")),
-                totalDurationSeconds = it.getInt("totalDurationSeconds"),
-            )
-        }
-
     private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
 
-    private fun parseLegs(json: JSONArray) = (0 until json.length()).map { i ->
-        val leg = json.getJSONObject(i)
-        RouteLeg(
-            mode = leg.getString("mode"),
-            durationSeconds = leg.getInt("durationSeconds"),
-            distanceMeters = leg.getInt("distanceMeters"),
-            polyline = leg.getString("polyline"),
-        )
-    }
+    override suspend fun planTrip(sessionToken: String?, trip: PlanRequest) =
+        request("POST", "/api/routes/plan", sessionToken, body = trip.toJson()) { it.toTripPlan() }
 
     private fun parseUser(json: JSONObject) = User(
         id = json.getString("id"),
@@ -373,7 +336,7 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, Parking
         } catch (e: JSONException) {
             throw IOException("Malformed response", e)
         } catch (e: IllegalArgumentException) {
-            throw IOException("Unknown enum value", e) // FareType or RateUnit valueOf on a value this app doesn't know
+            throw IOException("Unknown enum value", e) // e.g. FareType or TripMode valueOf on a value this app doesn't know
         } catch (e: DateTimeParseException) {
             throw IOException("Malformed date", e)
         } finally {
