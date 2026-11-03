@@ -16,6 +16,7 @@
 | 2026-11-01        | 2.1.1, 2.6, 4.1 | Added the parking spot API tests (issue #71). The "delete my account" tests now check that the user's parking spots are deleted. Added the Map tab's unit tests |
 | 2026-11-01        | 2.1.1, 2.6 | Removed the `POST /api/users/me/trips/seed` API tests along with the endpoint and the Map tab's "Load demo trips" button, and updated the `trip.model.ts` coverage note, since no API saves trips now |
 | 2026-11-01        | 4.1 | `ParkingSpotsViewModelTest` now also covers tapping a place or a P marker on the map, including the address lookup and its fallback (issue #71) |
+| 2026-11-02        | 2.1.1, 2.6, 3.1, 3.2 | Added the Planner endpoint, pure algorithm tests, saved planning preferences, and the response-time NFR test (issue #72) |
 
 ---
 
@@ -24,6 +25,8 @@
 ### 2.1. Locations of Back-end Tests and Instructions to Run Them
 
 #### 2.1.1. Tests
+
+Pure planner algorithm tests are in `backend/tests/unit/planner.core.test.ts` and `backend/tests/unit/transit-zones.test.ts`; run them with `cd backend; npm test -- tests/unit/`.
 
 | **Interface** | **Describe Group Location, No Mocks** | **Describe Group Location, With Mocks** | **Mocked Components** |
 | ------------- | ------------------------------------- | --------------------------------------- | --------------------- |
@@ -42,6 +45,8 @@
 | **GET /api/vehicles/makes/:make/models** | [`backend/tests/no-mock/vehicles.test.ts#L43`](../backend/tests/no-mock/vehicles.test.ts#L43) | _None: nothing external can fail_ | _None_ |
 | **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
 | **POST /api/routes/chained** | [`backend/tests/no-mock/routes.chained.test.ts#L22`](../backend/tests/no-mock/routes.chained.test.ts#L22) | [`backend/tests/mock/routes.chained.test.ts#L42`](../backend/tests/mock/routes.chained.test.ts#L42) | Google Routes API (`fetch`) |
+| **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts`](../backend/tests/no-mock/routes.plan.test.ts) | [`backend/tests/mock/routes.plan.test.ts`](../backend/tests/mock/routes.plan.test.ts) | Google Routes API (`fetch`), User DB for saved parking spots |
+| **PUT /api/users/me/planning-preferences** | [`backend/tests/no-mock/users.planning-preferences.test.ts`](../backend/tests/no-mock/users.planning-preferences.test.ts) | [`backend/tests/mock/users.planning-preferences.test.ts`](../backend/tests/mock/users.planning-preferences.test.ts) | User DB |
 
 
 "No mocks" tests run against a real MongoDB (the same `mongo:7.0` image deployed on the VM). The sign-in tests that need Google to accept a token are in the mocked group, because automated tests can't get a real Google ID token. Every other test signs users in by adding a user and session straight to the test database (`backend/tests/helpers/auth.ts`), so it doesn't need Google.
@@ -50,9 +55,9 @@ The vehicle list endpoints have no mocked group. Their data is `backend/src/data
 
 #### 2.1.2. Commit Hash Where Tests Run
 
-`f0aefbfc15f9685c0e419d9e059d21525dcdd53e`
+`f0aefbfc15f9685c0e419d9e059d21525dcdd53e` (CP1 baseline; issue #72 changes have not yet been committed or run in CI)
 
-This is the last commit that changes code. Later commits only change documentation.
+This was the last commit measured in the existing coverage reports. It does not include the current Planner changes.
 
 #### 2.1.3. Explanation on How to Run the Tests
 
@@ -94,7 +99,7 @@ Each run posts a coverage table for all three runs on its summary page and uploa
 
 ![Jest coverage report for tests/mock/ and tests/no-mock/ together](images/backend-coverage-combined.png)
 
-`src`, `src/config`, `src/middleware` and `src/models` are below 100% only because of the startup code, the error-handler branch, and the trip total checks listed in 2.6. Every other folder is at 100%.
+In the existing CP1 coverage run, `src`, `src/config`, `src/middleware` and `src/models` were below 100% only because of the startup code, the error-handler branch, and the trip total checks listed in 2.6. Planner coverage has not yet been measured; see section 3.2.
 
 ### 2.6. Lines API Tests Can't Reach
 
@@ -115,11 +120,37 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 
 ### 3.1. Test Locations in Git
 
-The non-functional requirement tests will be added in a later checkpoint.
+`backend/tests/nfr/planner.response-time.test.ts` runs 20 authenticated Drive → Transit requests with three saved spots. It stubs Google using the latency values in `backend/tests/fixtures/planner-google-latencies.json`, verifies each response contains three options, and asserts p95 is at most four seconds. Run it with `scripts/run-backend-nfr-tests.ps1` (Windows) or `scripts/run-backend-nfr-tests.sh` (macOS/Linux).
 
 ### 3.2. Test Verification and Logs
 
-The verification steps and logs will be added with the tests in a later checkpoint.
+Validation run on 2026-11-02 with Node v26.13.0 and npm 11.20.0 (the backend declares Node >=22 <23):
+
+| **Check** | **Result** |
+| --- | --- |
+| `npm test -- tests/unit/` | Passed: 2 suites, 18 tests |
+| `npm run typecheck` | Passed |
+| `npm run build` | Passed |
+| `scripts/run-backend-interface-tests.ps1` | Passed: 24 suites, 107 tests across mocked, unmocked and combined runs |
+| `scripts/run-backend-nfr-tests.ps1` | Passed: 20/20 requests returned three options; p95 141.8 ms |
+| Combined interface + unit coverage (`coverage/interface-plus-unit`) | 93.49% statements, 84.63% branches, 94.18% functions, 95.53% lines; the issue #72 100% per-changed-file gate is **not met** |
+| `scripts/run-backend.ps1` Docker build | Failed before building the project: Docker could not reach Docker Hub to resolve `docker/dockerfile:1`; `npm run build` above passed locally |
+
+The 20 Planner response times in milliseconds were: 171.8, 139.1, 135.1, 141.4, 135.8, 138.8, 140.6, 138.7, 129.9, 135.2, 126.8, 139.9, 136.3, 141.8, 138.2, 140.9, 140.4, 137.1, 125.2, 122.0. These use the synthetic Google latency fixture; they are not real Google service timings.
+
+Planner-related coverage from the combined interface + unit run:
+
+| **File** | **Statements** | **Branches** | **Functions** | **Lines** |
+| --- | ---: | ---: | ---: | ---: |
+| `planner.constants.ts` | 100% | 95% | 100% | 100% |
+| `planner.core.ts` | 97.22% | 91.02% | 100% | 97.89% |
+| `planner.google.service.ts` | 92.5% | 67.88% | 100% | 95.52% |
+| `planner.service.ts` | 86.86% | 75.97% | 91.3% | 93.96% |
+| `transit-zones.ts` | 100% | 100% | 100% | 100% |
+| `plan-request.validation.ts` | 83.33% | 83.01% | 100% | 100% |
+| `planning-preferences.validation.ts` | 100% | 81.25% | 100% | 100% |
+
+The uncovered branches in the validators, Google adapter and planner orchestration are input-shape, fallback, and error/replacement paths not exercised by the current cases; they remain test work, not unreachable code. The exact uncovered line/branch data is in `backend/coverage/interface-plus-unit/lcov.info`. Node 26 also produced the declared-engine warning and ts-jest's hybrid-module warning. No live authorized Google response fixture has been recorded; current Google payloads are mocked inline.
 
 ---
 

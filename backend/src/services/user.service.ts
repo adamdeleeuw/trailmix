@@ -1,5 +1,5 @@
 import type { Types } from 'mongoose';
-import { UserModel, type Profile, type User } from '../models/user.model';
+import { UserModel, type PlanningPreferences, type Profile, type User } from '../models/user.model';
 import type { GoogleProfile } from './google.service';
 
 /**
@@ -66,6 +66,18 @@ export async function saveGasPrice(id: Types.ObjectId, centsPerLitre: number): P
   return UserModel.findByIdAndUpdate(
     id,
     { $set: { lastGasPrice: { centsPerLitre, savedAt: new Date() } } },
+    { new: true, runValidators: true },
+  ).lean();
+}
+
+/** Saves the user's default route-planning preferences. */
+export async function savePlanningPreferences(
+  id: Types.ObjectId,
+  preferences: PlanningPreferences,
+): Promise<User | null> {
+  return UserModel.findByIdAndUpdate(
+    id,
+    { $set: preferences },
     { new: true, runValidators: true },
   ).lean();
 }

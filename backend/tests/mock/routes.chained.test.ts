@@ -87,7 +87,7 @@ describe('Mocked: POST /api/routes/chained', () => {
     const response = await planRoute();
 
     expect(response.status).toBe(200);
-    expect(response.body.legs[0].distanceMeters).toBe(0); // the `?? 0` in routes.service.ts
+    expect(response.body.legs[0].distanceMeters).toBe(0); // the missing-distance fallback in legacy-routes.service.ts
   });
 
   // Mocked behavior: Google rejects the request (e.g. a bad API key)

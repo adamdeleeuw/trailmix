@@ -50,6 +50,8 @@ describe('Unmocked: PUT /api/users/me/profile', () => {
         vehicle: corolla,
         transit: { fareType: 'ADULT_STORED_VALUE', monthlyPassZones: null },
         lastGasPrice: null,
+        costVsTime: 50,
+        defaultModes: ['DRIVE', 'TRANSIT'],
       },
     });
     expect(await storedUser(user)).toMatchObject({ profileComplete: true, vehicle: corolla });

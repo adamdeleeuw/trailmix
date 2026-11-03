@@ -71,6 +71,8 @@ describe('Mocked: POST /api/auth/google', () => {
         vehicle: null,
         transit: null,
         lastGasPrice: null,
+        costVsTime: 50,
+        defaultModes: ['DRIVE', 'TRANSIT'],
       },
     });
     const session = await SessionModel.findOne({ userId: user._id }).orFail().lean();

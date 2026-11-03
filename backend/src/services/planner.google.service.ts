@@ -1,0 +1,283 @@
+import { env } from '../config/env';
+import type { PlannerPlace } from './planner.core';
+
+export type PlannerMode = 'DRIVE' | 'TRANSIT';
+
+export interface MatrixElement {
+  originIndex: number;
+  destinationIndex: number;
+  durationSeconds: number;
+  distanceMeters: number;
+}
+
+export interface TransitLineDetail {
+  name: string;
+  vehicle: string;
+  colour: string;
+  headsign: string;
+  departureStop: string;
+  arrivalStop: string;
+  stopCount: number;
+}
+
+export interface RouteDetail {
+  durationSeconds: number;
+  distanceMeters: number;
+  polyline: string;
+  departAt: string;
+  arriveAt: string;
+  transitLines: TransitLineDetail[];
+  walkSeconds: number;
+  steps: RouteStepDetail[];
+}
+
+export interface RouteStepDetail {
+  mode: 'TRANSIT' | 'WALK';
+  durationSeconds: number;
+  distanceMeters: number;
+  polyline: string;
+  from: { label: string; lat: number; lng: number };
+  to: { label: string; lat: number; lng: number };
+  departAt: string;
+  arriveAt: string;
+  transitLine: TransitLineDetail | null;
+}
+
+export class RouteServiceUnavailableError extends Error {}
+
+const MATRIX_URL = 'https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix';
+const DETAILS_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+const TIMEOUT_MS = 10_000;
+const MATRIX_FIELD_MASK = 'originIndex,destinationIndex,duration,distanceMeters,condition,status';
+const DETAILS_FIELD_MASK = [
+  'routes.duration',
+  'routes.distanceMeters',
+  'routes.polyline.encodedPolyline',
+  'routes.legs.startTime',
+  'routes.legs.endTime',
+  'routes.legs.steps.transitDetails.transitLine.name',
+  'routes.legs.steps.transitDetails.transitLine.color',
+  'routes.legs.steps.transitDetails.transitLine.vehicle.name',
+  'routes.legs.steps.transitDetails.transitLine.vehicle.type',
+  'routes.legs.steps.transitDetails.headsign',
+  'routes.legs.steps.transitDetails.stopDetails',
+  'routes.legs.steps.travelMode',
+  'routes.legs.steps.duration',
+  'routes.legs.steps.distanceMeters',
+  'routes.legs.steps.polyline.encodedPolyline',
+  'routes.legs.steps.startLocation.latLng',
+  'routes.legs.steps.endLocation.latLng',
+].join(',');
+
+function waypoint(place: Pick<PlannerPlace, 'lat' | 'lng'>): object {
+  return { location: { latLng: { latitude: place.lat, longitude: place.lng } } };
+}
+
+function seconds(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !/^\d+(\.\d+)?s$/.test(value)) return undefined;
+  return Math.round(Number.parseFloat(value));
+}
+
+function isoTimestamp(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+async function postGoogle<T>(url: string, fieldMask: string, body: object): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': env.googleRoutesApiKey,
+          'X-Goog-FieldMask': fieldMask,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error(`Routes API responded ${response.status}`);
+      return (await response.json()) as T;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new RouteServiceUnavailableError('Could not reach Google Routes API', { cause: lastError });
+}
+
+/** Queries an origin/destination matrix and omits elements where Google found no route. */
+export async function computeRouteMatrix(
+  origins: readonly PlannerPlace[],
+  destinations: readonly PlannerPlace[],
+  mode: PlannerMode,
+  time: { departureTime?: string; arrivalTime?: string } = {},
+): Promise<MatrixElement[]> {
+  const response = await postGoogle<unknown>(MATRIX_URL, MATRIX_FIELD_MASK, {
+    origins: origins.map(waypoint),
+    destinations: destinations.map(waypoint),
+    travelMode: mode,
+    ...(mode === 'DRIVE' ? { routingPreference: 'TRAFFIC_AWARE' } : {}),
+    ...time,
+  });
+  if (!Array.isArray(response)) return [];
+  return response.flatMap((item: unknown) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const element = item as Record<string, unknown>;
+    const durationSeconds = seconds(element.duration);
+    if (
+      element.condition !== 'ROUTE_EXISTS' ||
+      typeof element.originIndex !== 'number' ||
+      typeof element.destinationIndex !== 'number' ||
+      durationSeconds === undefined
+    ) return [];
+    return [{
+      originIndex: element.originIndex,
+      destinationIndex: element.destinationIndex,
+      durationSeconds,
+      distanceMeters: typeof element.distanceMeters === 'number' ? Math.round(element.distanceMeters) : 0,
+    }];
+  });
+}
+
+interface GoogleDetailsResponse {
+  routes?: {
+    duration?: string;
+    distanceMeters?: number;
+    polyline?: { encodedPolyline?: string };
+    legs?: {
+      startTime?: string;
+      endTime?: string;
+      steps?: {
+        travelMode?: string;
+        duration?: string;
+        distanceMeters?: number;
+        polyline?: { encodedPolyline?: string };
+        startLocation?: { latLng?: { latitude?: number; longitude?: number } };
+        endLocation?: { latLng?: { latitude?: number; longitude?: number } };
+        transitDetails?: {
+          headsign?: string;
+          stopDetails?: {
+            departureStop?: { name?: string };
+            arrivalStop?: { name?: string };
+            stopCount?: number;
+            departureTime?: string;
+            arrivalTime?: string;
+          };
+          transitLine?: {
+            name?: string;
+            vehicle?: { name?: string; type?: string };
+            color?: string;
+          };
+        };
+      }[];
+    }[];
+  }[];
+}
+
+/** Retrieves full route geometry and transit labels for one planned leg. */
+export async function computeRouteDetails(
+  origin: PlannerPlace,
+  destination: PlannerPlace,
+  mode: PlannerMode,
+  time: { departureTime?: string; arrivalTime?: string },
+): Promise<RouteDetail | null> {
+  const response = await postGoogle<GoogleDetailsResponse>(DETAILS_URL, DETAILS_FIELD_MASK, {
+    origin: waypoint(origin),
+    destination: waypoint(destination),
+    travelMode: mode,
+    ...(mode === 'DRIVE' ? { routingPreference: 'TRAFFIC_AWARE' } : {}),
+    ...time,
+  });
+  const route = response.routes?.[0];
+  const durationSeconds = seconds(route?.duration);
+  const polyline = route?.polyline?.encodedPolyline;
+  if (route === undefined || durationSeconds === undefined || polyline === undefined) return null;
+
+  const transitLines = (route.legs ?? []).flatMap((leg) => leg.steps ?? []).flatMap((step) => {
+    const details = step.transitDetails;
+    if (step.travelMode !== 'TRANSIT' || details === undefined) return [];
+    return [{
+      name: details.transitLine?.name ?? '',
+      vehicle: details.transitLine?.vehicle?.name ?? details.transitLine?.vehicle?.type ?? '',
+      colour: details.transitLine?.color ?? '',
+      headsign: details.headsign ?? '',
+      departureStop: details.stopDetails?.departureStop?.name ?? '',
+      arrivalStop: details.stopDetails?.arrivalStop?.name ?? '',
+      stopCount: details.stopDetails?.stopCount ?? 0,
+    }];
+  });
+  const walkSeconds = (route.legs ?? []).flatMap((leg) => leg.steps ?? []).reduce((total, step) => {
+    if (step.travelMode !== 'WALK') return total;
+    return total + (seconds(step.duration) ?? 0);
+  }, 0);
+  const leg = route.legs?.[0];
+  let departAt = isoTimestamp(leg?.startTime) ?? isoTimestamp(time.departureTime);
+  let arriveAt = isoTimestamp(leg?.endTime) ?? isoTimestamp(time.arrivalTime);
+  if (departAt === undefined && arriveAt !== undefined) {
+    departAt = new Date(Date.parse(arriveAt) - durationSeconds * 1000).toISOString();
+  }
+  if (arriveAt === undefined && departAt !== undefined) {
+    arriveAt = new Date(Date.parse(departAt) + durationSeconds * 1000).toISOString();
+  }
+  const steps: RouteStepDetail[] = [];
+  let stepCursor = departAt === undefined ? undefined : Date.parse(departAt);
+  for (const routeLeg of route.legs ?? []) {
+    for (const step of routeLeg.steps ?? []) {
+      if (step.travelMode !== 'TRANSIT' && step.travelMode !== 'WALK') continue;
+      const stepDuration = seconds(step.duration);
+      const start = step.startLocation?.latLng;
+      const end = step.endLocation?.latLng;
+      if (
+        stepDuration === undefined || start?.latitude === undefined || start.longitude === undefined ||
+        end?.latitude === undefined || end.longitude === undefined
+      ) continue;
+
+      const details = step.transitDetails;
+      const transitLine: TransitLineDetail | null = step.travelMode === 'TRANSIT' && details !== undefined ? {
+        name: details.transitLine?.name ?? '',
+        vehicle: details.transitLine?.vehicle?.name ?? details.transitLine?.vehicle?.type ?? '',
+        colour: details.transitLine?.color ?? '',
+        headsign: details.headsign ?? '',
+        departureStop: details.stopDetails?.departureStop?.name ?? '',
+        arrivalStop: details.stopDetails?.arrivalStop?.name ?? '',
+        stopCount: details.stopDetails?.stopCount ?? 0,
+      } : null;
+      const stepDepartAt = isoTimestamp(details?.stopDetails?.departureTime) ??
+        (stepCursor === undefined ? '' : new Date(stepCursor).toISOString());
+      const stepArriveAt = isoTimestamp(details?.stopDetails?.arrivalTime) ??
+        (stepDepartAt === '' ? '' : new Date(Date.parse(stepDepartAt) + stepDuration * 1000).toISOString());
+      if (stepArriveAt !== '') stepCursor = Date.parse(stepArriveAt);
+      steps.push({
+        mode: step.travelMode,
+        durationSeconds: stepDuration,
+        distanceMeters: Math.round(step.distanceMeters ?? 0),
+        polyline: step.polyline?.encodedPolyline ?? '',
+        from: {
+          label: transitLine?.departureStop ?? '',
+          lat: start.latitude,
+          lng: start.longitude,
+        },
+        to: {
+          label: transitLine?.arrivalStop ?? '',
+          lat: end.latitude,
+          lng: end.longitude,
+        },
+        departAt: stepDepartAt,
+        arriveAt: stepArriveAt,
+        transitLine,
+      });
+    }
+  }
+  return {
+    durationSeconds,
+    distanceMeters: Math.round(route.distanceMeters ?? 0),
+    polyline,
+    departAt: departAt ?? '',
+    arriveAt: arriveAt ?? '',
+    transitLines,
+    walkSeconds,
+    steps,
+  };
+}

@@ -30,6 +30,8 @@ describe('Unmocked: GET /api/users/me', () => {
         vehicle: null,
         transit: null,
         lastGasPrice: null,
+        costVsTime: 50,
+        defaultModes: ['DRIVE', 'TRANSIT'],
       },
     });
   });

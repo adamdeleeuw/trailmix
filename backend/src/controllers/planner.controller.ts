@@ -1,9 +1,14 @@
 import type { Request, Response } from 'express';
-import { computeRoute, type LatLng } from '../services/routes.service';
+import { computeRoute, type LatLng } from '../services/legacy-routes.service';
+import type { AuthLocals } from '../middleware/require-session.middleware';
+import { planTrip } from '../services/planner.service';
+import { RouteServiceUnavailableError } from '../services/planner.google.service';
+import { parsePlanRequest } from '../validation/plan-request.validation';
 
 const OK = 200;
 const BAD_REQUEST = 400;
 const NOT_FOUND = 404;
+const SERVICE_UNAVAILABLE = 503;
 const MAX_LAT = 90;
 const MAX_LNG = 180;
 
@@ -22,11 +27,9 @@ function parsePoint(value: unknown): LatLng | null {
   return { lat, lng };
 }
 
-/**
- * Plans a chained commute: drive from the start to the split point, then transit to the destination. Somewhat hardcoded right now, will be turned into algo at later checkpoints
- */
-export async function planChainedRoute(req: Request, res: Response): Promise<void> {
-  const body: unknown = req.body; // undefined if the request had no JSON body
+/** Legacy handler retained while the app migrates away from `/api/routes/chained`. */
+export async function planLegacyChainedRoute(req: Request, res: Response): Promise<void> {
+  const body: unknown = req.body;
   const fields = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const start = parsePoint(fields.start);
   const split = parsePoint(fields.split);
@@ -37,7 +40,6 @@ export async function planChainedRoute(req: Request, res: Response): Promise<voi
     return;
   }
 
-  // the two legs don't depend on each other, so ask for both at once
   const [driveLeg, transitLeg] = await Promise.all([
     computeRoute(start, split, 'DRIVE'),
     computeRoute(split, destination, 'TRANSIT'),
@@ -52,4 +54,20 @@ export async function planChainedRoute(req: Request, res: Response): Promise<voi
     legs: [driveLeg, transitLeg],
     totalDurationSeconds: driveLeg.durationSeconds + transitLeg.durationSeconds,
   });
+}
+
+/** Plans up to three options using the user's costs, preferences, and saved parking spots. */
+export async function planRoute(req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
+  const parsed = parsePlanRequest(req.body);
+  if ('error' in parsed) {
+    res.status(BAD_REQUEST).json({ error: parsed.error });
+    return;
+  }
+  try {
+    const result = await planTrip(res.locals.auth.user._id, res.locals.auth.user, parsed.request);
+    res.status(OK).json(result);
+  } catch (error) {
+    if (!(error instanceof RouteServiceUnavailableError)) throw error;
+    res.status(SERVICE_UNAVAILABLE).json({ error: "Couldn't reach the route service" });
+  }
 }

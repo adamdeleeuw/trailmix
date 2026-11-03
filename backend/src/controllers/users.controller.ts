@@ -3,9 +3,15 @@ import type { AuthLocals } from '../middleware/require-session.middleware';
 import { toUserResponse } from '../models/user.model';
 import { deleteUserSessions } from '../services/session.service';
 import { deleteUserTrips, findTripsByUserId } from '../services/trip.service';
-import { deleteUser, saveGasPrice as saveUserGasPrice, saveUserProfile } from '../services/user.service';
+import {
+  deleteUser,
+  saveGasPrice as saveUserGasPrice,
+  savePlanningPreferences as saveUserPlanningPreferences,
+  saveUserProfile,
+} from '../services/user.service';
 import { parseGasPrice } from '../validation/gas-price.validation';
 import { parseProfile } from '../validation/profile.validation';
+import { parsePlanningPreferences } from '../validation/planning-preferences.validation';
 
 const OK = 200;
 const NO_CONTENT = 204;
@@ -78,6 +84,21 @@ export async function saveGasPrice(req: Request, res: Response<unknown, AuthLoca
   const user = await saveUserGasPrice(res.locals.auth.user._id, centsPerLitre);
   if (user === null) {
     res.status(UNAUTHORIZED).json({ error: 'Unauthorized' }); // deleted after the session check
+    return;
+  }
+  res.status(OK).json({ user: toUserResponse(user) });
+}
+
+/** Saves the signed-in user's route-planning defaults. */
+export async function savePlanningPreferences(req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
+  const preferences = parsePlanningPreferences(req.body);
+  if (preferences === undefined) {
+    res.status(BAD_REQUEST).json({ error: 'Invalid planning preferences: costVsTime must be 0..100 and defaultModes must contain DRIVE and/or TRANSIT' });
+    return;
+  }
+  const user = await saveUserPlanningPreferences(res.locals.auth.user._id, preferences);
+  if (user === null) {
+    res.status(UNAUTHORIZED).json({ error: 'Unauthorized' });
     return;
   }
   res.status(OK).json({ user: toUserResponse(user) });

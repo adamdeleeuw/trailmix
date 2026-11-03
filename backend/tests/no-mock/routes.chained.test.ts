@@ -42,7 +42,7 @@ describe('Unmocked: POST /api/routes/chained', () => {
     const { token } = await createSignedInUser(); // signed in, so only the points can be the problem
     const signedIn = { Authorization: bearer(token) };
 
-    // Each body breaks a different check in parsePoint (routes.controller.ts)
+    // Each body breaks a different check in parsePoint (planner.controller.ts)
     const badBodies = [
       undefined, // no body at all
       { start: null, split: POINT, destination: POINT },

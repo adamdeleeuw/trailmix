@@ -55,8 +55,8 @@ The issues below were justified as they came up in earlier issues. Every other o
 
   4. **Issue**
 
-     - **Location in Git:** [`backend/src/routes/routes.route.ts#L7`](../backend/src/routes/routes.route.ts#L7)
-     - **Justification:** Same as above, for the async `requireSession` and `planChainedRoute` handlers. The mocked API tests prove errors are handled, since a failing Routes API call returns a 500 instead of crashing.
+   - **Location in Git:** [`backend/src/routes/planner.route.ts#L7`](../backend/src/routes/planner.route.ts#L7)
+   - **Justification:** Same as above, for the async `requireSession` and `planLegacyChainedRoute` handlers. The mocked API tests prove errors are handled, since a failing legacy Google Routes API call returns a 500 instead of crashing.
 
   The same warning on [`backend/src/routes/auth.route.ts`](../backend/src/routes/auth.route.ts) and [`backend/src/routes/users.route.ts#L7`](../backend/src/routes/users.route.ts#L7) was ignored for the same reason in issue #9. Wrapping every handler to silence the rule would add code that does nothing Express 5 doesn't already do.
 
