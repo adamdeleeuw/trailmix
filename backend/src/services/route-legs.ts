@@ -1,4 +1,5 @@
 import type { Place } from '../models/trip.model';
+import type { TransitLineDetail } from './planner.google.service';
 
 export interface NormalizableLeg {
   mode: 'DRIVE' | 'TRANSIT' | 'WALK';
@@ -10,15 +11,7 @@ export interface NormalizableLeg {
   distanceMeters: number;
   costCents: number;
   polyline: string;
-  transitLines: Array<{
-    name: string;
-    vehicle: string;
-    colour: string;
-    headsign: string;
-    departureStop: string;
-    arrivalStop: string;
-    stopCount: number;
-  }>;
+  transitLines: TransitLineDetail[];
 }
 
 const POLYLINE_SCALE = 1e5;

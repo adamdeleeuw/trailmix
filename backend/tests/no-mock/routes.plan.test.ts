@@ -37,7 +37,8 @@ describe('Unmocked: POST /api/routes/plan', () => {
     expect(response.body).toEqual({ error: 'Unauthorized' });
   });
 
-  // Input: valid session and request bodies with a missing place, invalid coordinate, unknown mode, invalid preference, or invalid date
+  // Input: valid session and request bodies with a missing place, invalid coordinate, unknown mode, invalid preference,
+  // a max walk outside 1 to 60 whole minutes, or invalid date
   // Expected status code: 400
   // Expected behavior: reject each request before contacting Google
   // Expected output: a field-specific error message
@@ -48,6 +49,8 @@ describe('Unmocked: POST /api/routes/plan', () => {
       [{ ...validBody, destination: { ...destination, lat: 91 } }, 'destination'],
       [{ ...validBody, modes: ['BIKE'] }, 'modes'],
       [{ ...validBody, costVsTime: 101 }, 'costVsTime'],
+      [{ ...validBody, maxWalkMinutes: 0 }, 'maxWalkMinutes'],
+      [{ ...validBody, maxWalkMinutes: 7.5 }, 'maxWalkMinutes'],
       [{ ...validBody, arriveBy: 'tomorrow afternoon' }, 'arriveBy'],
     ] as const;
 

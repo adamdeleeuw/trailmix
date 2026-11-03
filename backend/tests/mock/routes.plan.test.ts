@@ -58,6 +58,41 @@ function googleSays(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
 }
 
+// one Google step: a walk of [seconds], or a ride on [line] (name, then short name)
+function step(mode: 'WALK' | 'TRANSIT', seconds: number, line?: { name: string; nameShort?: string }): object {
+  return {
+    travelMode: mode,
+    staticDuration: `${seconds}s`,
+    distanceMeters: seconds * (mode === 'WALK' ? 1 : 8),
+    polyline: { encodedPolyline: ROUTE_POLYLINE },
+    startLocation: { latLng: { latitude: 49.26, longitude: -123.24 } },
+    endLocation: { latLng: { latitude: 49.27, longitude: -123.2 } },
+    ...(mode === 'TRANSIT' ? {
+      transitDetails: {
+        headsign: 'Downtown',
+        stopDetails: { departureStop: { name: `${line?.name ?? 'Line'} stop` }, arrivalStop: { name: 'Next stop' }, stopCount: 4 },
+        transitLine: { name: line?.name ?? 'Line', nameShort: line?.nameShort, color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
+      },
+    } : {}),
+  };
+}
+
+// a detailed transit route made of [steps], timed to match the one-element MATRIX
+function transitRoute(steps: object[]): object {
+  return {
+    routes: [{ duration: '1200s', distanceMeters: 5000, polyline: { encodedPolyline: ROUTE_POLYLINE }, legs: [{ steps }] }],
+  };
+}
+
+// plans BODY (transit only) for a user with [maxWalkMinutes] saved, sending [extra] in the request
+async function planWithMaxWalk(maxWalkMinutes: number, steps: object[], extra: object = {}): Promise<request.Response> {
+  jest.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(googleSays(MATRIX))
+    .mockResolvedValueOnce(googleSays(transitRoute(steps)));
+  const { token } = await createSignedInUser({ maxWalkMinutes });
+  return request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({ ...BODY, ...extra });
+}
+
 async function submitPlan(): Promise<request.Response> {
   const { token } = await createSignedInUser();
   return request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send(BODY);
@@ -370,6 +405,64 @@ describe('Mocked: POST /api/routes/plan', () => {
       [leg.from.label, leg.to.label])).not.toContain('Transit connection');
     expect(decodePolyline(response.body.options[0].legs[0].polyline)).toHaveLength(9);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // Mocked behavior: Google's only route walks 6 minutes in one stretch before the bus
+  // Input: valid session for a user whose saved max walk is 5 minutes, transit only
+  // Expected status code: 200
+  // Expected behavior: the route is dropped because one walking stretch is over the user's max
+  // Expected output: { options: [], warnings: [] }
+  test('Drops a route with a walking stretch longer than the saved max walk', async () => {
+    const response = await planWithMaxWalk(5, [step('WALK', 360), step('TRANSIT', 840)]);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ options: [], warnings: [] });
+  });
+
+  // Mocked behavior: Google's route walks 4 minutes, rides, then walks 4 more minutes (8 in total)
+  // Input: valid session for a user whose saved max walk is 5 minutes, transit only
+  // Expected status code: 200
+  // Expected behavior: each stretch is checked on its own, so two short walks are allowed
+  // Expected output: one option with both walks
+  test('Keeps a route whose walking is split into stretches under the max', async () => {
+    const response = await planWithMaxWalk(5, [step('WALK', 240), step('TRANSIT', 720), step('WALK', 240)]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.options).toHaveLength(1);
+    expect(response.body.options[0].legs.map((leg: { mode: string }) => leg.mode)).toEqual(['WALK', 'TRANSIT', 'WALK']);
+  });
+
+  // Mocked behavior: Google's only route walks 6 minutes in one stretch before the bus
+  // Input: valid session for a user whose saved max walk is 5 minutes, with maxWalkMinutes 10 in the request
+  // Expected status code: 200
+  // Expected behavior: the request's max walk is used instead of the saved one
+  // Expected output: one option
+  test("Uses the request's max walk over the saved one", async () => {
+    const response = await planWithMaxWalk(5, [step('WALK', 360), step('TRANSIT', 840)], { maxWalkMinutes: 10 });
+
+    expect(response.status).toBe(200);
+    expect(response.body.options).toHaveLength(1);
+  });
+
+  // Mocked behavior: Google's route rides a bus, walks between stops, then rides a train
+  // Input: valid session with the default max walk, transit only
+  // Expected status code: 200
+  // Expected behavior: changing vehicles counts as a transfer even with no parking spot, and lines keep their short names
+  // Expected output: one option with transfers 1 and the bus's short name "99"
+  test('Counts each vehicle change as a transfer and sends short line names', async () => {
+    const response = await planWithMaxWalk(10, [
+      step('TRANSIT', 600, { name: 'UBC/Commercial-Broadway', nameShort: '99' }),
+      step('WALK', 120),
+      step('TRANSIT', 480, { name: 'Canada Line' }),
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.options[0]).toMatchObject({ transfers: 1, transferPoints: [] });
+    const lines = response.body.options[0].legs.flatMap((leg: { transitLines: unknown[] }) => leg.transitLines);
+    expect(lines).toMatchObject([
+      { name: 'UBC/Commercial-Broadway', shortName: '99' },
+      { name: 'Canada Line', shortName: '' },
+    ]);
   });
 
   // Mocked behavior: Google fails the first matrix request and succeeds on retry

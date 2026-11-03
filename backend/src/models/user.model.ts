@@ -24,6 +24,11 @@ export const PLANNING_MODES = ['DRIVE', 'TRANSIT'] as const;
 export const DEFAULT_PLANNING_MODES: readonly (typeof PLANNING_MODES)[number][] = ['DRIVE', 'TRANSIT'];
 export const DEFAULT_COST_VS_TIME = 50;
 
+/** The longest single stretch of walking a route may have, in minutes, when the user hasn't chosen one. */
+export const DEFAULT_MAX_WALK_MINUTES = 10;
+export const MIN_MAX_WALK_MINUTES = 1;
+export const MAX_MAX_WALK_MINUTES = 60;
+
 /** The gas prices a user can save, in cents per litre. */
 export const MIN_CENTS_PER_LITRE = 50;
 export const MAX_CENTS_PER_LITRE = 400;
@@ -108,6 +113,7 @@ export interface Profile {
 export interface PlanningPreferences {
   costVsTime: number;
   defaultModes: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes?: number; // left unchanged when a save leaves it out
 }
 
 /**
@@ -133,6 +139,7 @@ export interface User {
   parkingSpots: ParkingSpot[]; // newest first, at most MAX_PARKING_SPOTS
   costVsTime: number;
   defaultModes: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes: number; // longest single walking stretch a planned route may have
   createdAt: Date;
   updatedAt: Date;
 }
@@ -150,6 +157,7 @@ export interface UserResponse {
   lastGasPrice: { centsPerLitre: number; savedAt: string } | null; // savedAt is an ISO 8601 date
   costVsTime: number;
   defaultModes: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes: number;
 }
 
 // _id: false because there's only ever one of each, inside the user
@@ -212,6 +220,13 @@ const userSchema = new Schema<User>(
     parkingSpots: { type: [parkingSpotSchema], default: [] },
     costVsTime: { type: Number, min: 0, max: 100, default: DEFAULT_COST_VS_TIME },
     defaultModes: { type: [String], enum: [...PLANNING_MODES], default: [...DEFAULT_PLANNING_MODES] },
+    maxWalkMinutes: {
+      type: Number,
+      min: MIN_MAX_WALK_MINUTES,
+      max: MAX_MAX_WALK_MINUTES,
+      default: DEFAULT_MAX_WALK_MINUTES,
+      validate: Number.isInteger,
+    },
   },
   { timestamps: true },
 );
@@ -248,6 +263,7 @@ export function toUserResponse(user: User): UserResponse {
     },
     costVsTime: user.costVsTime ?? DEFAULT_COST_VS_TIME,
     defaultModes: user.defaultModes ?? [...DEFAULT_PLANNING_MODES],
+    maxWalkMinutes: user.maxWalkMinutes ?? DEFAULT_MAX_WALK_MINUTES, // accounts made before this setting
   };
 }
 

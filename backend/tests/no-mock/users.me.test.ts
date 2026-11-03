@@ -32,6 +32,7 @@ describe('Unmocked: GET /api/users/me', () => {
         lastGasPrice: null,
         costVsTime: 50,
         defaultModes: ['DRIVE', 'TRANSIT'],
+        maxWalkMinutes: 10,
       },
     });
   });

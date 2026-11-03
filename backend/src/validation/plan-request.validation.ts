@@ -2,6 +2,7 @@ import { PLANNING_MODES } from '../models/user.model';
 import type { PlannerPlace } from '../services/planner.core';
 import type { PlannerMode } from '../services/planner.google.service';
 import { isRecord } from './common.validation';
+import { isMaxWalkMinutes } from './planning-preferences.validation';
 
 export interface PlanRequest {
   origin: PlannerPlace;
@@ -9,6 +10,7 @@ export interface PlanRequest {
   arriveBy: Date | null;
   modes: PlannerMode[];
   costVsTime?: number;
+  maxWalkMinutes?: number; // overrides the saved preference for this trip
 }
 
 export type PlanRequestParseResult = { request: PlanRequest } | { error: string };
@@ -46,6 +48,9 @@ export function parsePlanRequest(body: unknown): PlanRequestParseResult {
     body.costVsTime < 0 ||
     body.costVsTime > 100
   )) return { error: 'costVsTime must be an integer from 0 to 100' };
+  if (body.maxWalkMinutes !== undefined && !isMaxWalkMinutes(body.maxWalkMinutes)) {
+    return { error: 'maxWalkMinutes must be an integer from 1 to 60' };
+  }
   return {
     request: {
       origin,
@@ -53,6 +58,7 @@ export function parsePlanRequest(body: unknown): PlanRequestParseResult {
       arriveBy: body.arriveBy === null ? null : new Date(body.arriveBy as string),
       modes: [...body.modes] as PlannerMode[],
       ...(body.costVsTime === undefined ? {} : { costVsTime: body.costVsTime as number }),
+      ...(body.maxWalkMinutes === undefined ? {} : { maxWalkMinutes: body.maxWalkMinutes as number }),
     },
   };
 }

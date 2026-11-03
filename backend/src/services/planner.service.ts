@@ -1,6 +1,6 @@
 import type { Types } from 'mongoose';
 import type { Leg, Place } from '../models/trip.model';
-import type { ParkingSpot, User } from '../models/user.model';
+import { DEFAULT_MAX_WALK_MINUTES, type ParkingSpot, type User } from '../models/user.model';
 import type { PlanRequest } from '../validation/plan-request.validation';
 import { getParkingSpots } from './parking-spot.service';
 import {
@@ -27,7 +27,6 @@ import { zonesForTransitLines } from './transit-zones';
 
 const PARKING_BUFFER_SECONDS = 300;
 const GOOGLE_DEPARTURE_BUFFER_MS = 60_000;
-const MAX_WALK_SECONDS = 600;
 const BASELINE_DRIVE_ID = 'BASELINE_DRIVE';
 const BASELINE_TRANSIT_ID = 'BASELINE_TRANSIT';
 
@@ -209,6 +208,16 @@ function transitLegs(origin: PlannerPlace, destination: PlannerPlace, detail: Ro
   });
 }
 
+// how many times the trip changes vehicle: car to bus, or bus to train; walking between doesn't count
+function vehicleChanges(legs: readonly PlanLeg[]): number {
+  return Math.max(0, legs.filter((leg) => leg.mode !== 'WALK').length - 1);
+}
+
+// the user's longest allowed walking stretch for this trip: the request's, then their saved one
+function maxWalkSeconds(request: PlanRequest, user: User): number {
+  return (request.maxWalkMinutes ?? user.maxWalkMinutes ?? DEFAULT_MAX_WALK_MINUTES) * 60;
+}
+
 function makeOption(
   candidate: PlanCandidate,
   schedule: ReturnType<typeof scheduleChain>,
@@ -232,7 +241,7 @@ function makeOption(
     costEstimated: price.costEstimated,
     baselineDriveCostCents,
     transferPoints: candidate.spot === null ? [] : [toPlace(spotPlace(candidate.spot))],
-    transfers: candidate.spot === null ? 0 : 1,
+    transfers: vehicleChanges(normalizedLegs),
     legs: normalizedLegs,
   };
 }
@@ -257,7 +266,9 @@ async function getDetailedCandidate(
         ? { departureTime: estimate.transitDepartAt.toISOString() }
         : { arrivalTime: request.arriveBy.toISOString() }),
     ]);
-    if (driveDetail === null || transitDetail === null || driveDetail.walkSeconds + transitDetail.walkSeconds > MAX_WALK_SECONDS) {
+    const maxWalk = maxWalkSeconds(request, user);
+    if (driveDetail === null || transitDetail === null ||
+      driveDetail.longestWalkSeconds > maxWalk || transitDetail.longestWalkSeconds > maxWalk) {
       return null;
     }
 
@@ -301,7 +312,7 @@ async function getDetailedCandidate(
   const detail = await computeRouteDetails(request.origin, request.destination, mode, mode === 'DRIVE' || request.arriveBy === null
     ? { departureTime: estimatedLeaveAt.toISOString() }
     : { arrivalTime: request.arriveBy.toISOString() });
-  if (detail === null || detail.walkSeconds > MAX_WALK_SECONDS) return null;
+  if (detail === null || detail.longestWalkSeconds > maxWalkSeconds(request, user)) return null;
 
   const schedule = scheduleDetailedSingle(
     detail.durationSeconds,

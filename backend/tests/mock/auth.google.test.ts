@@ -73,6 +73,7 @@ describe('Mocked: POST /api/auth/google', () => {
         lastGasPrice: null,
         costVsTime: 50,
         defaultModes: ['DRIVE', 'TRANSIT'],
+        maxWalkMinutes: 10,
       },
     });
     const session = await SessionModel.findOne({ userId: user._id }).orFail().lean();

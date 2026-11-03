@@ -52,6 +52,7 @@ describe('Unmocked: PUT /api/users/me/profile', () => {
         lastGasPrice: null,
         costVsTime: 50,
         defaultModes: ['DRIVE', 'TRANSIT'],
+        maxWalkMinutes: 10,
       },
     });
     expect(await storedUser(user)).toMatchObject({ profileComplete: true, vehicle: corolla });

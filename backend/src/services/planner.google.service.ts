@@ -12,6 +12,7 @@ export interface MatrixElement {
 
 export interface TransitLineDetail {
   name: string;
+  shortName: string; // what the line is signed as, e.g. "99" or "R4"; '' when it has none (SkyTrain lines)
   vehicle: string;
   colour: string;
   headsign: string;
@@ -28,6 +29,7 @@ export interface RouteDetail {
   arriveAt: string;
   transitLines: TransitLineDetail[];
   walkSeconds: number;
+  longestWalkSeconds: number; // the longest stretch of back-to-back walking steps, checked against the user's max walk
   steps: RouteStepDetail[];
 }
 
@@ -54,6 +56,7 @@ const DETAILS_FIELD_MASK = [
   'routes.distanceMeters',
   'routes.polyline.encodedPolyline',
   'routes.legs.steps.transitDetails.transitLine.name',
+  'routes.legs.steps.transitDetails.transitLine.nameShort',
   'routes.legs.steps.transitDetails.transitLine.color',
   'routes.legs.steps.transitDetails.transitLine.vehicle.name',
   'routes.legs.steps.transitDetails.transitLine.vehicle.type',
@@ -163,6 +166,7 @@ interface GoogleDetailsResponse {
           };
           transitLine?: {
             name?: string;
+            nameShort?: string;
             vehicle?: { name?: string; type?: string };
             color?: string;
           };
@@ -170,6 +174,38 @@ interface GoogleDetailsResponse {
       }[];
     }[];
   }[];
+}
+
+type GoogleTransitDetails = NonNullable<
+  NonNullable<NonNullable<NonNullable<GoogleDetailsResponse['routes']>[number]['legs']>[number]['steps']>[number]['transitDetails']
+>;
+
+function toTransitLine(details: GoogleTransitDetails): TransitLineDetail {
+  return {
+    name: details.transitLine?.name ?? '',
+    shortName: details.transitLine?.nameShort ?? '',
+    vehicle: details.transitLine?.vehicle?.name ?? details.transitLine?.vehicle?.type ?? '',
+    colour: details.transitLine?.color ?? '',
+    headsign: details.headsign ?? '',
+    departureStop: details.stopDetails?.departureStop?.name ?? '',
+    arrivalStop: details.stopDetails?.arrivalStop?.name ?? '',
+    stopCount: details.stopDetails?.stopCount ?? 0,
+  };
+}
+
+/** The longest run of back-to-back walking steps, in seconds; riding a vehicle ends a run. */
+export function longestWalkSeconds(steps: readonly { travelMode?: string; staticDuration?: string }[]): number {
+  let longest = 0;
+  let current = 0;
+  for (const step of steps) {
+    if (step.travelMode === 'WALK') {
+      current += seconds(step.staticDuration) ?? 0;
+      longest = Math.max(longest, current);
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
 }
 
 /** Retrieves full route geometry and transit labels for one planned leg. */
@@ -194,15 +230,7 @@ export async function computeRouteDetails(
   const transitLines = (route.legs ?? []).flatMap((leg) => leg.steps ?? []).flatMap((step) => {
     const details = step.transitDetails;
     if (step.travelMode !== 'TRANSIT' || details === undefined) return [];
-    return [{
-      name: details.transitLine?.name ?? '',
-      vehicle: details.transitLine?.vehicle?.name ?? details.transitLine?.vehicle?.type ?? '',
-      colour: details.transitLine?.color ?? '',
-      headsign: details.headsign ?? '',
-      departureStop: details.stopDetails?.departureStop?.name ?? '',
-      arrivalStop: details.stopDetails?.arrivalStop?.name ?? '',
-      stopCount: details.stopDetails?.stopCount ?? 0,
-    }];
+    return [toTransitLine(details)];
   });
   const walkSeconds = (route.legs ?? []).flatMap((leg) => leg.steps ?? []).reduce((total, step) => {
     if (step.travelMode !== 'WALK') return total;
@@ -230,15 +258,7 @@ export async function computeRouteDetails(
       ) continue;
 
       const details = step.transitDetails;
-      const transitLine: TransitLineDetail | null = step.travelMode === 'TRANSIT' && details !== undefined ? {
-        name: details.transitLine?.name ?? '',
-        vehicle: details.transitLine?.vehicle?.name ?? details.transitLine?.vehicle?.type ?? '',
-        colour: details.transitLine?.color ?? '',
-        headsign: details.headsign ?? '',
-        departureStop: details.stopDetails?.departureStop?.name ?? '',
-        arrivalStop: details.stopDetails?.arrivalStop?.name ?? '',
-        stopCount: details.stopDetails?.stopCount ?? 0,
-      } : null;
+      const transitLine: TransitLineDetail | null = step.travelMode === 'TRANSIT' && details !== undefined ? toTransitLine(details) : null;
       const stepDepartAt = isoTimestamp(details?.stopDetails?.departureTime) ??
         (stepCursor === undefined ? '' : new Date(stepCursor).toISOString());
       const stepArriveAt = isoTimestamp(details?.stopDetails?.arrivalTime) ??
@@ -273,6 +293,7 @@ export async function computeRouteDetails(
     arriveAt: arriveAt ?? '',
     transitLines,
     walkSeconds,
+    longestWalkSeconds: longestWalkSeconds((route.legs ?? []).flatMap((leg) => leg.steps ?? [])),
     steps,
   };
 }

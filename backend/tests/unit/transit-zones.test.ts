@@ -4,6 +4,7 @@ import type { TransitLineDetail } from '../../src/services/planner.google.servic
 function line(overrides: Partial<TransitLineDetail> = {}): TransitLineDetail {
   return {
     name: 'Expo Line',
+    shortName: '',
     vehicle: 'SkyTrain',
     colour: '#0067A0',
     headsign: 'King George',

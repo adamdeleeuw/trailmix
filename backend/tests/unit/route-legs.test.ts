@@ -28,6 +28,7 @@ function leg(
     transitLines: mode === 'TRANSIT'
       ? [{
         name: '99 B-Line',
+        shortName: '',
         vehicle: 'Bus',
         colour: '#00843D',
         headsign: 'UBC',
