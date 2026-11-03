@@ -5,6 +5,8 @@ import com.example.cpen321application.data.HttpException
 import com.example.cpen321application.data.PlanPlace
 import com.example.cpen321application.data.PlanRequest
 import com.example.cpen321application.data.PlannerApi
+import com.example.cpen321application.data.PlanningPreferences
+import com.example.cpen321application.data.PlanningPreferencesApi
 import com.example.cpen321application.data.RouteLabel
 import com.example.cpen321application.data.SessionStore
 import com.example.cpen321application.data.TripMode
@@ -52,6 +54,27 @@ private class RecordingPlanner : PlannerApi {
     }
 }
 
+/** Saved preferences in memory. Set [failure] to make loading and saving throw it. */
+private class FakePreferences(var saved: PlanningPreferences = PlanningPreferences(50, setOf(TripMode.DRIVE, TripMode.TRANSIT), 10)) :
+    PlanningPreferencesApi {
+    var loads = 0
+    val saves = mutableListOf<PlanningPreferences>()
+    var failure: IOException? = null
+
+    override suspend fun getPlanningPreferences(sessionToken: String?): PlanningPreferences {
+        loads++
+        failure?.let { throw it }
+        return saved
+    }
+
+    override suspend fun savePlanningPreferences(sessionToken: String?, preferences: PlanningPreferences): PlanningPreferences {
+        failure?.let { throw it }
+        saves += preferences
+        saved = preferences
+        return preferences
+    }
+}
+
 private object PlanTokenStore : SessionStore {
     override suspend fun token() = "token"
     override suspend fun setToken(token: String?) = Unit
@@ -64,12 +87,13 @@ private object PlanTokenStore : SessionStore {
 class PlanningViewModelTest {
     private val dispatcher = StandardTestDispatcher() // lets the tests control the replan delay
     private val api = RecordingPlanner()
+    private val preferences = FakePreferences()
     private lateinit var viewModel: PlanningViewModel
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
-        viewModel = PlanningViewModel(api, PlanTokenStore)
+        viewModel = PlanningViewModel(api, preferences, PlanTokenStore)
     }
 
     @After
@@ -188,6 +212,80 @@ class PlanningViewModelTest {
 
         assertEquals(HOME, viewModel.origin)
         assertEquals(1, api.requests.size)
+    }
+
+    @Test
+    fun planningStartsFromTheSavedModesAndMaxWalk() = runTest(dispatcher) {
+        preferences.saved = PlanningPreferences(50, setOf(TripMode.TRANSIT), 15)
+
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(setOf(TripMode.TRANSIT), viewModel.modes)
+        assertEquals(15, viewModel.maxWalkMinutes)
+        assertEquals(setOf(TripMode.TRANSIT), api.requests.single().modes)
+        assertEquals(15, api.requests.single().maxWalkMinutes)
+    }
+
+    @Test
+    fun savedPreferencesAreOnlyLoadedOnce() = runTest(dispatcher) {
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+        viewModel.start(METROTOWN, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(1, preferences.loads)
+        assertEquals(2, api.requests.size)
+    }
+
+    @Test
+    fun whenPreferencesCantLoadPlanningStillWorksWithTheDefaults() = runTest(dispatcher) {
+        preferences.failure = IOException()
+
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(PlanStatus.READY, viewModel.status)
+        assertEquals(setOf(TripMode.DRIVE, TripMode.TRANSIT), viewModel.modes)
+        assertEquals(10, viewModel.maxWalkMinutes)
+    }
+
+    @Test
+    fun changingTheMaxWalkReplansAndSavesItAsTheDefault() = runTest(dispatcher) {
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        viewModel.changeMaxWalk(20)
+        advanceUntilIdle()
+
+        assertEquals(20, api.requests.last().maxWalkMinutes)
+        assertEquals(2, api.requests.size)
+        assertEquals(20, preferences.saves.single().maxWalkMinutes)
+        assertEquals(setOf(TripMode.DRIVE, TripMode.TRANSIT), preferences.saves.single().defaultModes) // unchanged
+    }
+
+    @Test
+    fun aMaxWalkThatCantBeSavedStillAppliesToThisTrip() = runTest(dispatcher) {
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+        preferences.failure = IOException()
+
+        viewModel.changeMaxWalk(5)
+        advanceUntilIdle()
+
+        assertEquals(5, viewModel.maxWalkMinutes)
+        assertEquals(5, api.requests.last().maxWalkMinutes)
+        assertFalse(viewModel.sessionExpired)
+    }
+
+    @Test
+    fun changingModesDoesNotSaveThem() = runTest(dispatcher) {
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+        viewModel.toggleMode(TripMode.DRIVE)
+        advanceUntilIdle()
+
+        assertTrue(preferences.saves.isEmpty())
     }
 
     @Test

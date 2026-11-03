@@ -8,7 +8,9 @@ import com.example.cpen321application.data.RouteLabel
 import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.data.TripMode
 import com.example.cpen321application.ui.planning.RowKind
+import com.example.cpen321application.data.TransitLine
 import com.example.cpen321application.ui.planning.arrivalSummaryText
+import com.example.cpen321application.ui.planning.boardDetail
 import com.example.cpen321application.ui.planning.costSplitText
 import com.example.cpen321application.ui.planning.kmText
 import com.example.cpen321application.ui.planning.parkingText
@@ -59,8 +61,8 @@ class PreviewFormatTest {
         assertEquals("14 min · 9.2 km · $1.18 fuel", rows[1].detail)
         assertEquals("Park at North Parkade (sample)", rows[2].title)
         assertEquals("Free parking", rows[2].detail)
-        assertEquals("Expo Line toward Waterfront", rows[4].title)
-        assertEquals("Board at Sample Station · 9 stops", rows[4].detail)
+        assertEquals("Expo Line", rows[4].title) // shown in a badge
+        assertEquals("toward Waterfront · Board at Sample Station · 9 stops", rows[4].detail)
         assertEquals("#0060A9", rows[4].colour)
         assertEquals("Get off at Waterfront Station", rows[5].title)
         assertEquals("#0060A9", rows[5].colour)
@@ -92,6 +94,36 @@ class PreviewFormatTest {
 
         assertEquals("Walk · 3 min · 200 m", row.title)
         assertNull(row.detail)
+    }
+
+    @Test
+    fun theDriveRowShowsFuelEvenWhenTheLegAlsoCarriesParking() {
+        val balanced = route(RouteLabel.BALANCED)
+        // the real Planner puts fuel + parking in the drive leg's cost
+        val paid = balanced.copy(
+            costBreakdown = CostBreakdown(118, 300, 240),
+            legs = balanced.legs.mapIndexed { i, leg -> if (i == 0) leg.copy(costCents = 418) else leg },
+        )
+
+        assertEquals("14 min \u00B7 9.2 km \u00B7 $1.18 fuel", timelineRows(paid, NINE_AM, ZONE)[1].detail)
+    }
+
+    @Test
+    fun boardingLeavesOutAMissingDirectionAndStopCount() {
+        val leg = route(RouteLabel.BALANCED).legs.first { it.mode == TripMode.TRANSIT }
+        val bare = leg.copy(transitLines = leg.transitLines.map { it.copy(headsign = "", stopCount = 0) })
+        val oneStop = leg.copy(transitLines = leg.transitLines.map { it.copy(stopCount = 1) })
+
+        assertEquals("Board at Sample Station", boardDetail(bare))
+        assertEquals("toward Waterfront \u00B7 Board at Sample Station \u00B7 1 stop", boardDetail(oneStop))
+    }
+
+    @Test
+    fun linesWithAShortNameShowItLikeGoogleMaps() {
+        val line = TransitLine("UBC/Commercial-Broadway", "Bus", null, "UBC", "A", "B", 4, shortName = "99")
+
+        assertEquals("99", line.badgeName)
+        assertEquals("Expo Line", line.copy(name = "Expo Line", shortName = null).badgeName)
     }
 
     @Test

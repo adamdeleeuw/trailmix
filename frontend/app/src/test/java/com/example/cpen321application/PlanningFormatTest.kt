@@ -15,6 +15,7 @@ import com.example.cpen321application.ui.planning.StripItem
 import com.example.cpen321application.ui.planning.TripLine
 import com.example.cpen321application.ui.planning.lateText
 import com.example.cpen321application.ui.planning.minutes
+import com.example.cpen321application.ui.planning.noRoutesText
 import com.example.cpen321application.ui.planning.modeStrip
 import com.example.cpen321application.ui.planning.modeStripText
 import com.example.cpen321application.ui.planning.punctualityText
@@ -50,6 +51,14 @@ class PlanningFormatTest {
             modes = setOf(TripMode.DRIVE, TripMode.TRANSIT),
         )
         routes = api.planTrip("token", request).options.associateBy { it.label }
+    }
+
+    @Test
+    fun noRoutesSuggestsALongerWalkOnlyWhenThatCouldHelp() {
+        val hint = "No routes found between these places. Try allowing a longer walk."
+        assertEquals(hint, noRoutesText(setOf(TripMode.TRANSIT), maxWalkMinutes = 10))
+        assertEquals("No routes found between these places.", noRoutesText(setOf(TripMode.DRIVE), maxWalkMinutes = 10))
+        assertEquals("No routes found between these places.", noRoutesText(setOf(TripMode.TRANSIT), maxWalkMinutes = 30))
     }
 
     @Test

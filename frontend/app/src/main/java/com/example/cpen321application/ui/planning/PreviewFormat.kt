@@ -1,5 +1,6 @@
 package com.example.cpen321application.ui.planning
 
+import com.example.cpen321application.data.PlanLeg
 import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.data.TripMode
 import com.google.android.gms.maps.model.LatLng
@@ -44,7 +45,9 @@ fun timelineRows(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.s
     legs.forEachIndexed { i, leg ->
         when (leg.mode) {
             TripMode.DRIVE -> {
-                val detail = "${minutes(leg.durationSeconds)} min · ${kmText(leg.distanceMeters)} · ${costText(leg.costCents)} fuel"
+                // the leg's cost also holds parking, so fuel comes from the route's breakdown (CP2 routes drive once)
+                val fuel = route.costBreakdown.fuelCents
+                val detail = "${minutes(leg.durationSeconds)} min · ${kmText(leg.distanceMeters)} · ${costText(fuel)} fuel"
                 rows += TimelineRow(RowKind.DRIVE, "Drive to ${leg.to.label}", detail, null, leg.from.location)
                 if (i < legs.lastIndex) rows += TimelineRow(RowKind.PARK, "Park at ${leg.to.label}", parkingText(route), clockText(leg.arriveAt, zone), leg.to.location)
             }
@@ -61,10 +64,7 @@ fun timelineRows(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.s
             }
             TripMode.TRANSIT -> {
                 val line = leg.transitLines.firstOrNull()
-                val title = if (line == null) "Transit" else "${line.name} toward ${line.headsign}"
-                val from = line?.departureStop ?: leg.from.label
-                val stops = line?.let { " · ${it.stopCount} stops" }.orEmpty()
-                rows += TimelineRow(RowKind.BOARD, title, "Board at $from$stops", clockText(leg.departAt, zone), leg.from.location, line?.colour)
+                rows += TimelineRow(RowKind.BOARD, line?.badgeName ?: "Transit", boardDetail(leg), clockText(leg.departAt, zone), leg.from.location, line?.colour)
                 rows += TimelineRow(
                     RowKind.ALIGHT,
                     "Get off at ${line?.arrivalStop ?: leg.to.label}",
@@ -79,6 +79,20 @@ fun timelineRows(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.s
     val arrival = lateText(route, arriveBy, zone) ?: punctualityText(route, arriveBy)
     rows += TimelineRow(RowKind.ARRIVE, "Arrive at ${legs.last().to.label}", arrival, clockText(route.arriveAt, zone), legs.last().to.location)
     return rows
+}
+
+/**
+ * "toward Waterfront · Board at Sample Station · 9 stops". The direction is left out
+ * when Google gives none, and the stop count when it's unknown.
+ */
+fun boardDetail(leg: PlanLeg): String {
+    val line = leg.transitLines.firstOrNull()
+    val parts = listOfNotNull(
+        line?.headsign?.takeIf { it.isNotBlank() }?.let { "toward $it" },
+        "Board at ${line?.departureStop?.takeIf { it.isNotBlank() } ?: leg.from.label}",
+        line?.stopCount?.takeIf { it > 0 }?.let { if (it == 1) "1 stop" else "$it stops" },
+    )
+    return parts.joinToString(" \u00B7 ")
 }
 
 /** "9.2 km", or "200 m" under a kilometre. */

@@ -97,7 +97,7 @@ fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     val models = MapModels(
         search = viewModel { MapSearchViewModel(places) },
         spots = viewModel { ParkingSpotsViewModel(BackendApi, places, DataStoreSessionStore(context)) },
-        planner = viewModel { PlanningViewModel(BackendApi, DataStoreSessionStore(context)) },
+        planner = viewModel { PlanningViewModel(BackendApi, BackendApi, DataStoreSessionStore(context)) },
         planningSearch = viewModel(key = "planning-search") { MapSearchViewModel(places) },
     )
     var planning by rememberSaveable { mutableStateOf(false) }

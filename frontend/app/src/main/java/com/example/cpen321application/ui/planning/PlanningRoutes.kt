@@ -2,6 +2,7 @@ package com.example.cpen321application.ui.planning
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -92,10 +94,15 @@ internal fun RoutesSheet(planner: PlanningViewModel, onClose: () -> Unit, onPeek
 @Composable
 private fun OptionsRow(planner: PlanningViewModel) {
     var pickingTime by remember { mutableStateOf(false) }
-    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // scrolls sideways when the chips don't fit, like Google Maps' row
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         AssistChip(onClick = { pickingTime = true }, label = { Text("${arriveByChipText(planner.arriveBy)} ▾") })
         ModesMenu(planner)
         SortMenu(planner)
+        MaxWalkMenu(planner)
     }
     if (pickingTime) {
         ArriveByDialog(
@@ -157,6 +164,35 @@ private fun SortMenu(planner: PlanningViewModel) {
     }
 }
 
+// the longest single walk a route may have; the choice is saved as the user's default
+@Composable
+private fun MaxWalkMenu(planner: PlanningViewModel) {
+    var open by remember { mutableStateOf(false) }
+    // a saved value that isn't one of the usual choices is still offered
+    val choices = (MAX_WALK_CHOICES + planner.maxWalkMinutes).distinct().sorted()
+    Box {
+        AssistChip(onClick = { open = true }, label = { Text("Walk \u2264 ${planner.maxWalkMinutes} min \u25BE") })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Text(
+                "Longest single walk",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            choices.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text("$minutes min") },
+                    onClick = {
+                        planner.changeMaxWalk(minutes)
+                        open = false
+                    },
+                    leadingIcon = { RadioButton(selected = planner.maxWalkMinutes == minutes, onClick = null) },
+                )
+            }
+        }
+    }
+}
+
 // picks an arrive-by time today or tomorrow, or "Leave now" (`null`)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -188,7 +224,7 @@ private fun RouteList(planner: PlanningViewModel, onFirstHeight: (Int) -> Unit) 
     val first = Modifier.onSizeChanged { onFirstHeight(it.height) }
     when {
         planner.status == PlanStatus.NEEDS_ORIGIN -> Message("Choose a start point to see routes.", first)
-        planner.status == PlanStatus.NO_ROUTES -> Message(NO_ROUTES, first)
+        planner.status == PlanStatus.NO_ROUTES -> Message(noRoutesText(planner.modes, planner.maxWalkMinutes), first)
         planner.status == PlanStatus.FAILED -> Row(
             first.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -315,8 +351,11 @@ private fun Banners(planner: PlanningViewModel, onClose: () -> Unit) {
     if (PlanWarning.NO_PARKING_SPOTS in planner.warnings && TripMode.DRIVE in planner.modes) {
         Banner("Save a parking spot to plan driving trips", action = "Back to map", onAction = onClose)
     }
+    if (PlanWarning.VEHICLE_MISSING in planner.warnings) {
+        Banner("Add your car in Profile for accurate fuel costs")
+    }
     if (PlanWarning.GAS_PRICE_MISSING in planner.warnings) {
-        Banner("Set your gas price for accurate costs") // the Profile shortcut comes with the account data
+        Banner("Set your gas price in Profile for accurate costs")
     }
 }
 

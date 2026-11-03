@@ -183,8 +183,8 @@ const val PARKING_LIMIT_ERROR = "Parking spot limit reached"
 /** The backend's 409 error when the user already saved this Google place. */
 const val PARKING_DUPLICATE_ERROR = "Parking spot already saved"
 
-/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [ParkingSpotApi] and [PlannerApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, PlannerApi {
+/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [ParkingSpotApi], [PlannerApi] and [PlanningPreferencesApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, PlannerApi, PlanningPreferencesApi {
     private const val PARKING_SPOTS_PATH = "/api/users/me/parking-spots"
 
     private const val TIMEOUT_MS = 10_000
@@ -281,6 +281,14 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, Pl
 
     override suspend fun planTrip(sessionToken: String?, trip: PlanRequest) =
         request("POST", "/api/routes/plan", sessionToken, body = trip.toJson()) { it.toTripPlan() }
+
+    override suspend fun getPlanningPreferences(sessionToken: String?) =
+        request("GET", "/api/users/me", sessionToken) { it.getJSONObject("user").toPlanningPreferences() }
+
+    override suspend fun savePlanningPreferences(sessionToken: String?, preferences: PlanningPreferences) =
+        request("PUT", "/api/users/me/planning-preferences", sessionToken, body = preferences.toJson()) {
+            it.getJSONObject("user").toPlanningPreferences()
+        }
 
     private fun parseUser(json: JSONObject) = User(
         id = json.getString("id"),

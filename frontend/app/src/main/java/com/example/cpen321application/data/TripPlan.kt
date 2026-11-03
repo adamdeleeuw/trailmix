@@ -30,12 +30,31 @@ data class PlanRequest(
     val arriveBy: Instant?,
     val modes: Set<TripMode>,
     val costVsTime: Int? = null, // 0 = cheapest only, 100 = fastest only
+    val maxWalkMinutes: Int? = null, // longest single walk allowed; null uses the saved preference
 )
+
+/** Default modes for a trip a user isn't sure about yet; the backend's default too. */
+val DEFAULT_TRIP_MODES = setOf(TripMode.DRIVE, TripMode.TRANSIT)
+const val DEFAULT_MAX_WALK_MINUTES = 10
+const val DEFAULT_COST_VS_TIME = 50
+
+/** The user's saved Planner defaults. */
+data class PlanningPreferences(
+    val costVsTime: Int,
+    val defaultModes: Set<TripMode>,
+    val maxWalkMinutes: Int,
+)
+
+/** What a new account starts with, and what Planning uses when the saved ones can't be loaded. */
+val DEFAULT_PLANNING_PREFERENCES = PlanningPreferences(DEFAULT_COST_VS_TIME, DEFAULT_TRIP_MODES, DEFAULT_MAX_WALK_MINUTES)
 
 /** Where a route's money goes. */
 data class CostBreakdown(val fuelCents: Int, val parkingCents: Int, val fareCents: Int)
 
-/** A bus or train a transit leg rides. [colour] is a hex string like "#0060A9", or `null` if Google gives none. */
+/**
+ * A bus or train a transit leg rides. [colour] is a hex string like "#0060A9", or `null` if Google gives none.
+ * [shortName] is what the line is signed as, like "99" or "R4", or `null` when it has none (SkyTrain lines).
+ */
 data class TransitLine(
     val name: String,
     val vehicle: String,
@@ -44,7 +63,11 @@ data class TransitLine(
     val departureStop: String,
     val arrivalStop: String,
     val stopCount: Int,
-)
+    val shortName: String? = null,
+) {
+    /** The name for badges: the short name when there is one, like Google Maps. */
+    val badgeName: String get() = shortName ?: name
+}
 
 /** One leg of a route. [polyline] is in Google's encoded polyline format (see `decodePolyline`). */
 data class PlanLeg(
@@ -89,6 +112,13 @@ interface PlannerApi {
     suspend fun planTrip(sessionToken: String?, trip: PlanRequest): TripPlan
 }
 
+/** Reads and saves the user's [PlanningPreferences]. Throws like [PlannerApi]. */
+interface PlanningPreferencesApi {
+    suspend fun getPlanningPreferences(sessionToken: String?): PlanningPreferences
+
+    suspend fun savePlanningPreferences(sessionToken: String?, preferences: PlanningPreferences): PlanningPreferences
+}
+
 // ---- JSON, used by BackendApi.planTrip ----
 
 private fun PlanPlace.toJson() = JSONObject()
@@ -105,6 +135,7 @@ internal fun PlanRequest.toJson(): JSONObject {
         .put("arriveBy", arriveBy?.toString() ?: JSONObject.NULL) // Instant.toString() is ISO 8601 UTC
         .put("modes", JSONArray(modes.map { it.name }))
     costVsTime?.let { json.put("costVsTime", it) } // left out so the backend uses the saved preference
+    maxWalkMinutes?.let { json.put("maxWalkMinutes", it) }
     return json
 }
 
@@ -122,6 +153,7 @@ private fun JSONObject.toTransitLine() = TransitLine(
     departureStop = getString("departureStop"),
     arrivalStop = getString("arrivalStop"),
     stopCount = getInt("stopCount"),
+    shortName = if (isNull("shortName")) null else optString("shortName").ifEmpty { null },
 )
 
 private fun JSONObject.toLeg() = PlanLeg(
@@ -153,6 +185,25 @@ private fun JSONObject.toRouteOption(): RouteOption {
         transferPoints = getJSONArray("transferPoints").objects().map { it.toPlace() },
         transfers = getInt("transfers"),
         legs = getJSONArray("legs").objects().map { it.toLeg() },
+    )
+}
+
+/** The body for PUT /api/users/me/planning-preferences. */
+internal fun PlanningPreferences.toJson(): JSONObject = JSONObject()
+    .put("costVsTime", costVsTime)
+    .put("defaultModes", JSONArray(TripMode.entries.filter { it in defaultModes }.map { it.name }))
+    .put("maxWalkMinutes", maxWalkMinutes)
+
+/**
+ * Reads the Planner defaults from an account (`GET /api/users/me`'s `user`). Fields an older
+ * backend doesn't send fall back to the defaults, and modes this app doesn't know are skipped.
+ */
+internal fun JSONObject.toPlanningPreferences(): PlanningPreferences {
+    val modes = optJSONArray("defaultModes").strings().mapNotNull { name -> TripMode.entries.find { it.name == name } }
+    return PlanningPreferences(
+        costVsTime = optInt("costVsTime", DEFAULT_COST_VS_TIME),
+        defaultModes = modes.toSet().ifEmpty { DEFAULT_TRIP_MODES },
+        maxWalkMinutes = optInt("maxWalkMinutes", DEFAULT_MAX_WALK_MINUTES),
     )
 }
 

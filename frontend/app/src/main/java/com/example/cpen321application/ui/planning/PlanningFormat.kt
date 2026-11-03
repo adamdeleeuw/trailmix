@@ -59,7 +59,7 @@ fun lateText(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.syste
 fun legName(leg: PlanLeg) = when (leg.mode) {
     TripMode.DRIVE -> "Drive"
     TripMode.WALK -> "Walk"
-    TripMode.TRANSIT -> leg.transitLines.firstOrNull()?.name ?: "Transit"
+    TripMode.TRANSIT -> leg.transitLines.firstOrNull()?.badgeName ?: "Transit"
 }
 
 /** One piece of a route row's mode strip: "Drive 28", "Walk 4", or a line's name in its colour. */
@@ -160,3 +160,13 @@ private fun connectorText(group: List<PlanLeg>): String {
         else -> "${legName(group.first())} $total min"
     }
 }
+
+/** "No routes found…", with a nudge to allow longer walks when transit is on and the limit is short. */
+fun noRoutesText(modes: Set<TripMode>, maxWalkMinutes: Int): String {
+    val base = NO_ROUTES
+    val walkHelps = TripMode.TRANSIT in modes && maxWalkMinutes < SHORT_WALK_LIMIT_MINUTES
+    return if (walkHelps) "$base Try allowing a longer walk." else base
+}
+
+const val NO_ROUTES = "No routes found between these places."
+private const val SHORT_WALK_LIMIT_MINUTES = 30

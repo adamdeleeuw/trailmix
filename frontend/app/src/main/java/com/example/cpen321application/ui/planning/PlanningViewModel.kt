@@ -5,10 +5,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.cpen321application.data.DEFAULT_MAX_WALK_MINUTES
+import com.example.cpen321application.data.DEFAULT_PLANNING_PREFERENCES
+import com.example.cpen321application.data.DEFAULT_TRIP_MODES
 import com.example.cpen321application.data.PlanPlace
 import com.example.cpen321application.data.PlanRequest
 import com.example.cpen321application.data.PlanWarning
 import com.example.cpen321application.data.PlannerApi
+import com.example.cpen321application.data.PlanningPreferences
+import com.example.cpen321application.data.PlanningPreferencesApi
 import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.data.SessionStore
 import com.example.cpen321application.data.TripPlan
@@ -21,8 +26,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 const val REPLAN_DELAY_MS = 500L // wait for the user to stop changing things before asking again
-const val NO_ROUTES = "No routes found between these places."
 const val ROUTE_SERVICE_DOWN = "Couldn't reach the route service."
+
+/** The max walk choices offered, in minutes. */
+val MAX_WALK_CHOICES = listOf(5, 10, 15, 20, 30)
 
 /** One end of the trip, for changing it by search. */
 enum class TripEnd { START, DESTINATION }
@@ -46,10 +53,15 @@ enum class PlanStatus {
  * Preview, never replan. The Planner weighs cost against time with the user's saved
  * preference; Sort by only reorders its routes.
  *
+ * The first time Planning opens, it loads the user's saved preferences and starts from
+ * their default modes and max walk. Changing the max walk saves it as the new default;
+ * changing modes only affects this trip.
+ *
  * The ViewModel outlives screen rotation, so rotating keeps everything without a request.
  */
 class PlanningViewModel(
     private val api: PlannerApi,
+    private val preferencesApi: PlanningPreferencesApi,
     private val store: SessionStore,
 ) : ViewModel() {
     var origin by mutableStateOf<PlanPlace?>(null)
@@ -58,7 +70,11 @@ class PlanningViewModel(
     var destination by mutableStateOf<PlanPlace?>(null)
         private set
 
-    var modes by mutableStateOf(setOf(TripMode.DRIVE, TripMode.TRANSIT))
+    var modes by mutableStateOf(DEFAULT_TRIP_MODES)
+        private set
+
+    /** The longest single walk a route may have, in minutes; saved as the user's default when changed. */
+    var maxWalkMinutes by mutableStateOf(DEFAULT_MAX_WALK_MINUTES)
         private set
 
     /** When the user must arrive, or `null` to leave now. */
@@ -100,6 +116,7 @@ class PlanningViewModel(
     val selectedRoute: RouteOption?
         get() = options.getOrNull(selectedIndex)
 
+    private var preferences: PlanningPreferences? = null // null until loaded, the first time Planning opens
     private var planJob: Job? = null
     private var planRun = 0 // bumped by each new plan, so a replaced one that finishes late is ignored
 
@@ -112,8 +129,57 @@ class PlanningViewModel(
         isPreviewing = false
         options = emptyList()
         warnings = emptyList()
-        replan(delayMs = 0)
+        if (preferences != null) {
+            replan(delayMs = 0)
+            return
+        }
+        // loads the saved defaults before the first plan, unless the user changes something first
+        planJob?.cancel()
+        val run = ++planRun
+        status = PlanStatus.LOADING
+        planJob = viewModelScope.launch {
+            val loaded = loadPreferences()
+            if (run == planRun) {
+                modes = loaded.defaultModes
+                maxWalkMinutes = loaded.maxWalkMinutes
+                replan(delayMs = 0)
+            }
+        }
     }
+
+    /** Sets the longest single walk allowed, replans, and saves it as the user's default. */
+    fun changeMaxWalk(minutes: Int) {
+        if (minutes == maxWalkMinutes) return
+        maxWalkMinutes = minutes
+        replan()
+        val updated = (preferences ?: DEFAULT_PLANNING_PREFERENCES).copy(maxWalkMinutes = minutes)
+        preferences = updated
+        viewModelScope.launch {
+            try {
+                preferencesApi.savePlanningPreferences(token(), updated)
+            } catch (e: UnauthorizedException) {
+                sessionExpired = true
+            } catch (e: IOException) {
+                // this trip already uses it; it just isn't the default next time
+            }
+        }
+    }
+
+    // the saved preferences, or the defaults when they can't be loaded (planning still works)
+    private suspend fun loadPreferences(): PlanningPreferences {
+        val loaded = try {
+            preferencesApi.getPlanningPreferences(token())
+        } catch (e: UnauthorizedException) {
+            sessionExpired = true
+            DEFAULT_PLANNING_PREFERENCES
+        } catch (e: IOException) {
+            DEFAULT_PLANNING_PREFERENCES
+        }
+        preferences = loaded
+        return loaded
+    }
+
+    private suspend fun token() = store.token() ?: throw UnauthorizedException()
 
     fun changeOrigin(place: PlanPlace) {
         origin = place
@@ -213,11 +279,12 @@ class PlanningViewModel(
             return
         }
         status = PlanStatus.LOADING
-        val request = PlanRequest(from, to, arriveBy, modes) // no costVsTime: the user's saved preference
+        // no costVsTime, so the backend uses the user's saved preference
+        val request = PlanRequest(from, to, arriveBy, modes, maxWalkMinutes = maxWalkMinutes)
         planJob = viewModelScope.launch {
             delay(delayMs) // cancelled here if the user changes something else first
             try {
-                val plan = api.planTrip(store.token() ?: throw UnauthorizedException(), request)
+                val plan = api.planTrip(token(), request)
                 if (run == planRun) show(plan)
             } catch (e: UnauthorizedException) {
                 if (run == planRun) {
