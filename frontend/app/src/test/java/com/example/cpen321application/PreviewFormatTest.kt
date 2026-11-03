@@ -83,6 +83,18 @@ class PreviewFormatTest {
     }
 
     @Test
+    fun aWalkWithNoUsefulDestinationUsesItsDurationAndDistance() {
+        val balanced = route(RouteLabel.BALANCED)
+        val walk = balanced.legs.first { it.mode == TripMode.WALK }
+        val preview = balanced.copy(legs = listOf(walk.copy(to = walk.to.copy(label = "Transit connection"))))
+
+        val row = timelineRows(preview, arriveBy = null, zone = ZONE)[1]
+
+        assertEquals("Walk · 3 min · 200 m", row.title)
+        assertNull(row.detail)
+    }
+
+    @Test
     fun drivingTheWholeWayHasNoParkRow() {
         val kinds = timelineRows(route(RouteLabel.FASTEST), NINE_AM, ZONE).map { it.kind }
 

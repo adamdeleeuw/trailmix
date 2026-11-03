@@ -48,13 +48,17 @@ fun timelineRows(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.s
                 rows += TimelineRow(RowKind.DRIVE, "Drive to ${leg.to.label}", detail, null, leg.from.location)
                 if (i < legs.lastIndex) rows += TimelineRow(RowKind.PARK, "Park at ${leg.to.label}", parkingText(route), clockText(leg.arriveAt, zone), leg.to.location)
             }
-            TripMode.WALK -> rows += TimelineRow(
-                RowKind.WALK,
-                "Walk to ${leg.to.label}",
-                "${minutes(leg.durationSeconds)} min · ${kmText(leg.distanceMeters)}",
-                null,
-                leg.from.location,
-            )
+            TripMode.WALK -> {
+                val destination = leg.to.label.takeIf { it.isNotBlank() && it != "Transit connection" }
+                val detail = "${minutes(leg.durationSeconds)} min · ${kmText(leg.distanceMeters)}"
+                rows += TimelineRow(
+                    RowKind.WALK,
+                    destination?.let { "Walk to $it" } ?: "Walk · $detail",
+                    detail.takeIf { destination != null },
+                    null,
+                    leg.from.location,
+                )
+            }
             TripMode.TRANSIT -> {
                 val line = leg.transitLines.firstOrNull()
                 val title = if (line == null) "Transit" else "${line.name} toward ${line.headsign}"

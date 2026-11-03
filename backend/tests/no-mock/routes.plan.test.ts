@@ -59,23 +59,30 @@ describe('Unmocked: POST /api/routes/plan', () => {
   });
 
   // Mocked behavior: none; MongoDB and Google Routes API are real
-  // Input: valid session, UBC-to-Downtown request with DRIVE mode
+  // Input: valid session, UBC-to-Downtown request with DRIVE and TRANSIT modes
   // Expected status code: 200
   // Expected behavior: fetch live route details without stubbing the route service
   // Expected output: every returned leg has a non-empty polyline decoding to more than two points
   liveRouteGeometryTest('Returns decoded geometry for every live route leg', async () => {
     const { token } = await createSignedInUser();
-    const response = await sendPlan({ ...validBody, modes: ['DRIVE'] }, bearer(token));
+    const response = await sendPlan({ ...validBody, modes: ['DRIVE', 'TRANSIT'] }, bearer(token));
 
     expect(response.status).toBe(200);
     expect(response.body.options.length).toBeGreaterThan(0);
-    for (const option of response.body.options as Array<{ legs: Array<{ mode: string; polyline: string }> }>) {
+    for (const option of response.body.options as Array<{
+      legs: Array<{ mode: string; polyline: string; from: { label: string }; to: { label: string } }>;
+    }>) {
       expect(option.legs.length).toBeGreaterThan(0);
       for (const leg of option.legs) {
         expect(leg.mode).toBeTruthy();
         expect(leg.polyline.length).toBeGreaterThan(0);
         const points = decodePolyline(leg.polyline);
         expect(points.length).toBeGreaterThan(2);
+        expect(leg.from.label).not.toBe('Transit connection');
+        expect(leg.to.label).not.toBe('Transit connection');
+      }
+      for (let index = 1; index < option.legs.length; index += 1) {
+        expect(option.legs[index - 1]?.mode === 'WALK' && option.legs[index]?.mode === 'WALK').toBe(false);
       }
     }
   }, 30_000);

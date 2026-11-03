@@ -22,6 +22,7 @@ import {
   type PlannerMode,
   type RouteDetail,
 } from './planner.google.service';
+import { normalizeRouteLegs } from './route-legs';
 import { zonesForTransitLines } from './transit-zones';
 
 const PARKING_BUFFER_SECONDS = 300;
@@ -180,13 +181,13 @@ function transitLegs(origin: PlannerPlace, destination: PlannerPlace, detail: Ro
     const arriveAt = step.arriveAt || new Date(Date.parse(departAt) + step.durationSeconds * 1000).toISOString();
     previousArrival = arriveAt;
     const from: Place = {
-      label: step.from.label || (index === 0 ? origin.label : 'Transit connection'),
+      label: step.from.label || (index === 0 ? origin.label : ''),
       lat: step.from.lat,
       lng: step.from.lng,
       placeId: null,
     };
     const to: Place = {
-      label: step.to.label || (index === steps.length - 1 ? destination.label : 'Transit connection'),
+      label: step.to.label || (index === steps.length - 1 ? destination.label : ''),
       lat: step.to.lat,
       lng: step.to.lng,
       placeId: null,
@@ -215,21 +216,24 @@ function makeOption(
   legs: PlanLeg[],
   label: RouteLabel,
   baselineDriveCostCents: number | null,
+  origin: PlannerPlace,
+  destination: PlannerPlace,
 ): RouteOption {
+  const normalizedLegs = normalizeRouteLegs(legs, toPlace(origin), toPlace(destination));
   return {
     label,
     leaveAt: schedule.leaveAt.toISOString(),
     arriveAt: schedule.arriveAt.toISOString(),
     lateByMinutes: schedule.lateByMinutes,
     totalDurationSeconds: Math.max(0, Math.round((schedule.arriveAt.getTime() - schedule.leaveAt.getTime()) / 1000)),
-    totalDistanceMeters: legs.reduce((total, leg) => total + leg.distanceMeters, 0),
+    totalDistanceMeters: normalizedLegs.reduce((total, leg) => total + leg.distanceMeters, 0),
     totalCostCents: price.totalCostCents,
     costBreakdown: price.costBreakdown,
     costEstimated: price.costEstimated,
     baselineDriveCostCents,
     transferPoints: candidate.spot === null ? [] : [toPlace(spotPlace(candidate.spot))],
     transfers: candidate.spot === null ? 0 : 1,
-    legs,
+    legs: normalizedLegs,
   };
 }
 
@@ -282,7 +286,7 @@ async function getDetailedCandidate(
       ...transitLegs(transfer, request.destination, transitDetail, price.costBreakdown.fareCents),
     ];
     return {
-      option: makeOption(candidate, schedule, price, legs, label, baselineDriveCostCents),
+      option: makeOption(candidate, schedule, price, legs, label, baselineDriveCostCents, request.origin, request.destination),
       score: price.score,
       spotId: candidate.spotId,
     };
@@ -322,7 +326,7 @@ async function getDetailedCandidate(
     ? transitLegs(request.origin, request.destination, detail, price.costBreakdown.fareCents)
     : [toDetailedLeg('DRIVE', request.origin, request.destination, detail, price.costBreakdown.fuelCents)];
   return {
-    option: makeOption(candidate, schedule, price, legs, label, baselineDriveCostCents),
+    option: makeOption(candidate, schedule, price, legs, label, baselineDriveCostCents, request.origin, request.destination),
     score: price.score,
     spotId: candidate.spotId,
   };

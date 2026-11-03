@@ -293,6 +293,85 @@ describe('Mocked: POST /api/routes/plan', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  // Mocked behavior: Google returns three consecutive walking steps followed by one transit step
+  // Input: valid session, UBC-to-Downtown request with TRANSIT mode
+  // Expected status code: 200
+  // Expected behavior: turn-by-turn walking steps normalize into one walk leg before response
+  // Expected output: one labelled walk, one transit leg, and unchanged route duration and distance totals
+  test('Merges consecutive walking steps in the plan response', async () => {
+    const detail = {
+      routes: [{
+        duration: '1200s',
+        distanceMeters: 5000,
+        polyline: { encodedPolyline: ROUTE_POLYLINE },
+        legs: [{
+          steps: [
+            {
+              travelMode: 'WALK',
+              staticDuration: '20s',
+              distanceMeters: 20,
+              polyline: { encodedPolyline: ROUTE_POLYLINE },
+              startLocation: { latLng: { latitude: BODY.origin.lat, longitude: BODY.origin.lng } },
+              endLocation: { latLng: { latitude: 49.261, longitude: -123.245 } },
+            },
+            {
+              travelMode: 'WALK',
+              staticDuration: '30s',
+              distanceMeters: 30,
+              polyline: { encodedPolyline: ROUTE_POLYLINE },
+              startLocation: { latLng: { latitude: 49.261, longitude: -123.245 } },
+              endLocation: { latLng: { latitude: 49.262, longitude: -123.244 } },
+            },
+            {
+              travelMode: 'WALK',
+              staticDuration: '40s',
+              distanceMeters: 40,
+              polyline: { encodedPolyline: ROUTE_POLYLINE },
+              startLocation: { latLng: { latitude: 49.262, longitude: -123.244 } },
+              endLocation: { latLng: { latitude: 49.263, longitude: -123.243 } },
+            },
+            {
+              travelMode: 'TRANSIT',
+              staticDuration: '1110s',
+              distanceMeters: 4910,
+              polyline: { encodedPolyline: ROUTE_POLYLINE },
+              startLocation: { latLng: { latitude: 49.263, longitude: -123.243 } },
+              endLocation: { latLng: { latitude: BODY.destination.lat, longitude: BODY.destination.lng } },
+              transitDetails: {
+                headsign: 'Downtown',
+                stopDetails: {
+                  departureStop: { name: 'UBC Exchange Bay 1' },
+                  arrivalStop: { name: 'Downtown' },
+                  stopCount: 8,
+                },
+                transitLine: { name: '99 B-Line', color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
+              },
+            },
+          ],
+        }],
+      }],
+    };
+    const fetchMock = jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(googleSays(MATRIX))
+      .mockResolvedValueOnce(googleSays(detail));
+
+    const response = await submitPlan();
+
+    expect(response.status).toBe(200);
+    expect(response.body.options[0]).toMatchObject({
+      totalDurationSeconds: 1200,
+      totalDistanceMeters: 5000,
+      legs: [
+        { mode: 'WALK', durationSeconds: 90, distanceMeters: 90, to: { label: 'UBC Exchange Bay 1' } },
+        { mode: 'TRANSIT', durationSeconds: 1110, distanceMeters: 4910 },
+      ],
+    });
+    expect(response.body.options[0].legs.flatMap((leg: { from: { label: string }; to: { label: string } }) =>
+      [leg.from.label, leg.to.label])).not.toContain('Transit connection');
+    expect(decodePolyline(response.body.options[0].legs[0].polyline)).toHaveLength(9);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   // Mocked behavior: Google fails the first matrix request and succeeds on retry
   // Input: a valid transit-only plan
   // Expected status code: 200
