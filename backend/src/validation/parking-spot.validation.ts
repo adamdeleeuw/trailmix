@@ -7,7 +7,7 @@ import {
   type ParkingRate,
   type ParkingSpotDetails,
 } from '../models/user.model';
-import { isRecord } from './common.validation';
+import { isCoordinate, isRecord } from './common.validation';
 
 const MAX_LATITUDE = 90;
 const MAX_LONGITUDE = 180;
@@ -19,11 +19,6 @@ function parseLabel(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const label = value.trim();
   return label.length >= MIN_PARKING_LABEL_LENGTH && label.length <= MAX_PARKING_LABEL_LENGTH ? label : undefined;
-}
-
-/** Checks that a value is a finite number from -limit to limit. */
-function isCoordinate(value: unknown, limit: number): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit;
 }
 
 /** Checks a `{ lat, lng }` point. */
