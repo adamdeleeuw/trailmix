@@ -407,6 +407,68 @@ describe('Mocked: POST /api/routes/plan', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  // Mocked behavior: Google returns a driving route whose steps carry turn-by-turn instructions,
+  //                  one with no maneuver, one with no text and one with no start location
+  // Input: valid session, UBC-to-Downtown request with DRIVE mode only
+  // Expected status code: 200
+  // Expected behavior: the planner asks Google for the instructions and keeps those with text and a place
+  // Expected output: one drive leg whose steps are the two usable instructions, the unnamed one as MANEUVER_UNSPECIFIED
+  test('Returns turn-by-turn steps for a drive leg', async () => {
+    const start = { latLng: { latitude: 49.27, longitude: -123.2 } };
+    const driveStep = (navigationInstruction: object, startLocation: object | undefined = start) => ({
+      travelMode: 'DRIVE', staticDuration: '300s', distanceMeters: 3000, polyline: { encodedPolyline: ROUTE_POLYLINE },
+      startLocation, navigationInstruction,
+    });
+    const fetchMock = jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(googleSays(MATRIX))
+      .mockResolvedValueOnce(googleSays({
+        routes: [{
+          duration: '900s', distanceMeters: 9000, polyline: { encodedPolyline: ROUTE_POLYLINE },
+          legs: [{
+            steps: [
+              driveStep({ maneuver: 'DEPART', instructions: 'Head east on University Blvd' }),
+              driveStep({ instructions: 'Continue onto W 10th Ave' }),
+              driveStep({ maneuver: 'TURN_LEFT' }),
+              driveStep({ maneuver: 'TURN_RIGHT', instructions: 'Turn right onto Burrard St' }, {}),
+            ],
+          }],
+        }],
+      }));
+    const { token } = await createSignedInUser();
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token))
+      .send({ ...BODY, modes: ['DRIVE'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.options[0].legs).toHaveLength(1);
+    expect(response.body.options[0].legs[0].steps).toStrictEqual([
+      { instruction: 'Head east on University Blvd', maneuver: 'DEPART', lat: 49.27, lng: -123.2 },
+      { instruction: 'Continue onto W 10th Ave', maneuver: 'MANEUVER_UNSPECIFIED', lat: 49.27, lng: -123.2 },
+    ]);
+    const detailHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
+    expect(detailHeaders['X-Goog-FieldMask']).toContain('routes.legs.steps.navigationInstruction');
+  });
+
+  // Mocked behavior: Google returns two walking steps with instructions, then a transit step that also has one
+  // Input: valid session, UBC-to-Downtown request with TRANSIT mode
+  // Expected status code: 200
+  // Expected behavior: the merged walk leg keeps both walking instructions in order, and the transit leg has none
+  // Expected output: a walk leg with 2 steps and a transit leg with an empty steps list
+  test('Returns turn-by-turn steps for walk legs only', async () => {
+    const walk = (instructions: string) => ({ ...step('WALK', 120), navigationInstruction: { maneuver: 'STRAIGHT', instructions } });
+    const ride = { ...step('TRANSIT', 960), navigationInstruction: { instructions: 'Bus towards Downtown' } };
+    jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(googleSays(MATRIX))
+      .mockResolvedValueOnce(googleSays(transitRoute([walk('Head north'), walk('Walk to the stop'), ride])));
+
+    const response = await submitPlan();
+
+    expect(response.status).toBe(200);
+    const [walkLeg, transitLeg] = response.body.options[0].legs;
+    expect(walkLeg.steps.map((item: { instruction: string }) => item.instruction)).toEqual(['Head north', 'Walk to the stop']);
+    expect(transitLeg.steps).toStrictEqual([]);
+  });
+
   // Mocked behavior: Google's only route walks 6 minutes in one stretch before the bus
   // Input: valid session for a user whose saved max walk is 5 minutes, transit only
   // Expected status code: 200

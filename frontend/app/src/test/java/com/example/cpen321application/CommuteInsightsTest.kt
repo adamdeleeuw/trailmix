@@ -1,8 +1,6 @@
 package com.example.cpen321application
 
-import com.example.cpen321application.data.Trip
 import com.example.cpen321application.data.TripLeg
-import com.example.cpen321application.data.TripPlace
 import com.example.cpen321application.ui.main.calculateCommuteInsights
 import com.example.cpen321application.ui.main.modePercentages
 import com.example.cpen321application.ui.main.sortTrips
@@ -63,13 +61,6 @@ class CommuteInsightsTest {
         assertEquals(emptyMap<String, Int>(), modePercentages(emptyMap()))
     }
 
-    private fun trip(duration: Int, cost: Int, legs: List<TripLeg>) = Trip(
-        id = "id-$duration",
-        origin = TripPlace("Home"),
-        destination = TripPlace("Work"),
-        legs = legs,
-        totalDurationSeconds = duration,
-        totalCostCents = cost,
-        tripDate = "2026-10-19T08:00:00Z",
-    )
+    private fun trip(duration: Int, cost: Int, legs: List<TripLeg>) =
+        testTrip(id = "id-$duration", duration = duration, cost = cost, legs = legs)
 }

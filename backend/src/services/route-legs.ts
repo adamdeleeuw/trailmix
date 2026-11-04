@@ -1,4 +1,4 @@
-import type { Place } from '../models/trip.model';
+import type { NavigationStep, Place } from '../models/trip.model';
 import type { TransitLineDetail } from './planner.google.service';
 
 export interface NormalizableLeg {
@@ -12,6 +12,7 @@ export interface NormalizableLeg {
   costCents: number;
   polyline: string;
   transitLines: TransitLineDetail[];
+  steps: NavigationStep[];
 }
 
 const POLYLINE_SCALE = 1e5;
@@ -103,6 +104,7 @@ function absorbWalkIntoNext(walk: NormalizableLeg, next: NormalizableLeg): Norma
     distanceMeters: walk.distanceMeters + next.distanceMeters,
     costCents: walk.costCents + next.costCents,
     polyline: combinePolylines(walk.polyline, next.polyline),
+    steps: [...walk.steps, ...next.steps],
   };
 }
 
@@ -115,6 +117,7 @@ function absorbWalkIntoPrevious(previous: NormalizableLeg, walk: NormalizableLeg
     distanceMeters: previous.distanceMeters + walk.distanceMeters,
     costCents: previous.costCents + walk.costCents,
     polyline: combinePolylines(previous.polyline, walk.polyline),
+    steps: [...previous.steps, ...walk.steps],
   };
 }
 
@@ -129,6 +132,7 @@ function mergeWalkGroup(legs: readonly NormalizableLeg[]): NormalizableLeg {
     distanceMeters: merged.distanceMeters + leg.distanceMeters,
     costCents: merged.costCents + leg.costCents,
     polyline: combinePolylines(merged.polyline, leg.polyline),
+    steps: [...merged.steps, ...leg.steps],
   }), first);
 }
 

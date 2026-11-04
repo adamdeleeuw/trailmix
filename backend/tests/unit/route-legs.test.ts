@@ -37,7 +37,13 @@ function leg(
         stopCount: 8,
       }]
       : [],
+    steps: [],
   };
+}
+
+/** A turn-by-turn instruction, told apart by its text. */
+function turn(instruction: string) {
+  return { instruction, maneuver: 'TURN_LEFT', lat: ORIGIN.lat, lng: ORIGIN.lng };
 }
 
 function totals(legs: readonly NormalizableLeg[]) {
@@ -152,5 +158,27 @@ describe('Unmocked: normalizeRouteLegs', () => {
     ];
 
     expect(totals(normalizeRouteLegs(input, ORIGIN, DESTINATION))).toEqual(totals(input));
+  });
+
+  // Input: three walks with one instruction each, then a drive followed by a trivial walk
+  // Expected status code: N/A (pure function)
+  // Expected output: merged legs keep every instruction, in the order they're travelled
+  // Mock behavior: none
+  test('keeps turn-by-turn steps in order when merging legs', () => {
+    const walks = [
+      { ...leg('WALK', FIRST_SEGMENT, 120, 100), steps: [turn('Head north')] },
+      { ...leg('WALK', SECOND_SEGMENT, 120, 100), steps: [turn('Turn left')] },
+      { ...leg('WALK', THIRD_SEGMENT, 120, 100), steps: [turn('Turn right')] },
+    ];
+    const driveThenTrivialWalk = [
+      { ...leg('DRIVE', FIRST_SEGMENT, 600, 5000), steps: [turn('Drive east')] },
+      { ...leg('WALK', SECOND_SEGMENT, 30, 20), steps: [turn('Walk to the door')] },
+    ];
+
+    const [mergedWalk] = normalizeRouteLegs(walks, ORIGIN, DESTINATION);
+    const [drive] = normalizeRouteLegs(driveThenTrivialWalk, ORIGIN, DESTINATION);
+
+    expect(mergedWalk?.steps.map(({ instruction }) => instruction)).toEqual(['Head north', 'Turn left', 'Turn right']);
+    expect(drive?.steps.map(({ instruction }) => instruction)).toEqual(['Drive east', 'Walk to the door']);
   });
 });

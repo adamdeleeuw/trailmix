@@ -1,4 +1,5 @@
 import { env } from '../config/env';
+import type { NavigationStep } from '../models/trip.model';
 import type { PlannerPlace } from './planner.core';
 
 export type PlannerMode = 'DRIVE' | 'TRANSIT';
@@ -31,6 +32,7 @@ export interface RouteDetail {
   walkSeconds: number;
   longestWalkSeconds: number; // the longest stretch of back-to-back walking steps, checked against the user's max walk
   steps: RouteStepDetail[];
+  navigation: NavigationStep[]; // turn-by-turn for every driving or walking step, in order
 }
 
 export interface RouteStepDetail {
@@ -43,6 +45,7 @@ export interface RouteStepDetail {
   departAt: string;
   arriveAt: string;
   transitLine: TransitLineDetail | null;
+  navigation: NavigationStep[]; // a walking step's own instruction, empty for a transit step
 }
 
 export class RouteServiceUnavailableError extends Error {}
@@ -68,6 +71,7 @@ const DETAILS_FIELD_MASK = [
   'routes.legs.steps.polyline.encodedPolyline',
   'routes.legs.steps.startLocation.latLng',
   'routes.legs.steps.endLocation.latLng',
+  'routes.legs.steps.navigationInstruction',
 ].join(',');
 
 function waypoint(place: Pick<PlannerPlace, 'lat' | 'lng'>): object {
@@ -155,6 +159,7 @@ interface GoogleDetailsResponse {
         polyline?: { encodedPolyline?: string };
         startLocation?: { latLng?: { latitude?: number; longitude?: number } };
         endLocation?: { latLng?: { latitude?: number; longitude?: number } };
+        navigationInstruction?: { maneuver?: string; instructions?: string };
         transitDetails?: {
           headsign?: string;
           stopDetails?: {
@@ -176,9 +181,22 @@ interface GoogleDetailsResponse {
   }[];
 }
 
-type GoogleTransitDetails = NonNullable<
-  NonNullable<NonNullable<NonNullable<GoogleDetailsResponse['routes']>[number]['legs']>[number]['steps']>[number]['transitDetails']
->;
+type GoogleStep = NonNullable<NonNullable<NonNullable<GoogleDetailsResponse['routes']>[number]['legs']>[number]['steps']>[number];
+type GoogleTransitDetails = NonNullable<GoogleStep['transitDetails']>;
+
+/** Reads a driving or walking step's turn-by-turn instruction, or none when Google gave no text or place for it. */
+function toNavigationSteps(step: GoogleStep): NavigationStep[] {
+  const instruction = step.navigationInstruction?.instructions;
+  const start = step.startLocation?.latLng;
+  if (step.travelMode === 'TRANSIT' || instruction === undefined || instruction === '') return [];
+  if (start?.latitude === undefined || start.longitude === undefined) return [];
+  return [{
+    instruction,
+    maneuver: step.navigationInstruction?.maneuver ?? 'MANEUVER_UNSPECIFIED', // Google's own name for "no arrow"
+    lat: start.latitude,
+    lng: start.longitude,
+  }];
+}
 
 function toTransitLine(details: GoogleTransitDetails): TransitLineDetail {
   return {
@@ -282,6 +300,7 @@ export async function computeRouteDetails(
         departAt: stepDepartAt,
         arriveAt: stepArriveAt,
         transitLine,
+        navigation: toNavigationSteps(step),
       });
     }
   }
@@ -295,5 +314,6 @@ export async function computeRouteDetails(
     walkSeconds,
     longestWalkSeconds: longestWalkSeconds((route.legs ?? []).flatMap((leg) => leg.steps ?? [])),
     steps,
+    navigation: (route.legs ?? []).flatMap((leg) => leg.steps ?? []).flatMap(toNavigationSteps),
   };
 }

@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthLocals } from '../middleware/require-session.middleware';
 import { toUserResponse } from '../models/user.model';
 import { deleteUserSessions } from '../services/session.service';
-import { deleteUserTrips, findTripsByUserId } from '../services/trip.service';
+import { deleteUserTrips } from '../services/trip.service';
 import {
   deleteUser,
   saveGasPrice as saveUserGasPrice,
@@ -29,12 +29,6 @@ const UNAUTHORIZED = 401;
  */
 export function getMe(_req: Request, res: Response<unknown, AuthLocals>): void {
   res.status(OK).json({ user: toUserResponse(res.locals.auth.user) });
-}
-
-/** Returns the signed-in user's trip history, newest first. */
-export async function getMyTrips(_req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
-  const trips = await findTripsByUserId(res.locals.auth.user._id);
-  res.status(OK).json({ trips });
 }
 
 /**

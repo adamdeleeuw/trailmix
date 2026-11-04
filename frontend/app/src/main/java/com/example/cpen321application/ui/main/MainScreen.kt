@@ -10,9 +10,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavHostController
@@ -43,22 +46,25 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
  * Map. Each tab keeps its place when the user switches away and back. The bar is
  * hidden on the edit screens.
  *
- * @param map The Map tab, for planning a commute and loading demo trips.
- * @param history The History tab, with the trip history and commute insights.
+ * @param map The Map tab, for finding places and planning a commute.
+ * @param history The History tab, with the trip history and commute insights, called with a function that opens Map.
  * @param profile The Profile tab, called with a function that opens the edit screen.
  * @param editProfile The Edit vehicle or Edit transit screen, called with a function that returns to Profile.
+ * @param snackbar Messages shown above the nav bar on every tab.
  */
 @Composable
 fun MainScreen(
     map: @Composable () -> Unit,
-    history: @Composable () -> Unit,
+    history: @Composable (openMap: () -> Unit) -> Unit,
     profile: @Composable (onEdit: () -> Unit) -> Unit,
     editProfile: @Composable (onDone: () -> Unit) -> Unit,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             val tab = Tab.entries.firstOrNull { it.route == currentRoute }
             if (tab != null) TabBar(tab) { navController.openTab(it) }
@@ -70,7 +76,7 @@ fun MainScreen(
             modifier = Modifier.padding(padding).consumeWindowInsets(padding), // so screens don't pad the bars twice
         ) {
             composable(MainRoutes.MAP) { map() }
-            composable(MainRoutes.HISTORY) { history() }
+            composable(MainRoutes.HISTORY) { history { navController.openTab(Tab.MAP) } }
             composable(MainRoutes.PROFILE) { profile { navController.navigate(MainRoutes.EDIT_PROFILE) } }
             composable(MainRoutes.EDIT_PROFILE) { editProfile { navController.popBackStack() } }
         }

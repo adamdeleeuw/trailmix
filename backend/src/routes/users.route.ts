@@ -5,50 +5,25 @@ import {
   getMyParkingSpots,
   removeParkingSpot,
 } from '../controllers/parking-spots.controller';
-import {
-  deleteMe,
-  getMe,
-  getMyTrips,
-  saveGasPrice,
-  savePlanningPreferences,
-  saveProfile,
-} from '../controllers/users.controller';
+import { changeTripStatus, createTrip, getMyTrips, removeTrip } from '../controllers/trips.controller';
+import { deleteMe, getMe, saveGasPrice, savePlanningPreferences, saveProfile } from '../controllers/users.controller';
 import { requireSession } from '../middleware/require-session.middleware';
 
 const router = Router(); // routes under /api/users
 
+// Express 5 sends a rejected async handler to the error handler, so handlers need no wrapper
 router.get('/me', requireSession, getMe);
-router.get('/me/trips', requireSession, getMyTrips);
 router.put('/me/profile', requireSession, saveProfile);
-router.put('/me/planning-preferences', requireSession, (req, res, next) => {
-  savePlanningPreferences(req, res).catch(next);
-});
-// Wrapped so the handler returns void; a rejected promise still reaches the error handler via next.
-router.put('/me/gas-price', requireSession, (req, res, next) => {
-  saveGasPrice(req, res).catch(next);
-});
-router.delete('/me', requireSession, (req, res, next) => {
-  deleteMe(req, res).catch(next);
-});
-router.get('/me/parking-spots', requireSession, (req, res, next) => {
-  getMyParkingSpots(req, res).catch((err: unknown) => {
-    next(err);
-  });
-});
-router.post('/me/parking-spots', requireSession, (req, res, next) => {
-  createParkingSpot(req, res).catch((err: unknown) => {
-    next(err);
-  });
-});
-router.put('/me/parking-spots/:id', requireSession, (req, res, next) => {
-  editParkingSpot(req, res).catch((err: unknown) => {
-    next(err);
-  });
-});
-router.delete('/me/parking-spots/:id', requireSession, (req, res, next) => {
-  removeParkingSpot(req, res).catch((err: unknown) => {
-    next(err);
-  });
-});
+router.put('/me/planning-preferences', requireSession, savePlanningPreferences);
+router.put('/me/gas-price', requireSession, saveGasPrice);
+router.delete('/me', requireSession, deleteMe);
+router.get('/me/trips', requireSession, getMyTrips);
+router.post('/me/trips', requireSession, createTrip);
+router.patch('/me/trips/:id', requireSession, changeTripStatus);
+router.delete('/me/trips/:id', requireSession, removeTrip);
+router.get('/me/parking-spots', requireSession, getMyParkingSpots);
+router.post('/me/parking-spots', requireSession, createParkingSpot);
+router.put('/me/parking-spots/:id', requireSession, editParkingSpot);
+router.delete('/me/parking-spots/:id', requireSession, removeParkingSpot);
 
 export default router;
