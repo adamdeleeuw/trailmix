@@ -57,7 +57,7 @@ describe('Unmocked: GET /api/users/me/trips', () => {
   // Expected status code: 200
   // Expected behavior: the old trip loads with the CP2 defaults instead of failing
   // Expected output: { trips } with status COMPLETED, transferPoints [midpoint], the summed leg distance,
-  //                  an empty cost breakdown, and null leg times and transit details
+  //                  an empty cost breakdown, null leg times and transit details, and no turn-by-turn steps
   test('Trip saved before CP2 loads with defaults', async () => {
     const { user, token } = await createSignedInUser();
     const home = { label: 'Home', lat: 49.19, lng: -122.85, placeId: null };
@@ -86,8 +86,8 @@ describe('Unmocked: GET /api/users/me/trips', () => {
       .get('/api/users/me/trips')
       .set('Authorization', bearer(token));
 
-    const noTimes = { departAt: null, arriveAt: null };
-    const noDetails = { colour: null, headsign: null, departureStop: null, arrivalStop: null, stopCount: null };
+    const oldLegDefaults = { departAt: null, arriveAt: null, steps: [] };
+    const noDetails = { shortName: null, colour: null, headsign: null, departureStop: null, arrivalStop: null, stopCount: null };
     expect(response.status).toBe(200);
     expect(response.body).toStrictEqual({
       trips: [{
@@ -97,9 +97,9 @@ describe('Unmocked: GET /api/users/me/trips', () => {
         destination: ubc,
         transferPoints: [station],
         legs: [
-          { mode: 'DRIVE', from: home, to: station, ...noTimes, durationSeconds: 660, distanceMeters: 4200, costCents: 64, polyline: 'drive', transitLines: [] },
+          { mode: 'DRIVE', from: home, to: station, ...oldLegDefaults, durationSeconds: 660, distanceMeters: 4200, costCents: 64, polyline: 'drive', transitLines: [] },
           {
-            mode: 'TRANSIT', from: station, to: ubc, ...noTimes, durationSeconds: 3300, distanceMeters: 31000, costCents: 335, polyline: 'transit',
+            mode: 'TRANSIT', from: station, to: ubc, ...oldLegDefaults, durationSeconds: 3300, distanceMeters: 31000, costCents: 335, polyline: 'transit',
             transitLines: [{ name: '99 B-Line', vehicle: 'Bus', ...noDetails }],
           },
         ],

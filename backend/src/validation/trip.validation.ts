@@ -3,6 +3,7 @@ import {
   TRIP_MODES,
   type CostBreakdown,
   type Leg,
+  type NavigationStep,
   type NewTrip,
   type Place,
   type TransitLine,
@@ -17,6 +18,8 @@ const MAX_LONGITUDE = 180;
 const MAX_TEXT_LENGTH = 512; // longer than any place name, stop name or Google place ID
 const MAX_POLYLINE_LENGTH = 20000; // far more than a route across Metro Vancouver encodes to
 const MAX_TRANSIT_LINES = 5; // per leg, the lines a stop could be served by
+const MAX_STEPS = 100; // per leg, more turns than a drive across Metro Vancouver has
+const MANEUVER = /^[A-Z_]{1,40}$/; // Google's maneuver names, like "TURN_SLIGHT_LEFT"
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000; // how far ahead of the server a phone's clock may be
 // ISO 8601 with a timezone, like the app's Instant.toString(), e.g. "2026-11-03T16:30:00Z",
 // checked as a start and an end so neither pattern nests quantifiers (no ReDoS)
@@ -117,9 +120,20 @@ function parseTransitDetails(line: Record<string, unknown>): TransitDetails | un
 function parseTransitLine(value: unknown): TransitLine | undefined {
   if (!isRecord(value)) return undefined;
   const name = parseText(value.name);
+  const shortName = parseOptionalText(value.shortName);
   const vehicle = parseText(value.vehicle);
   const details = parseTransitDetails(value);
-  return name !== undefined && vehicle !== undefined && details !== undefined ? { name, vehicle, ...details } : undefined;
+  if (name === undefined || shortName === undefined || vehicle === undefined || details === undefined) return undefined;
+  return { name, shortName, vehicle, ...details };
+}
+
+/** Checks one turn-by-turn instruction of a driving or walking leg. */
+function parseNavigationStep(value: unknown): NavigationStep | undefined {
+  if (!isRecord(value)) return undefined;
+  const { maneuver, lat, lng } = value;
+  const instruction = parseText(value.instruction);
+  if (instruction === undefined || typeof maneuver !== 'string' || !MANEUVER.test(maneuver)) return undefined;
+  return isCoordinate(lat, MAX_LATITUDE) && isCoordinate(lng, MAX_LONGITUDE) ? { instruction, maneuver, lat, lng } : undefined;
 }
 
 /** Checks where and when a leg starts and ends. */
@@ -146,8 +160,9 @@ function parseLeg(value: unknown): Leg | undefined {
   const ends = parseLegEnds(value);
   const measures = parseLegMeasures(value);
   const transitLines = parseList(value.transitLines, MAX_TRANSIT_LINES, parseTransitLine);
-  if (ends === undefined || measures === undefined || transitLines === undefined) return undefined;
-  return { mode: value.mode, ...ends, ...measures, transitLines };
+  const steps = parseList(value.steps, MAX_STEPS, parseNavigationStep);
+  if (ends === undefined || measures === undefined || transitLines === undefined || steps === undefined) return undefined;
+  return { mode: value.mode, ...ends, ...measures, transitLines, steps };
 }
 
 /** Checks the legs and transfer points, and takes the trip's origin and destination from its first and last legs. */

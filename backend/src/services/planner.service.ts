@@ -32,7 +32,7 @@ const BASELINE_TRANSIT_ID = 'BASELINE_TRANSIT';
 
 export type RouteLabel = 'CHEAPEST' | 'FASTEST' | 'BALANCED';
 
-export interface PlanLeg extends Omit<Leg, 'mode' | 'transitLines'> {
+export interface PlanLeg extends Omit<Leg, 'mode' | 'transitLines' | 'departAt' | 'arriveAt'> {
   mode: PlannerMode | 'WALK';
   departAt: string;
   arriveAt: string;
@@ -166,6 +166,7 @@ function toDetailedLeg(
     costCents,
     polyline: detail.polyline,
     transitLines: detail.transitLines,
+    steps: mode === 'DRIVE' ? detail.navigation : [], // a transit leg is boarded, not turned through
   };
 }
 
@@ -204,6 +205,7 @@ function transitLegs(origin: PlannerPlace, destination: PlannerPlace, detail: Ro
       costCents,
       polyline: step.polyline,
       transitLines: step.transitLine === null ? [] : [step.transitLine],
+      steps: step.navigation,
     };
   });
 }

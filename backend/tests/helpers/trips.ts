@@ -52,11 +52,15 @@ const WATERFRONT = { label: 'Waterfront Station', lat: 49.2859, lng: -123.1117, 
 /** Where `ROUTE_OPTION` ends. */
 export const DOWNTOWN = { label: 'Downtown office', lat: 49.2849, lng: -123.1153, placeId: 'ChIJ-downtown' };
 
+/** A turn-by-turn instruction on `DRIVE_LEG`, for tests that change one step. */
+export const TURN = { instruction: 'Turn left onto Production Way', maneuver: 'TURN_LEFT', lat: 49.2521, lng: -122.9199 };
+
 /** `ROUTE_OPTION`'s first leg, for tests that change one leg. Its cost is fuel plus parking. */
 export const DRIVE_LEG = {
   mode: 'DRIVE', from: BURNABY_HOME, to: PRODUCTION_WAY_LOT,
   departAt: '2026-11-03T15:30:00.000Z', arriveAt: '2026-11-03T15:44:00.000Z',
   durationSeconds: 840, distanceMeters: 9000, costCents: 420, polyline: 'drive-polyline', transitLines: [],
+  steps: [{ instruction: 'Head east on Lougheed Hwy', maneuver: 'DEPART', lat: 49.2488, lng: -122.9805 }, TURN],
 };
 
 /** `ROUTE_OPTION`'s SkyTrain leg, for tests that change its transit line. */
@@ -65,9 +69,10 @@ export const TRANSIT_LEG = {
   departAt: '2026-11-03T15:50:00.000Z', arriveAt: '2026-11-03T16:15:00.000Z',
   durationSeconds: 1500, distanceMeters: 14000, costCents: 335, polyline: 'transit-polyline',
   transitLines: [{
-    name: 'Expo Line', vehicle: 'SkyTrain', colour: '#0060A9', headsign: 'Waterfront',
+    name: 'Expo Line', shortName: null, vehicle: 'SkyTrain', colour: '#0060A9', headsign: 'Waterfront',
     departureStop: 'Production Way–University', arrivalStop: 'Waterfront', stopCount: 12,
   }],
+  steps: [],
 };
 
 /**
@@ -94,12 +99,14 @@ export const ROUTE_OPTION = {
       mode: 'WALK', from: PRODUCTION_WAY_LOT, to: PRODUCTION_WAY_STATION,
       departAt: '2026-11-03T15:44:00.000Z', arriveAt: '2026-11-03T15:47:00.000Z',
       durationSeconds: 180, distanceMeters: 250, costCents: 0, polyline: 'walk-polyline', transitLines: [],
+      steps: [{ instruction: 'Walk to Production Way–University Station', maneuver: 'STRAIGHT', lat: 49.2534, lng: -122.9183 }],
     },
     TRANSIT_LEG,
     {
       mode: 'WALK', from: WATERFRONT, to: DOWNTOWN,
       departAt: '2026-11-03T16:15:00.000Z', arriveAt: '2026-11-03T16:20:00.000Z',
       durationSeconds: 300, distanceMeters: 400, costCents: 0, polyline: 'walk-polyline-2', transitLines: [],
+      steps: [],
     },
   ],
 };

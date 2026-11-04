@@ -22,12 +22,21 @@ export interface Place {
 /** A transit line used by a trip leg. */
 export interface TransitLine {
   name: string; // route or line name
+  shortName: string | null; // what the line is signed as, e.g. "99", '' or null when it has none (SkyTrain lines, older trips)
   vehicle: string; // e.g. bus, SkyTrain, or SeaBus
   colour: string | null; // hex colour from Google, which sometimes omits it
   headsign: string | null; // direction shown on the vehicle, e.g. "King George"
   departureStop: string | null;
   arrivalStop: string | null;
   stopCount: number | null; // stops ridden, null for trips saved before CP2
+}
+
+/** One turn-by-turn instruction on a driving or walking leg, for in-app navigation. */
+export interface NavigationStep {
+  instruction: string; // Google's text, e.g. "Turn left onto W 16th Ave"
+  maneuver: string; // Google's maneuver name, e.g. "TURN_LEFT", which picks the app's arrow
+  lat: number; // where the maneuver happens (the start of Google's step)
+  lng: number;
 }
 
 /** One driving, transit or walking segment of a trip. */
@@ -42,6 +51,7 @@ export interface Leg {
   costCents: number; // non-negative whole cents
   polyline: string; // encoded route geometry
   transitLines: TransitLine[]; // empty for a driving or walking leg
+  steps: NavigationStep[]; // turn-by-turn for a driving or walking leg, empty for transit and for older trips
 }
 
 /** How a trip's total cost splits into fuel, parking and transit fares, in whole cents. */
@@ -61,7 +71,7 @@ export interface Trip {
   destination: Place;
   transferPoints: Place[]; // the parking spot for Drive → Transit, else empty
   legs: Leg[];
-  totalDurationSeconds: number; // sum of leg durations
+  totalDurationSeconds: number; // leave to arrive, so it includes any waiting between legs
   totalDistanceMeters: number | undefined; // sum of leg distances, undefined only on trips saved before CP2
   totalCostCents: number; // sum of leg costs
   costBreakdown: CostBreakdown;
@@ -134,12 +144,23 @@ const placeSchema = new Schema<Place>(
 const transitLineSchema = new Schema<TransitLine>(
   {
     name: { type: String, required: true },
+    shortName: { type: String, default: null },
     vehicle: { type: String, required: true },
     colour: { type: String, default: null },
     headsign: { type: String, default: null },
     departureStop: { type: String, default: null },
     arrivalStop: { type: String, default: null },
     stopCount: { type: Number, default: null, min: 0, validate: isWholeOrNull },
+  },
+  { _id: false },
+);
+
+const navigationStepSchema = new Schema<NavigationStep>(
+  {
+    instruction: { type: String, required: true },
+    maneuver: { type: String, required: true },
+    lat: { type: Number, required: true, min: -90, max: 90 },
+    lng: { type: Number, required: true, min: -180, max: 180 },
   },
   { _id: false },
 );
@@ -156,6 +177,7 @@ const legSchema = new Schema<Leg>(
     costCents: { type: Number, required: true, min: 0, validate: Number.isInteger },
     polyline: { type: String, required: true },
     transitLines: { type: [transitLineSchema], default: [] },
+    steps: { type: [navigationStepSchema], default: [] },
   },
   { _id: false },
 );
@@ -212,12 +234,8 @@ const sumLegDistances = (legs: Leg[]) => legs.reduce((sum: number, leg: Leg) => 
 
 // runs on create and save only, and status changes use findOneAndUpdate, so old trips never reach it
 tripSchema.pre('validate', function validateLegTotals(this: HydratedDocument<Trip>) {
-  const totalDurationSeconds = this.legs.reduce((sum: number, leg: Leg) => sum + leg.durationSeconds, 0);
   const totalCostCents = this.legs.reduce((sum: number, leg: Leg) => sum + leg.costCents, 0);
   const { fuelCents, parkingCents, fareCents } = this.costBreakdown;
-  if (totalDurationSeconds !== this.totalDurationSeconds) {
-    this.invalidate('totalDurationSeconds', 'Must equal the sum of leg durations');
-  }
   if (sumLegDistances(this.legs) !== this.totalDistanceMeters) {
     this.invalidate('totalDistanceMeters', 'Must equal the sum of leg distances');
   }
