@@ -4,7 +4,7 @@ import { createApp } from '../../src/app';
 import { TripModel } from '../../src/models/trip.model';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
-import { BURNABY_HOME, DOWNTOWN, DRIVE_LEG, ROUTE_OPTION, TRANSIT_LEG, createTrip, tripBody } from '../helpers/trips';
+import { BURNABY_HOME, DOWNTOWN, DRIVE_LEG, ROUTE_OPTION, TRANSIT_LEG, TURN, createTrip, tripBody } from '../helpers/trips';
 
 useTestDatabase();
 
@@ -153,13 +153,18 @@ describe('Unmocked: POST /api/users/me/trips', () => {
     await expectRejected(token, tripBody({ option: { ...ROUTE_OPTION, totalDistanceMeters: 23651 } }));
   });
 
-  // Input: a valid session and a route whose totalDurationSeconds is 1 more than its legs
-  // Expected status code: 400
-  // Expected behavior: the trip model refuses it, and nothing is saved
-  // Expected output: { error: "Invalid trip" }
-  test("Duration that doesn't add up is rejected", async () => {
+  // Input: a valid session and a route whose totalDurationSeconds is 3 minutes more than its legs
+  // Expected status code: 201
+  // Expected behavior: the planner's total runs from leave to arrive, so waiting between legs is allowed
+  // Expected output: { trip } with the route's total duration
+  test('Duration that includes waiting between legs is saved', async () => {
     const { token } = await createSignedInUser();
-    await expectRejected(token, tripBody({ option: { ...ROUTE_OPTION, totalDurationSeconds: 2821 } }));
+
+    const response = await request(createApp()).post(PATH).set('Authorization', bearer(token))
+      .send(withOption({ totalDurationSeconds: 3000 }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.trip.totalDurationSeconds).toBe(3000);
   });
 
   // Input: a valid session and status "PAUSED", then status { "$ne": null } (a NoSQL injection attempt)
@@ -336,8 +341,9 @@ describe('Unmocked: POST /api/users/me/trips', () => {
     }
   });
 
-  // Input: a valid session, and a transit line that isn't an object, has an empty name or vehicle, or a
-  //        colour, headsign, departure stop or arrival stop that is too long, or a stop count of -1
+  // Input: a valid session, and a transit line that isn't an object, has an empty name or vehicle, a short
+  //        name that is a number, or a colour, headsign, departure stop or arrival stop that is too long,
+  //        or a stop count of -1
   // Expected status code: 400
   // Expected behavior: optional transit details may be null, but not invalid, and nothing is saved
   // Expected output: { error: "Invalid trip" }
@@ -345,12 +351,46 @@ describe('Unmocked: POST /api/users/me/trips', () => {
     const { token } = await createSignedInUser();
     await expectRejected(token, withTransitLines(['Expo Line']));
     const badFields = [
-      { name: '' }, { vehicle: '' }, { colour: TOO_LONG_TEXT }, { headsign: 7 },
+      { name: '' }, { vehicle: '' }, { shortName: 99 }, { colour: TOO_LONG_TEXT }, { headsign: 7 },
       { departureStop: TOO_LONG_TEXT }, { arrivalStop: TOO_LONG_TEXT }, { stopCount: -1 },
     ];
     for (const fields of badFields) {
       await expectRejected(token, withLine(fields));
     }
+  });
+
+  // Input: a valid session and a route whose 99 B-Line has the short name "99"
+  // Expected status code: 201
+  // Expected behavior: the short name is stored, so History and Navigation can say "99" like the planner did
+  // Expected output: { trip } whose transit leg's line has shortName "99"
+  test('Transit line short name is saved', async () => {
+    const { token } = await createSignedInUser();
+
+    const response = await request(createApp()).post(PATH).set('Authorization', bearer(token))
+      .send(withLine({ name: '99 B-Line', shortName: '99' }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.trip.legs[2].transitLines[0]).toMatchObject({ name: '99 B-Line', shortName: '99' });
+  });
+
+  // Input: a valid session, and turn-by-turn steps that aren't a list or number more than 100, or a step
+  //        that isn't an object, has an empty, long or missing instruction, a maneuver that is lowercase,
+  //        too long or a query object ({ "$ne": null }), or a latitude of 91 or a missing longitude
+  // Expected status code: 400
+  // Expected behavior: every step is checked, long lists are refused unread, and nothing is saved
+  // Expected output: { error: "Invalid trip" }
+  test('Invalid turn-by-turn steps are rejected', async () => {
+    const { token } = await createSignedInUser();
+    const badSteps = [
+      'Turn left', Array.from({ length: 101 }, () => TURN), ['Turn left'],
+      [{ ...TURN, instruction: '' }], [{ ...TURN, instruction: TOO_LONG_TEXT }], [{ ...TURN, instruction: undefined }],
+      [{ ...TURN, maneuver: 'turn_left' }], [{ ...TURN, maneuver: 'X'.repeat(41) }], [{ ...TURN, maneuver: { $ne: null } }],
+      [{ ...TURN, lat: 91 }], [{ ...TURN, lng: undefined }],
+    ];
+    for (const steps of badSteps) {
+      await expectRejected(token, withDriveLeg({ ...DRIVE_LEG, steps }));
+    }
+    await expectRejected(token, withDriveLeg({ ...DRIVE_LEG, steps: undefined }));
   });
 
   // Input: a valid session, and a route with a bad total duration, distance or cost, a costEstimated that

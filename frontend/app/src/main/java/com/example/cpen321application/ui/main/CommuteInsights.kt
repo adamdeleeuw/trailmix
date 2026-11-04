@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import com.example.cpen321application.data.Trip
+import com.example.cpen321application.data.TripStatus
 import java.util.Locale
 
 internal data class CommuteInsightSummary(
@@ -82,14 +83,16 @@ internal fun CommuteInsightsContent(
             Button(onClick = { viewModel.load(onUnauthorized) }) { Text("Retry") }
         }
         else -> {
-            val trips = viewModel.trips?.let { filterTrips(it, selectedPeriod) }.orEmpty()
+            // planned, active and cancelled trips weren't travelled, so they'd skew the averages
+            val trips = filterTrips(viewModel.trips.orEmpty(), selectedPeriod)
+                .filter { it.status == TripStatus.COMPLETED }
             if (trips.isEmpty()) {
-                Text("No trips found for ${selectedPeriod.label.lowercase(Locale.getDefault())}.")
+                Text("No completed trips in this period.")
             } else {
                 val summary = calculateCommuteInsights(trips)
                 Text("Based on ${summary.tripCount} ${if (summary.tripCount == 1) "trip" else "trips"}")
-                Text("Average time: ${formatDuration(summary.averageDurationSeconds)}")
-                Text(String.format(Locale.getDefault(), "Average cost: \u0024%.2f", summary.averageCostCents / 100.0))
+                Text("Average time: ${formatDuration(summary.averageDurationSeconds.toLong())}")
+                Text("Average cost: ${formatCents(summary.averageCostCents)}")
                 if (summary.totalModeDurationSeconds > 0L) {
                     Text("Time by transportation", style = MaterialTheme.typography.titleMedium)
                     ModeTimePieChart(summary)
@@ -155,14 +158,10 @@ private fun ModeTimePieChart(summary: CommuteInsightSummary) {
     }
 }
 
-private fun String.toModeLabel() = when (this) {
+/** Names a leg mode for the History tab, like "Driving" for DRIVE. */
+internal fun String.toModeLabel() = when (this) {
     "DRIVE" -> "Driving"
     "TRANSIT" -> "Transit"
+    "WALK" -> "Walking"
     else -> replaceFirstChar { it.titlecase(Locale.getDefault()) }
-}
-
-private fun formatDuration(seconds: Int): String {
-    val minutes = seconds / 60
-    val hours = minutes / 60
-    return if (hours > 0) "${hours}h ${minutes % 60}m" else "${minutes} min"
 }

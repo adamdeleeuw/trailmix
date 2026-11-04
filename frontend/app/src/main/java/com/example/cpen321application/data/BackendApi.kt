@@ -12,6 +12,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -49,18 +50,44 @@ data class User(
 /** A place recorded in a trip. */
 data class TripPlace(val label: String)
 
-/** A leg of a saved trip. */
-data class TripLeg(val mode: String, val durationSeconds: Int)
+/** Where a saved trip is in its life. The names match the backend's `status` values. */
+enum class TripStatus { PLANNED, ACTIVE, COMPLETED, CANCELLED }
 
-/** A saved commute returned by the backend. */
+/** A leg of a saved trip. Trips saved before CP2 have no leg times. */
+data class TripLeg(
+    val mode: String, // "DRIVE", "TRANSIT" or "WALK"
+    val durationSeconds: Int,
+    val distanceMeters: Int = 0,
+    val departAt: Instant? = null,
+    val arriveAt: Instant? = null,
+)
+
+/**
+ * A saved commute returned by the backend.
+ *
+ * @property fuelCents The fuel part of [totalCostCents]. With [parkingCents] and [fareCents]
+ *   it adds up to the total, except on trips saved before CP2, where all three are 0.
+ * @property baselineDriveCostCents What driving the whole way would have cost, or `null` if unknown.
+ * @property route The planned route it was saved from, for Trip Preview and Navigation, or `null`
+ *   on trips saved before CP2, which don't store enough of it.
+ */
 data class Trip(
     val id: String,
+    val status: TripStatus,
     val origin: TripPlace,
     val destination: TripPlace,
     val legs: List<TripLeg>,
     val totalDurationSeconds: Int,
     val totalCostCents: Int,
+    val fuelCents: Int,
+    val parkingCents: Int,
+    val fareCents: Int,
+    val baselineDriveCostCents: Int?,
     val tripDate: String,
+    val arriveBy: Instant? = null, // null when the user chose "leave now"
+    val actualStart: Instant? = null,
+    val actualEnd: Instant? = null,
+    val route: RouteOption? = null,
 )
 
 /** The last gas price a user saved, and when the backend saved it. */
@@ -84,17 +111,6 @@ data class Transit(val fareType: FareType, val monthlyPassZones: Int?)
 
 /** The commute questionnaire's answers. A `null` vehicle or transit means the user doesn't drive or take transit. */
 data class Profile(val timezone: String, val vehicle: Vehicle?, val transit: Transit?)
-
-/** One leg of a commute. [polyline] is in Google's encoded polyline format (see `decodePolyline`). */
-data class RouteLeg(
-    val mode: String, // "DRIVE" or "TRANSIT"
-    val durationSeconds: Int,
-    val distanceMeters: Int,
-    val polyline: String,
-)
-
-/** A planned chained commute: the drive leg, then the transit leg. */
-data class ChainedRoute(val legs: List<RouteLeg>, val totalDurationSeconds: Int)
 
 /** What a parking spot's cost is charged per. The names match the backend's `ratePer` values. */
 enum class RateUnit { HOUR, DAY }
@@ -154,7 +170,28 @@ interface ProfileApi {
 interface TripApi {
     /** Fetches the signed-in user's trip history, newest first. */
     suspend fun getTripHistory(sessionToken: String): List<Trip>
+
+    /**
+     * Saves a planned route as a trip, [TripStatus.PLANNED] for later or [TripStatus.ACTIVE] started at [at].
+     * Throws a 409 [HttpException] carrying [TRIP_ALREADY_ACTIVE_ERROR] when starting it would make a second active trip.
+     */
+    suspend fun saveTrip(sessionToken: String, route: RouteOption, status: TripStatus, arriveBy: Instant?, at: Instant): Trip
+
+    /**
+     * Starts a planned trip, or ends an active one, at the time [at], and returns the updated trip.
+     *
+     * Throws a 409 [HttpException] carrying [TRIP_ALREADY_ACTIVE_ERROR] when starting it would
+     * make a second active trip, another 409 when the trip's status can't move to [status], and a
+     * 404 when the user has no such trip.
+     */
+    suspend fun changeTripStatus(sessionToken: String, id: String, status: TripStatus, at: Instant): Trip
+
+    /** Deletes a planned trip. Throws a 409 [HttpException] if it isn't planned, and a 404 if it's gone. */
+    suspend fun deleteTrip(sessionToken: String, id: String)
 }
+
+/** The backend's 409 error when the user already has an active trip. */
+const val TRIP_ALREADY_ACTIVE_ERROR = "Another trip is already active"
 
 /** The backend's account endpoints used by the Profile tab. Fails the same way as [ProfileApi]. */
 interface AccountApi {
@@ -163,12 +200,6 @@ interface AccountApi {
 
     /** Permanently deletes the account and ends its sessions on every device. */
     suspend fun deleteAccount(sessionToken: String)
-}
-
-/** The backend's route planning endpoints. Throws like [AuthApi], and [HttpException] with code 404 when there is no route. */
-interface RoutesApi {
-    /** Plans driving from [start] to [split], then transit from [split] to [destination]. */
-    suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng): ChainedRoute
 }
 
 /**
@@ -200,11 +231,12 @@ const val PARKING_LIMIT_ERROR = "Parking spot limit reached"
 /** The backend's 409 error when the user already saved this Google place. */
 const val PARKING_DUPLICATE_ERROR = "Parking spot already saved"
 
-/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [RoutesApi] and [ParkingSpotApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, ParkingSpotApi {
+/** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [ParkingSpotApi], [PlannerApi] and [PlanningPreferencesApi] over HTTP. */
+object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, PlannerApi, PlanningPreferencesApi {
     private const val PARKING_SPOTS_PATH = "/api/users/me/parking-spots"
+    private const val TRIPS_PATH = "/api/users/me/trips"
 
-    private const val TIMEOUT_MS = 10_000 // route planning waits on two Google requests
+    private const val TIMEOUT_MS = 10_000
     private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
     override suspend fun signIn(idToken: String) =
@@ -230,7 +262,28 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, Parking
         request("PUT", "/api/users/me/profile", sessionToken, profile.toJson()) { parseUser(it.getJSONObject("user")) }
 
     override suspend fun getTripHistory(sessionToken: String) =
-        request("GET", "/api/users/me/trips", sessionToken) { it.toTrips() }
+        request("GET", TRIPS_PATH, sessionToken) { it.toTrips() }
+
+    override suspend fun saveTrip(sessionToken: String, route: RouteOption, status: TripStatus, arriveBy: Instant?, at: Instant): Trip {
+        val body = JSONObject()
+            .put("option", route.toJson())
+            .put("status", status.name)
+            .put("arriveBy", arriveBy?.toString() ?: JSONObject.NULL)
+            .put("actualStart", at.truncatedTo(ChronoUnit.MILLIS).toString()) // ignored for a planned trip
+        return request("POST", TRIPS_PATH, sessionToken, body) { it.getJSONObject("trip").toTrip() }
+    }
+
+    // milliseconds, since that's all a JavaScript date keeps
+    override suspend fun changeTripStatus(sessionToken: String, id: String, status: TripStatus, at: Instant): Trip {
+        val timeKey = if (status == TripStatus.ACTIVE) "actualStart" else "actualEnd"
+        val body = JSONObject().put("status", status.name).put(timeKey, at.truncatedTo(ChronoUnit.MILLIS).toString())
+        return request("PATCH", "$TRIPS_PATH/${encodePathSegment(id)}", sessionToken, body) {
+            it.getJSONObject("trip").toTrip()
+        }
+    }
+
+    override suspend fun deleteTrip(sessionToken: String, id: String) =
+        request("DELETE", "$TRIPS_PATH/${encodePathSegment(id)}", sessionToken) {}
 
     override suspend fun saveGasPrice(sessionToken: String, centsPerLitre: Double) =
         request("PUT", "/api/users/me/gas-price", sessionToken, JSONObject().put("centsPerLitre", centsPerLitre)) {
@@ -294,30 +347,18 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, Parking
                 .put("monthlyPassZones", it.monthlyPassZones ?: JSONObject.NULL)
         } ?: JSONObject.NULL)
 
-    override suspend fun planChainedRoute(sessionToken: String?, start: LatLng, split: LatLng, destination: LatLng) =
-        request(
-            "POST",
-            "/api/routes/chained",
-            sessionToken,
-            body = JSONObject().put("start", start.toJson()).put("split", split.toJson()).put("destination", destination.toJson()),
-        ) {
-            ChainedRoute(
-                legs = parseLegs(it.getJSONArray("legs")),
-                totalDurationSeconds = it.getInt("totalDurationSeconds"),
-            )
-        }
-
     private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
 
-    private fun parseLegs(json: JSONArray) = (0 until json.length()).map { i ->
-        val leg = json.getJSONObject(i)
-        RouteLeg(
-            mode = leg.getString("mode"),
-            durationSeconds = leg.getInt("durationSeconds"),
-            distanceMeters = leg.getInt("distanceMeters"),
-            polyline = leg.getString("polyline"),
-        )
-    }
+    override suspend fun planTrip(sessionToken: String?, trip: PlanRequest) =
+        request("POST", "/api/routes/plan", sessionToken, body = trip.toJson()) { it.toTripPlan() }
+
+    override suspend fun getPlanningPreferences(sessionToken: String?) =
+        request("GET", "/api/users/me", sessionToken) { it.getJSONObject("user").toPlanningPreferences() }
+
+    override suspend fun savePlanningPreferences(sessionToken: String?, preferences: PlanningPreferences) =
+        request("PUT", "/api/users/me/planning-preferences", sessionToken, body = preferences.toJson()) {
+            it.getJSONObject("user").toPlanningPreferences()
+        }
 
     private fun parseUser(json: JSONObject) = User(
         id = json.getString("id"),
@@ -373,7 +414,7 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, RoutesApi, Parking
         } catch (e: JSONException) {
             throw IOException("Malformed response", e)
         } catch (e: IllegalArgumentException) {
-            throw IOException("Unknown enum value", e) // FareType or RateUnit valueOf on a value this app doesn't know
+            throw IOException("Unknown enum value", e) // e.g. TripMode or TripStatus valueOf on a value this app doesn't know
         } catch (e: DateTimeParseException) {
             throw IOException("Malformed date", e)
         } finally {
@@ -413,22 +454,38 @@ private fun JSONObject.toTrips(): List<Trip> {
     return List(trips.length()) { trips.getJSONObject(it).toTrip() }
 }
 
-// a trip from GET /api/users/me/trips, keeping only the fields the History tab shows
+// a trip from the trip endpoints, keeping only the fields the History tab uses
 private fun JSONObject.toTrip(): Trip {
     val legs = getJSONArray("legs")
+    val costs = getJSONObject("costBreakdown")
     return Trip(
         id = getString("id"),
+        status = TripStatus.valueOf(getString("status")),
         origin = TripPlace(getJSONObject("origin").getString("label")),
         destination = TripPlace(getJSONObject("destination").getString("label")),
-        legs = List(legs.length()) { index ->
-            val leg = legs.getJSONObject(index)
-            TripLeg(leg.getString("mode"), leg.getInt("durationSeconds"))
-        },
+        legs = List(legs.length()) { legs.getJSONObject(it).toTripLeg() },
         totalDurationSeconds = getInt("totalDurationSeconds"),
         totalCostCents = getInt("totalCostCents"),
+        fuelCents = costs.getInt("fuelCents"),
+        parkingCents = costs.getInt("parkingCents"),
+        fareCents = costs.getInt("fareCents"),
+        baselineDriveCostCents = intOrNull("baselineDriveCostCents"),
         tripDate = getString("tripDate"),
+        arriveBy = stringOrNull("arriveBy")?.let(Instant::parse),
+        actualStart = stringOrNull("actualStart")?.let(Instant::parse),
+        actualEnd = stringOrNull("actualEnd")?.let(Instant::parse),
+        route = toSavedRoute(),
     )
 }
+
+// a leg of a saved trip, where trips saved before CP2 may have no distance and have no times
+private fun JSONObject.toTripLeg() = TripLeg(
+    mode = getString("mode"),
+    durationSeconds = getInt("durationSeconds"),
+    distanceMeters = optInt("distanceMeters"),
+    departAt = stringOrNull("departAt")?.let(Instant::parse),
+    arriveAt = stringOrNull("arriveAt")?.let(Instant::parse),
+)
 
 private fun JSONObject.stringOrNull(key: String) = if (isNull(key)) null else getString(key)
 

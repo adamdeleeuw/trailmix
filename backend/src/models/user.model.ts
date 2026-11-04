@@ -19,6 +19,16 @@ export const FARE_TYPES = [
 /** Zones an adult monthly pass can cover. */
 export const PASS_ZONES = [1, 2, 3] as const;
 
+/** Modes a user can allow by default when planning a trip. */
+export const PLANNING_MODES = ['DRIVE', 'TRANSIT'] as const;
+export const DEFAULT_PLANNING_MODES: readonly (typeof PLANNING_MODES)[number][] = ['DRIVE', 'TRANSIT'];
+export const DEFAULT_COST_VS_TIME = 50;
+
+/** The longest single stretch of walking a route may have, in minutes, when the user hasn't chosen one. */
+export const DEFAULT_MAX_WALK_MINUTES = 10;
+export const MIN_MAX_WALK_MINUTES = 1;
+export const MAX_MAX_WALK_MINUTES = 60;
+
 /** The gas prices a user can save, in cents per litre. */
 export const MIN_CENTS_PER_LITRE = 50;
 export const MAX_CENTS_PER_LITRE = 400;
@@ -99,6 +109,13 @@ export interface Profile {
   transit: Transit | null; // null when the user doesn't take transit
 }
 
+/** Saved defaults for the Planner screen. */
+export interface PlanningPreferences {
+  costVsTime: number;
+  defaultModes: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes?: number; // left unchanged when a save leaves it out
+}
+
 /**
  * A Trailmix account, stored in the `users` collection.
  *
@@ -120,6 +137,9 @@ export interface User {
   transit: Transit | null;
   lastGasPrice: GasPrice | null; // null until a price is saved
   parkingSpots: ParkingSpot[]; // newest first, at most MAX_PARKING_SPOTS
+  costVsTime: number;
+  defaultModes: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes: number; // longest single walking stretch a planned route may have
   createdAt: Date;
   updatedAt: Date;
 }
@@ -135,6 +155,9 @@ export interface UserResponse {
   vehicle: Vehicle | null;
   transit: Transit | null;
   lastGasPrice: { centsPerLitre: number; savedAt: string } | null; // savedAt is an ISO 8601 date
+  costVsTime: number;
+  defaultModes: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes: number;
 }
 
 // _id: false because there's only ever one of each, inside the user
@@ -195,6 +218,15 @@ const userSchema = new Schema<User>(
     transit: { type: transitSchema, default: null },
     lastGasPrice: { type: gasPriceSchema, default: null },
     parkingSpots: { type: [parkingSpotSchema], default: [] },
+    costVsTime: { type: Number, min: 0, max: 100, default: DEFAULT_COST_VS_TIME },
+    defaultModes: { type: [String], enum: [...PLANNING_MODES], default: [...DEFAULT_PLANNING_MODES] },
+    maxWalkMinutes: {
+      type: Number,
+      min: MIN_MAX_WALK_MINUTES,
+      max: MAX_MAX_WALK_MINUTES,
+      default: DEFAULT_MAX_WALK_MINUTES,
+      validate: Number.isInteger,
+    },
   },
   { timestamps: true },
 );
@@ -229,6 +261,9 @@ export function toUserResponse(user: User): UserResponse {
       centsPerLitre: user.lastGasPrice.centsPerLitre,
       savedAt: user.lastGasPrice.savedAt.toISOString(),
     },
+    costVsTime: user.costVsTime ?? DEFAULT_COST_VS_TIME,
+    defaultModes: user.defaultModes ?? [...DEFAULT_PLANNING_MODES],
+    maxWalkMinutes: user.maxWalkMinutes ?? DEFAULT_MAX_WALK_MINUTES, // accounts made before this setting
   };
 }
 
