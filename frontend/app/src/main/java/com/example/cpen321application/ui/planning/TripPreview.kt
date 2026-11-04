@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -27,8 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.example.cpen321application.data.PlanLeg
 import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.data.TripMode
+import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -60,6 +60,7 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
+import java.time.Instant
 import kotlinx.coroutines.launch
 
 private val WALK_GREY = Color(0xFF80868B)
@@ -69,51 +70,71 @@ private const val WALK_WIDTH = 10f
 private const val WALK_GAP_PX = 12f
 private const val ROUTE_PADDING_PX = 120
 private const val ROW_ZOOM = 16f // close enough to see the stop or the parkade
-private const val START_MESSAGE = "Navigation is coming soon."
-private const val SAVE_MESSAGE = "Save for later is coming soon."
 private val TIMELINE_MAX_HEIGHT = 300.dp
 private val DOT_SIZE = 12.dp
 
 /**
- * Trip Preview (#73): one route in detail. Each leg on the map in its own colour (drive
- * blue, transit in its line's colour, walking dotted grey) with markers at the start,
- * the parking spot, each stop and the destination; underneath, a summary and a timeline
- * of the trip. Tapping a timeline row pans the map there.
- *
- * Start and Save for later belong to #74; until then they say they're coming soon.
+ * Trip Preview (#73) for the route selected in Planning, with **Start** (#74), which saves it
+ * as the active trip and opens Navigation, and **Save for later**, which saves it to History.
  * Back returns to Planning with the same routes.
+ *
+ * @param onUnauthorized Called when the session has expired.
  */
 @Composable
-fun TripPreview(planner: PlanningViewModel, modifier: Modifier = Modifier) {
+fun TripPreview(planner: PlanningViewModel, trips: TripHistoryViewModel, onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     val route = planner.selectedRoute ?: return
+    val arriveBy = planner.arriveBy
+    RoutePreview(route, arriveBy, labelText(route.label), onBack = planner::closePreview, modifier) {
+        Button(
+            onClick = { trips.startRoute(route, arriveBy, onUnauthorized) },
+            enabled = !trips.isChanging,
+            modifier = Modifier.weight(1f),
+        ) { Text("Start") }
+        OutlinedButton(
+            onClick = { trips.save(route, arriveBy, onUnauthorized) },
+            enabled = !trips.isChanging,
+            modifier = Modifier.weight(1f),
+        ) { Text("Save for later") }
+    }
+}
+
+/**
+ * One route in detail, for Planning's Trip Preview and a trip opened from History. Each leg
+ * on the map in its own colour (drive blue, transit in its line's colour, walking dotted grey)
+ * with markers at the start, the parking spot, each stop and the destination. Underneath, a
+ * summary and a timeline of the trip, then [buttons]. Tapping a timeline row pans the map there.
+ *
+ * @param label The route's label, like "Cheapest", or `null` for a saved trip, which doesn't keep it.
+ * @param onBack Closes the preview.
+ */
+@Composable
+fun RoutePreview(
+    route: RouteOption,
+    arriveBy: Instant?,
+    label: String?,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    buttons: @Composable RowScope.() -> Unit,
+) {
     val camera = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(VANCOUVER, 12f) }
     val scope = rememberCoroutineScope()
-    val snackbar = remember { SnackbarHostState() }
-    var message by remember { mutableStateOf<String?>(null) }
     var bottomPx by remember { mutableIntStateOf(0) }
-    LaunchedEffect(message) {
-        message?.let {
-            snackbar.showSnackbar(it)
-            message = null
-        }
-    }
 
     Box(modifier.fillMaxSize()) {
         PreviewMap(route, camera, bottom = with(LocalDensity.current) { bottomPx.toDp() })
         SmallFloatingActionButton(
-            onClick = planner::closePreview,
+            onClick = onBack,
             modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to routes")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
         }
         Column(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomPx = it.height }) {
-            SnackbarHost(snackbar)
             PreviewPanel(
                 route,
-                planner.arriveBy,
+                arriveBy,
+                label,
                 onRow = { row -> scope.launch { camera.animate(CameraUpdateFactory.newLatLngZoom(row.at, ROW_ZOOM)) } },
-                onStart = { message = START_MESSAGE },
-                onSave = { message = SAVE_MESSAGE },
+                buttons,
             )
         }
     }
@@ -181,14 +202,14 @@ private fun PreviewMarkers(route: RouteOption) {
     )
 }
 
-// the summary, the timeline, and Start / Save for later
+// the summary, the timeline, and the buttons
 @Composable
 private fun PreviewPanel(
     route: RouteOption,
-    arriveBy: java.time.Instant?,
+    arriveBy: Instant?,
+    label: String?,
     onRow: (TimelineRow) -> Unit,
-    onStart: () -> Unit,
-    onSave: () -> Unit,
+    buttons: @Composable RowScope.() -> Unit,
 ) {
     val rows = remember(route, arriveBy) { timelineRows(route, arriveBy) }
     Surface(
@@ -198,23 +219,20 @@ private fun PreviewPanel(
         shadowElevation = 8.dp,
     ) {
         Column(Modifier.navigationBarsPadding().padding(top = 16.dp)) {
-            Summary(route, arriveBy)
+            Summary(route, arriveBy, label)
             HorizontalDivider(Modifier.padding(top = 12.dp))
             LazyColumn(Modifier.heightIn(max = TIMELINE_MAX_HEIGHT)) {
                 itemsIndexed(rows) { _, row -> TimelineItem(row) { onRow(row) } }
             }
             HorizontalDivider()
-            Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onStart, modifier = Modifier.weight(1f)) { Text("Start") }
-                OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f)) { Text("Save for later") }
-            }
+            Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), content = buttons)
         }
     }
 }
 
 // "40 min · $3.58", the arrival against the deadline, the cost split and any savings
 @Composable
-private fun Summary(route: RouteOption, arriveBy: java.time.Instant?) {
+private fun Summary(route: RouteOption, arriveBy: Instant?, label: String?) {
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text("${minutes(route.totalDurationSeconds)} min", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -222,11 +240,9 @@ private fun Summary(route: RouteOption, arriveBy: java.time.Instant?) {
                 "  ·  ${costText(route.totalCostCents, route.costEstimated)}",
                 style = MaterialTheme.typography.titleMedium,
             )
-            Text(
-                "  ${labelText(route.label)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            label?.let {
+                Text("  $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         val late = route.lateByMinutes > 0 && arriveBy != null
         Text(

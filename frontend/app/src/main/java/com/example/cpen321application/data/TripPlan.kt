@@ -1,8 +1,11 @@
 package com.example.cpen321application.data
 
 import com.google.android.gms.maps.model.LatLng
+import java.time.Duration
 import java.time.Instant
+import java.time.format.DateTimeParseException
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /*
@@ -69,7 +72,16 @@ data class TransitLine(
     val badgeName: String get() = shortName ?: name
 }
 
-/** One leg of a route. [polyline] is in Google's encoded polyline format (see `decodePolyline`). */
+/**
+ * One turn-by-turn instruction on a drive or walk leg, like "Turn left onto W 16th Ave".
+ * [maneuver] is Google's name for the turn, like "TURN_LEFT", and [location] is where it happens.
+ */
+data class NavigationStep(val instruction: String, val maneuver: String, val location: LatLng)
+
+/**
+ * One leg of a route. [polyline] is in Google's encoded polyline format (see `decodePolyline`).
+ * [steps] are its turns for in-app navigation, empty for a transit leg and for trips saved before them.
+ */
 data class PlanLeg(
     val mode: TripMode,
     val from: PlanPlace,
@@ -81,6 +93,7 @@ data class PlanLeg(
     val costCents: Int,
     val polyline: String,
     val transitLines: List<TransitLine>,
+    val steps: List<NavigationStep> = emptyList(),
 )
 
 /** One of the Planner's suggested routes. */
@@ -119,7 +132,7 @@ interface PlanningPreferencesApi {
     suspend fun savePlanningPreferences(sessionToken: String?, preferences: PlanningPreferences): PlanningPreferences
 }
 
-// ---- JSON, used by BackendApi.planTrip ----
+// ---- JSON, used by BackendApi.planTrip and the trip endpoints ----
 
 private fun PlanPlace.toJson() = JSONObject()
     .put("label", label)
@@ -156,6 +169,12 @@ private fun JSONObject.toTransitLine() = TransitLine(
     shortName = if (isNull("shortName")) null else optString("shortName").ifEmpty { null },
 )
 
+private fun JSONObject.toNavigationStep() = NavigationStep(
+    instruction = getString("instruction"),
+    maneuver = getString("maneuver"),
+    location = LatLng(getDouble("lat"), getDouble("lng")),
+)
+
 private fun JSONObject.toLeg() = PlanLeg(
     mode = TripMode.valueOf(getString("mode")),
     from = getJSONObject("from").toPlace(),
@@ -167,6 +186,7 @@ private fun JSONObject.toLeg() = PlanLeg(
     costCents = getInt("costCents"),
     polyline = getString("polyline"),
     transitLines = optJSONArray("transitLines").objects().map { it.toTransitLine() },
+    steps = optJSONArray("steps").objects().map { it.toNavigationStep() }, // missing on trips saved before steps
 )
 
 private fun JSONObject.toRouteOption(): RouteOption {
@@ -187,6 +207,104 @@ private fun JSONObject.toRouteOption(): RouteOption {
         legs = getJSONArray("legs").objects().map { it.toLeg() },
     )
 }
+
+private fun TransitLine.toJson() = JSONObject()
+    .put("name", name)
+    .put("shortName", shortName ?: JSONObject.NULL)
+    .put("vehicle", vehicle)
+    .put("colour", colour ?: JSONObject.NULL)
+    .put("headsign", headsign)
+    .put("departureStop", departureStop)
+    .put("arrivalStop", arrivalStop)
+    .put("stopCount", stopCount)
+
+private fun PlanLeg.toJson() = JSONObject()
+    .put("mode", mode.name)
+    .put("from", from.toJson())
+    .put("to", to.toJson())
+    .put("departAt", departAt.toString())
+    .put("arriveAt", arriveAt.toString())
+    .put("durationSeconds", durationSeconds)
+    .put("distanceMeters", distanceMeters)
+    .put("costCents", costCents)
+    .put("polyline", polyline)
+    .put("transitLines", JSONArray(transitLines.map { it.toJson() }))
+    .put("steps", JSONArray(steps.map { it.toJson() }))
+
+private fun NavigationStep.toJson() = JSONObject()
+    .put("instruction", instruction)
+    .put("maneuver", maneuver)
+    .put("lat", location.latitude)
+    .put("lng", location.longitude)
+
+/** A route as POST /api/users/me/trips takes it, the same shape the Planner sent it in. */
+internal fun RouteOption.toJson(): JSONObject = JSONObject()
+    .put("label", label.name)
+    .put("leaveAt", leaveAt.toString())
+    .put("arriveAt", arriveAt.toString())
+    .put("lateByMinutes", lateByMinutes)
+    .put("totalDurationSeconds", totalDurationSeconds)
+    .put("totalDistanceMeters", totalDistanceMeters)
+    .put("totalCostCents", totalCostCents)
+    .put(
+        "costBreakdown",
+        JSONObject()
+            .put("fuelCents", costBreakdown.fuelCents)
+            .put("parkingCents", costBreakdown.parkingCents)
+            .put("fareCents", costBreakdown.fareCents),
+    )
+    .put("costEstimated", costEstimated)
+    .put("baselineDriveCostCents", baselineDriveCostCents ?: JSONObject.NULL)
+    .put("transferPoints", JSONArray(transferPoints.map { it.toJson() }))
+    .put("transfers", transfers)
+    .put("legs", JSONArray(legs.map { it.toJson() }))
+
+/**
+ * Reads the route a saved trip (from the trip endpoints) was planned as, or `null` for a trip
+ * saved before CP2, whose legs have no times or stops, or one whose route can't be read.
+ *
+ * A trip doesn't keep its label, so it reads as [RouteLabel.BALANCED], and its lateness and
+ * transfers are worked out again from its times and legs.
+ */
+internal fun JSONObject.toSavedRoute(): RouteOption? {
+    if (isNull("plannedStart") || isNull("plannedEnd")) return null
+    return try {
+        val leaveAt = Instant.parse(getString("plannedStart"))
+        val arriveAt = Instant.parse(getString("plannedEnd"))
+        val arriveBy = if (isNull("arriveBy")) null else Instant.parse(getString("arriveBy"))
+        val costs = getJSONObject("costBreakdown")
+        val legs = getJSONArray("legs").objects().map { it.toLeg() }
+        RouteOption(
+            label = RouteLabel.BALANCED,
+            leaveAt = leaveAt,
+            arriveAt = arriveAt,
+            lateByMinutes = arriveBy?.let { lateMinutes(arriveAt, it) } ?: 0,
+            totalDurationSeconds = getInt("totalDurationSeconds"),
+            totalDistanceMeters = getInt("totalDistanceMeters"),
+            totalCostCents = getInt("totalCostCents"),
+            costBreakdown = CostBreakdown(costs.getInt("fuelCents"), costs.getInt("parkingCents"), costs.getInt("fareCents")),
+            costEstimated = optBoolean("costEstimated"),
+            baselineDriveCostCents = if (isNull("baselineDriveCostCents")) null else getInt("baselineDriveCostCents"),
+            transferPoints = optJSONArray("transferPoints").objects().map { it.toPlace() },
+            transfers = (legs.count { it.mode == TripMode.TRANSIT } - 1).coerceAtLeast(0),
+            legs = legs,
+        )
+    } catch (e: JSONException) {
+        null // e.g. a stop the backend stored as null, so History still loads, just without this trip's Preview
+    } catch (e: DateTimeParseException) {
+        null
+    } catch (e: IllegalArgumentException) {
+        null // a TripMode this app doesn't know
+    }
+}
+
+// whole minutes late, rounded up, as the Planner counts them
+private fun lateMinutes(arriveAt: Instant, arriveBy: Instant): Int {
+    val lateSeconds = Duration.between(arriveBy, arriveAt).seconds
+    return if (lateSeconds <= 0) 0 else ((lateSeconds + SECONDS_PER_MINUTE - 1) / SECONDS_PER_MINUTE).toInt()
+}
+
+private const val SECONDS_PER_MINUTE = 60
 
 /** The body for PUT /api/users/me/planning-preferences. */
 internal fun PlanningPreferences.toJson(): JSONObject = JSONObject()

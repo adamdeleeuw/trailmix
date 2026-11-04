@@ -52,8 +52,11 @@ import com.example.cpen321application.data.DataStoreSessionStore
 import com.example.cpen321application.data.GooglePlaceSearch
 import com.example.cpen321application.data.LOCATION_PERMISSIONS
 import com.example.cpen321application.data.PlanPlace
+import com.example.cpen321application.data.RouteOption
+import com.example.cpen321application.data.TripMode
 import com.example.cpen321application.data.currentLocation
 import com.example.cpen321application.data.hasLocationPermission
+import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.example.cpen321application.ui.planning.PlanningScreen
 import com.example.cpen321application.ui.planning.PlanningViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -88,10 +91,19 @@ private class MapModels(
  * known. Back closes Planning's search box, then Trip Preview, then Planning, then the
  * sheet, then clears the search, then leaves it to the nav bar's rules.
  *
+ * @param trips Where Trip Preview's Start and Save for later save the route.
+ * @param planAgain A trip's route from History's Plan again, which opens Planning with its places and modes.
+ * @param onPlanAgainOpened Called once [planAgain] is open, so it isn't opened again.
  * @param onUnauthorized Called when the session is no longer valid.
  */
 @Composable
-fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
+fun MapHomeScreen(
+    trips: TripHistoryViewModel,
+    planAgain: RouteOption?,
+    onPlanAgainOpened: () -> Unit,
+    onUnauthorized: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current.applicationContext
     val places = remember { GooglePlaceSearch(context) }
     val models = MapModels(
@@ -103,6 +115,14 @@ fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
     var planning by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { models.spots.loadSpots(onUnauthorized) }
+    LaunchedEffect(planAgain) {
+        val route = planAgain ?: return@LaunchedEffect
+        // walking alone isn't a mode the Planner takes, so a walk-only trip plans with the defaults
+        val modes = route.legs.map { it.mode }.filter { it != TripMode.WALK }.toSet().ifEmpty { null }
+        models.planner.start(to = route.legs.last().to, from = route.legs.first().from, tripModes = modes)
+        planning = true
+        onPlanAgainOpened()
+    }
 
     if (planning) {
         val planner = models.planner
@@ -116,7 +136,7 @@ fun MapHomeScreen(onUnauthorized: () -> Unit, modifier: Modifier = Modifier) {
                 else -> planning = false
             }
         }
-        PlanningScreen(planner, models.planningSearch, onClose = { planning = false }, onUnauthorized, modifier)
+        PlanningScreen(planner, models.planningSearch, trips, onClose = { planning = false }, onUnauthorized, modifier)
         return
     }
     val spots = models.spots

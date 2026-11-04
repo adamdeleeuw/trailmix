@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.cpen321application.data.PlanPlace
+import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.example.cpen321application.ui.map.MapSearchBar
 import com.example.cpen321application.ui.map.MapSearchViewModel
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -78,6 +79,7 @@ private const val ROUTE_PADDING_PX = 120 // space around a route when the map fi
  * Tapping the start or the destination opens a search box to change it.
  *
  * @param search The search box's suggestions, separate from the Map tab's own search.
+ * @param trips Where Trip Preview's Start and Save for later save the route.
  * @param onClose Back to the place sheet.
  * @param onUnauthorized Called when the session has expired.
  */
@@ -85,6 +87,7 @@ private const val ROUTE_PADDING_PX = 120 // space around a route when the map fi
 fun PlanningScreen(
     planner: PlanningViewModel,
     search: MapSearchViewModel,
+    trips: TripHistoryViewModel,
     onClose: () -> Unit,
     onUnauthorized: () -> Unit,
     modifier: Modifier = Modifier,
@@ -96,7 +99,7 @@ fun PlanningScreen(
         }
     }
     if (planner.isPreviewing) {
-        TripPreview(planner, modifier)
+        TripPreview(planner, trips, onUnauthorized, modifier)
         return
     }
     PlanningLayout(planner, search, onClose, modifier)

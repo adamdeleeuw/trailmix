@@ -120,8 +120,11 @@ class PlanningViewModel(
     private var planJob: Job? = null
     private var planRun = 0 // bumped by each new plan, so a replaced one that finishes late is ignored
 
-    /** Opens Planning for a destination, starting from [from] (the user's location) when known. Plans straight away. */
-    fun start(to: PlanPlace, from: PlanPlace?) {
+    /**
+     * Opens Planning for a destination, starting from [from] (the user's location) when known. Plans straight away
+     * with [tripModes], or the user's default modes when `null` (History's Plan again passes the trip's modes).
+     */
+    fun start(to: PlanPlace, from: PlanPlace?, tripModes: Set<TripMode>? = null) {
         destination = to
         origin = from
         myLocation = from
@@ -130,6 +133,7 @@ class PlanningViewModel(
         options = emptyList()
         warnings = emptyList()
         if (preferences != null) {
+            tripModes?.let { modes = it }
             replan(delayMs = 0)
             return
         }
@@ -140,7 +144,7 @@ class PlanningViewModel(
         planJob = viewModelScope.launch {
             val loaded = loadPreferences()
             if (run == planRun) {
-                modes = loaded.defaultModes
+                modes = tripModes ?: loaded.defaultModes
                 maxWalkMinutes = loaded.maxWalkMinutes
                 replan(delayMs = 0)
             }

@@ -111,6 +111,18 @@ class PlanningViewModelTest {
     }
 
     @Test
+    fun planAgainUsesTheTripsModesInsteadOfTheDefaults() = runTest(dispatcher) {
+        viewModel.start(WATERFRONT, from = HOME, tripModes = setOf(TripMode.TRANSIT))
+        advanceUntilIdle()
+
+        assertEquals(setOf(TripMode.TRANSIT), api.requests.single().modes)
+
+        viewModel.start(METROTOWN, from = HOME, tripModes = setOf(TripMode.DRIVE)) // preferences are loaded by now
+        advanceUntilIdle()
+        assertEquals(setOf(TripMode.DRIVE), api.requests.last().modes)
+    }
+
+    @Test
     fun withNoStartPointItAsksForOneInsteadOfPlanning() = runTest(dispatcher) {
         viewModel.start(WATERFRONT, from = null)
         advanceUntilIdle()

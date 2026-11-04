@@ -6,18 +6,27 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.cpen321application.data.BackendApi
 import com.example.cpen321application.data.DataStoreSessionStore
 import com.example.cpen321application.data.GoogleSignInClient
+import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.ui.AuthViewModel
 import com.example.cpen321application.ui.TrailmixApp
 import com.example.cpen321application.ui.auth.SignInScreen
+import com.example.cpen321application.ui.main.EndActiveTripDialog
 import com.example.cpen321application.ui.main.MainScreen
 import com.example.cpen321application.ui.main.TripHistoryScreen
 import com.example.cpen321application.ui.main.TripHistoryViewModel
+import com.example.cpen321application.ui.main.rememberTripSnackbar
 import com.example.cpen321application.ui.map.MapHomeScreen
+import com.example.cpen321application.ui.navigation.NavigationScreen
 import com.example.cpen321application.ui.profile.EditProfileScreen
 import com.example.cpen321application.ui.profile.EditProfileViewModel
 import com.example.cpen321application.ui.profile.ProfileScreen
@@ -100,12 +109,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // the tabs, with the History and Profile tabs and the edit screens wired to their ViewModels
+    // Navigation while a trip is active (so reopening the app mid-trip returns to it), else the tabs,
+    // with the History and Profile tabs and the edit screens wired to their ViewModels
     @Composable
     private fun Main() {
+        val trips = tripHistoryViewModel
+        var planAgain by remember { mutableStateOf<RouteOption?>(null) } // History's Plan again, until the Map tab opens it
+        LaunchedEffect(Unit) { trips.load(::signOut) } // at launch, to find an active trip
+        EndActiveTripDialog(trips, ::signOut)
+        if (trips.activeTrip != null || trips.finishedTrip != null) {
+            NavigationScreen(trips, onUnauthorized = ::signOut)
+            return
+        }
         MainScreen(
-            map = { MapHomeScreen(onUnauthorized = ::signOut) },
-            history ={ TripHistoryScreen(tripHistoryViewModel, onUnauthorized = ::signOut) },
+            map = { MapHomeScreen(trips, planAgain, onPlanAgainOpened = { planAgain = null }, onUnauthorized = ::signOut) },
+            history = { openMap ->
+                TripHistoryScreen(
+                    trips,
+                    onPlanAgain = { route ->
+                        planAgain = route
+                        openMap()
+                    },
+                    onUnauthorized = ::signOut,
+                )
+            },
             profile = { onEdit ->
                 ProfileScreen(
                     profileViewModel,
@@ -125,6 +152,7 @@ class MainActivity : ComponentActivity() {
                     onUnauthorized = ::signOut,
                 )
             },
+            snackbar = rememberTripSnackbar(trips),
         )
     }
 }
