@@ -34,8 +34,10 @@ fi
 info "Building and starting containers..."
 "${COMPOSE[@]}" up -d --build --remove-orphans
 
-info "Removing unused images..."
+info "Removing unused images and old build cache..."
 docker image prune -f >/dev/null
+# the cache grows on every build and is never cleared otherwise, so drop anything unused for 3 days but keep recent layers for fast rebuilds
+docker builder prune -af --filter until=72h >/dev/null
 
 info "Waiting for $HEALTH_URL ..."
 for _ in $(seq 1 30); do
