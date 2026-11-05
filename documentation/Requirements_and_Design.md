@@ -16,6 +16,8 @@
 | Nov 1, 2026 | 4.1, 4.2 | Removed `POST /api/users/me/trips/seed` and the Map tab's "Load demo trips" button, which isn't part of the app's features. Demo trips can still be added to a local database with `scripts/seed-trips`. |
 | Nov 1, 2026 | 3.1, 4.3 | Places on the map can now be tapped to open their sheet, and the sheet can be closed, to match Google Maps (#71). The Places API also looks up a tapped place's address. |
 | Nov 2, 2026 | 2, 3, 4.1, 4.2, 4.3 | Replaced the Routes component design with the multimodal Planner; documented its plan/preferences endpoints and retained `/api/routes/chained` as a legacy interface during the Android migration (#72). |
+| Nov 4, 2026 | 4.5 | Added a standalone, feature-oriented dependency diagram covering the updated Android and backend components and their external API dependencies. |
+| Nov 4, 2026 | 4.6 | Updated the existing questionnaire, trip-planning, and trip-history sequence diagrams to reflect the current vehicle catalog, Planner API, and trip lifecycle. |
 
 
 ---
@@ -394,18 +396,27 @@ sequenceDiagram
 
 2. [**Complete Questionnaire**](#uc2)
 
+Vehicle make and model lookups use the local `vehicles.json` catalog and do not query MongoDB.
+
 ```mermaid
 sequenceDiagram
     actor User
     participant App as :Frontend
     participant Users as :Users
+    participant Vehicles as :Vehicles API
+    participant Catalog as :Vehicle catalog JSON data
+    participant UserService as :User service
     participant DB as :MongoDB
 
-    App->>Users: GET /api/vehicles/makes
-    Users-->>App: 200 { makes }
+    App->>Vehicles: GET /api/vehicles/makes
+    Vehicles->>Catalog: listMakes()
+    Catalog-->>Vehicles: makes
+    Vehicles-->>App: 200 { makes }
     User->>App: pick a make
-    App->>Users: GET /api/vehicles/makes/:make/models
-    Users-->>App: 200 { models }
+    App->>Vehicles: GET /api/vehicles/makes/:make/models
+    Vehicles->>Catalog: listModels(make)
+    Catalog-->>Vehicles: models
+    Vehicles-->>App: 200 { models }
     User->>App: enter car details and transit fare type
     User->>App: tap "Submit"
     App->>App: validate answers
@@ -418,13 +429,16 @@ sequenceDiagram
             Users-->>App: 400 { error }
             App-->>User: show error, keep answers
         else profile valid
-            Users->>DB: users.findByIdAndUpdate(userId, { timezone, vehicle, transit, profileComplete: true })
+            Users->>UserService: saveUserProfile(userId, profile)
+            UserService->>DB: update user profile and set profileComplete
             alt save fails
-                DB-->>Users: error
+                DB-->>UserService: error
+                UserService-->>Users: error
                 Users-->>App: 500 { error }
                 App-->>User: show error, keep answers
             else saved
-                DB-->>Users: updated user
+                DB-->>UserService: updated user
+                UserService-->>Users: updated user
                 Users-->>App: 200 { user }
                 App-->>User: show main screen
             end
@@ -434,30 +448,37 @@ sequenceDiagram
 
 3. [**Plan a Trip**](#uc3)
 
+The app may omit `costVsTime` so the backend uses the saved preference; `maxWalkMinutes` may override its saved default.
+
 ```mermaid
 sequenceDiagram
     actor User
     participant App as :Frontend
-    participant Planner as :Planner
+    participant Backend as :Backend
+    participant DB as :MongoDB
     participant GR as :Google Routes API
 
-    User->>App: choose destination, modes and optional arrive-by time
-    App->>Planner: POST /api/routes/plan { origin, destination, arriveBy, modes }
-    par drive matrix when Drive is allowed
-        Planner->>GR: computeRouteMatrix(origin, saved spots and destination, DRIVE)
-        GR-->>Planner: driving durations and distances
-    and transit matrix when Transit is allowed
-        Planner->>GR: computeRouteMatrix(saved spots and origin, destination, TRANSIT)
-        GR-->>Planner: transit durations and distances
+    User->>App: open Planner
+    App->>Backend: GET /api/users/me (load saved planning preferences)
+    Backend->>DB: load authenticated user and preferences
+    DB-->>Backend: user and preferences
+    Backend-->>App: 200 { user }
+    User->>App: choose origin, destination, modes and optional arrive-by time
+    App->>Backend: POST /api/routes/plan { origin, destination, arriveBy, modes, maxWalkMinutes, costVsTime? }
+    Backend->>DB: load user planning data and saved parking spots
+    DB-->>Backend: profile, preferences and parking spots
+    Backend->>GR: request route matrices and details for candidates
+    GR-->>Backend: durations, distances and route details
+    Backend->>Backend: schedule, price and rank options
+    Backend-->>App: 200 { options, warnings }
+    App-->>User: show ranked route options
+    opt user saves the route for later or starts it
+        App->>Backend: POST /api/users/me/trips { option, status: PLANNED or ACTIVE }
+        Backend->>DB: create trip
+        DB-->>Backend: saved trip
+        Backend-->>App: 201 { trip }
+        App-->>User: confirm save or continue to navigation
     end
-    Planner->>Planner: select candidates, schedule, price and rank options
-    par route details for selected options
-        Planner->>GR: computeRoutes for selected legs
-        GR-->>Planner: polylines, times and transit details
-    end
-    Planner-->>App: 200 { options, warnings }
-    App-->>User: show Cheapest, Fastest and Balanced options
-    Note over App,Planner: The current Android app still uses legacy POST /api/routes/chained until its Planner screen migration.
 ```
 
 4. [**View Trip History**](#uc4)
@@ -486,6 +507,24 @@ sequenceDiagram
             User->>App: change date range or sort
             App->>App: filter and sort trips
             App-->>User: show updated list
+
+            opt user starts or ends a trip
+                User->>App: tap Start or End
+                App->>Trips: PATCH /api/users/me/trips/:id { status, actualStart or actualEnd }
+                Trips->>DB: validate and save trip status transition
+                DB-->>Trips: updated trip
+                Trips-->>App: 200 { trip }
+                App->>App: update trip in cached history
+            end
+
+            opt user deletes a planned trip
+                User->>App: confirm Delete
+                App->>Trips: DELETE /api/users/me/trips/:id
+                Trips->>DB: delete PLANNED trip
+                DB-->>Trips: deleted
+                Trips-->>App: 204 No Content
+                App->>App: remove trip from cached history
+            end
         end
     end
 ```
