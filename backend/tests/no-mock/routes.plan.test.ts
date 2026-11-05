@@ -37,21 +37,29 @@ describe('Unmocked: POST /api/routes/plan', () => {
     expect(response.body).toEqual({ error: 'Unauthorized' });
   });
 
-  // Input: valid session and request bodies with a missing place, invalid coordinate, unknown mode, invalid preference,
-  // a max walk outside 1 to 60 whole minutes, or invalid date
+  // Input: valid session and request bodies that aren't an object, or have a missing place, blank label, invalid coordinate,
+  // non-string place ID, empty, unknown or repeated modes, invalid preference, a max walk outside 1 to 60 whole minutes,
+  // or invalid date
   // Expected status code: 400
   // Expected behavior: reject each request before contacting Google
   // Expected output: a field-specific error message
   test('Rejects invalid request fields', async () => {
     const { token } = await createSignedInUser();
     const badBodies = [
+      [['not', 'an object'], 'body'],
       [{ ...validBody, origin: undefined }, 'origin'],
+      [{ ...validBody, origin: { ...origin, label: ' ' } }, 'origin'],
+      [{ ...validBody, origin: { ...origin, lng: 181 } }, 'origin'],
       [{ ...validBody, destination: { ...destination, lat: 91 } }, 'destination'],
+      [{ ...validBody, destination: { ...destination, placeId: 5 } }, 'destination'],
+      [{ ...validBody, modes: [] }, 'modes'],
       [{ ...validBody, modes: ['BIKE'] }, 'modes'],
+      [{ ...validBody, modes: ['TRANSIT', 'TRANSIT'] }, 'modes'],
       [{ ...validBody, costVsTime: 101 }, 'costVsTime'],
       [{ ...validBody, maxWalkMinutes: 0 }, 'maxWalkMinutes'],
       [{ ...validBody, maxWalkMinutes: 7.5 }, 'maxWalkMinutes'],
       [{ ...validBody, arriveBy: 'tomorrow afternoon' }, 'arriveBy'],
+      [{ ...validBody, arriveBy: 1_800_000_000_000 }, 'arriveBy'],
     ] as const;
 
     for (const [body, field] of badBodies) {

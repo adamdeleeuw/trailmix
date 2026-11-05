@@ -2,7 +2,7 @@ import request from 'supertest';
 
 import { createApp } from '../../src/app';
 import { Types } from 'mongoose';
-import { UserModel } from '../../src/models/user.model';
+import { UserModel, type ParkingSpot } from '../../src/models/user.model';
 import { SessionModel } from '../../src/models/session.model';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { failingQuery, useTestDatabase } from '../helpers/db';
@@ -98,6 +98,61 @@ async function planWithMaxWalk(maxWalkMinutes: number, steps: object[], extra: o
 async function submitPlan(): Promise<request.Response> {
   const { token } = await createSignedInUser();
   return request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send(BODY);
+}
+
+const SAVED_AT = new Date('2026-11-02T00:00:00Z');
+const HOUR_MS = 60 * 60 * 1000;
+
+// a user with a car, a gas price and a fare, so every route can be priced
+const DRIVER = {
+  timezone: 'America/Vancouver',
+  vehicle: { make: 'Honda', model: 'Civic', colour: null, litresPer100km: 8 },
+  transit: { fareType: 'ADULT_STORED_VALUE' as const, monthlyPassZones: null },
+  lastGasPrice: { centsPerLitre: 200, savedAt: SAVED_AT },
+};
+
+// [count] parking spots evenly spaced on the straight line from BODY's origin to its destination, cheapest first
+function spotsOnTheWay(count: number): ParkingSpot[] {
+  return Array.from({ length: count }, (_, index) => {
+    const along = (index + 1) / (count + 1);
+    return {
+      _id: new Types.ObjectId(),
+      label: `Spot ${index}`,
+      location: {
+        lat: BODY.origin.lat + (BODY.destination.lat - BODY.origin.lat) * along,
+        lng: BODY.origin.lng + (BODY.destination.lng - BODY.origin.lng) * along,
+      },
+      placeId: `spot-${index}`,
+      rateCents: 100 + index * 50,
+      ratePer: 'HOUR' as const,
+      overnightAllowed: true, // so an arrive-by time near midnight can't drop a spot
+      createdAt: SAVED_AT,
+    };
+  });
+}
+
+// a Google route of [seconds] with [steps], as a driving or transit route details response
+function detailedRoute(seconds: number, steps: object[] = []): object {
+  return {
+    routes: [{
+      duration: `${seconds}s`,
+      distanceMeters: 10000,
+      polyline: { encodedPolyline: ROUTE_POLYLINE },
+      legs: [{ steps }],
+    }],
+  };
+}
+
+// the request body Google was sent, for the matrix and route details calls the Planner makes
+interface GoogleRequest {
+  travelMode?: string;
+  destination?: { location?: { latLng?: { latitude?: number } } };
+  origins?: unknown[];
+  destinations?: unknown[];
+}
+
+function googleRequest(init: RequestInit | undefined): GoogleRequest {
+  return JSON.parse(String(init?.body)) as GoogleRequest;
 }
 
 beforeEach(() => {
@@ -653,5 +708,160 @@ describe('Mocked: POST /api/routes/plan', () => {
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: 'Internal Server Error' });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Mocked behavior: Google finds every route, but the direct drive's matrix element has no duration,
+  //                  and the transit route has a walking step without coordinates
+  // Input: valid session, both modes, one saved spot, a cost-vs-time of 80 and an arrive-by time three hours away
+  // Expected status code: 200
+  // Expected behavior: the chain and the transit route are scheduled back from the arrive-by time, the drive
+  //                    without a duration and the step without coordinates are skipped
+  // Expected output: routes with transit that all arrive at the arrive-by time, none of them late
+  test('Plans backward from an arrive-by time', async () => {
+    const arriveBy = new Date(Date.now() + 3 * HOUR_MS).toISOString();
+    const { token } = await createSignedInUser({ ...DRIVER, parkingSpots: spotsOnTheWay(1) });
+    jest.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      const body = googleRequest(init);
+      if (body.origins !== undefined && body.travelMode === 'DRIVE') {
+        return Promise.resolve(googleSays([
+          { originIndex: 0, destinationIndex: 0, duration: '600s', distanceMeters: 6000, condition: 'ROUTE_EXISTS' },
+          { originIndex: 0, destinationIndex: 1, distanceMeters: 12000, condition: 'ROUTE_EXISTS' },
+        ]));
+      }
+      if (body.origins !== undefined) {
+        return Promise.resolve(googleSays([0, 1].map((originIndex) => ({
+          originIndex, destinationIndex: 0, duration: '1200s', distanceMeters: 8000, condition: 'ROUTE_EXISTS',
+        }))));
+      }
+      if (body.travelMode === 'DRIVE') return Promise.resolve(googleSays(detailedRoute(600)));
+      return Promise.resolve(googleSays(detailedRoute(1200, [
+        { travelMode: 'WALK', staticDuration: '60s', distanceMeters: 60 },
+        step('TRANSIT', 1140, { name: '99' }),
+      ])));
+    });
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
+      ...BODY, modes: ['DRIVE', 'TRANSIT'], arriveBy, costVsTime: 80,
+    });
+
+    expect(response.status).toBe(200);
+    const options = response.body.options as { arriveAt: string; lateByMinutes: number; legs: { mode: string }[] }[];
+    expect(options).toHaveLength(2);
+    for (const option of options) {
+      expect(option.legs.some((leg) => leg.mode === 'TRANSIT')).toBe(true);
+      expect(option.arriveAt).toBe(arriveBy);
+      expect(option.lateByMinutes).toBe(0);
+    }
+  });
+
+  // Mocked behavior: Google's only route takes 20 minutes
+  // Input: valid session, transit only, and an arrive-by time one minute away
+  // Expected status code: 200
+  // Expected behavior: no route arrives on time, so the planner falls back to the one that arrives earliest
+  // Expected output: one route labelled FASTEST that says how late it is
+  test('Returns the earliest route when every route is late', async () => {
+    jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(googleSays(MATRIX))
+      .mockResolvedValueOnce(googleSays(DETAIL));
+    const { token } = await createSignedInUser();
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
+      ...BODY, arriveBy: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.options).toHaveLength(1);
+    expect(response.body.options[0].label).toBe('FASTEST');
+    expect(response.body.options[0].lateByMinutes).toBeGreaterThan(0);
+  });
+
+  // Mocked behavior: the matrix says every chain through eight saved spots arrives on time, but the detailed drive
+  //                  to the first four spots asked about takes three hours, so those chains arrive late
+  // Input: valid session, both modes, eight saved spots and an arrive-by time two hours away
+  // Expected status code: 200
+  // Expected behavior: each late pick is replaced by the next best on-time spot for its label, skipping a
+  //                    replacement that also turns out late
+  // Expected output: Cheapest, Fastest and Balanced routes, all on time, none through the late spots
+  test('Replaces picks that turn out late with on-time spots', async () => {
+    const spots = spotsOnTheWay(8);
+    const lateLatitudes = new Set<number>();
+    const { token } = await createSignedInUser({ ...DRIVER, parkingSpots: spots });
+    jest.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      const body = googleRequest(init);
+      if (body.origins !== undefined) {
+        const isDrive = body.travelMode === 'DRIVE';
+        return Promise.resolve(googleSays(spots.map((_, index) => ({
+          originIndex: isDrive ? 0 : index,
+          destinationIndex: isDrive ? index : 0,
+          duration: isDrive ? '600s' : `${1800 - index * 60}s`, // the further along the spot, the shorter the ride
+          distanceMeters: 8000,
+          condition: 'ROUTE_EXISTS',
+        }))));
+      }
+      if (body.travelMode !== 'DRIVE') return Promise.resolve(googleSays(transitRoute([step('TRANSIT', 1200, { name: '99' })])));
+      const spotLatitude = body.destination?.location?.latLng?.latitude ?? 0;
+      if (lateLatitudes.size < 4) lateLatitudes.add(spotLatitude); // the three first picks, then the first replacement
+      return Promise.resolve(googleSays(detailedRoute(lateLatitudes.has(spotLatitude) ? 3 * 60 * 60 : 600)));
+    });
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
+      ...BODY, modes: ['DRIVE', 'TRANSIT'], arriveBy: new Date(Date.now() + 2 * HOUR_MS).toISOString(),
+    });
+
+    expect(response.status).toBe(200);
+    const options = response.body.options as { label: string; lateByMinutes: number; transferPoints: { lat: number }[] }[];
+    expect(options.map((option) => option.label)).toEqual(['CHEAPEST', 'FASTEST', 'BALANCED']);
+    expect(lateLatitudes.size).toBe(4);
+    for (const option of options) {
+      expect(option.lateByMinutes).toBe(0);
+      expect(lateLatitudes.has(option.transferPoints[0]?.lat ?? 0)).toBe(false);
+    }
+  });
+
+  // Mocked behavior: Google's transit route starts and ends with walks under a minute and 50 m
+  // Input: valid session, UBC-to-Downtown request with TRANSIT mode only
+  // Expected status code: 200
+  // Expected behavior: the first walk is merged into the ride after it, and the last into the ride before it
+  // Expected output: one transit leg whose time and distance include both walks
+  test('Merges short walks into the ride next to them', async () => {
+    const response = await planWithMaxWalk(10, [
+      step('WALK', 30),
+      step('TRANSIT', 1140, { name: '99' }),
+      step('WALK', 30),
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.options[0].legs).toHaveLength(1);
+    expect(response.body.options[0].legs[0]).toMatchObject({ mode: 'TRANSIT', durationSeconds: 1200, distanceMeters: 9180 });
+  });
+
+  // Mocked behavior: Google's transit route is one SkyTrain ride from Waterfront (zone 1)
+  // Input: valid session for a user with each fare type, transit only
+  // Expected status code: 200
+  // Expected behavior: the zones come from the SkyTrain stations, and passes cover the zones they include
+  // Expected output: the fare for that fare type and number of zones
+  test.each([
+    ['a U-Pass', { fareType: 'UPASS', monthlyPassZones: null }, 'King George', 0],
+    ['a concession monthly pass', { fareType: 'CONCESSION_MONTHLY_PASS', monthlyPassZones: null }, 'King George', 0],
+    ['a 3-zone adult pass', { fareType: 'ADULT_MONTHLY_PASS', monthlyPassZones: 3 }, 'King George', 0],
+    ['a 1-zone adult pass on a 3-zone trip', { fareType: 'ADULT_MONTHLY_PASS', monthlyPassZones: 1 }, 'King George', 540],
+    ['concession stored value on a 2-zone trip', { fareType: 'CONCESSION_STORED_VALUE', monthlyPassZones: null }, 'Metrotown', 340],
+  ] as const)('Prices a SkyTrain trip for %s', async (_name, transit, arrivalStop, fareCents) => {
+    const skyTrain = {
+      ...step('TRANSIT', 1200),
+      transitDetails: {
+        transitLine: { name: 'Expo Line', color: '#0067A0', vehicle: { name: 'SkyTrain', type: 'RAIL' } },
+        stopDetails: { departureStop: { name: 'Waterfront' }, arrivalStop: { name: arrivalStop }, stopCount: 10 },
+      },
+    };
+    jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(googleSays(MATRIX))
+      .mockResolvedValueOnce(googleSays(transitRoute([skyTrain])));
+    const { token } = await createSignedInUser({ transit });
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send(BODY);
+
+    expect(response.status).toBe(200);
+    expect(response.body.options[0].costBreakdown.fareCents).toBe(fareCents);
   });
 });
