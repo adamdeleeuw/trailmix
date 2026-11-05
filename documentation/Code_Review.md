@@ -16,7 +16,7 @@
 
 ### 2.1. Commit Hash Where Codacy Ran
 
-`TODO-MERGE-COMMIT-OF-PR-82`
+`4af7b0632009b09bca8502b04ef34cc77fee5e7a`
 
 This is the last commit on `main` that changes code, the same one the tests run on (see `Testing.md` 2.1.2). Later commits only change documentation, so Codacy reports the same issues on them.
 

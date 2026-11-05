@@ -59,7 +59,7 @@ The vehicle list endpoints have no mocked group. Their data is `backend/src/data
 
 #### 2.1.2. Commit Hash Where Tests Run
 
-`TODO-MERGE-COMMIT-OF-PR-82`
+`4af7b0632009b09bca8502b04ef34cc77fee5e7a`
 
 This is the last commit on `main` that changes code, with the Planner (#72), Planning and Trip Preview (#73), the trip lifecycle (#74), and the Codacy fixes and Planner tests (#82). Later commits only change documentation.
 
@@ -150,7 +150,7 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
 - **Planning Response Time**
 
   - **Verification:** The test signs in a user with a car, a gas price, a transit fare and three saved parking spots between UBC and Waterfront Station, then sends 20 authenticated `POST /api/routes/plan` requests from UBC to Waterfront with Drive and Transit allowed. It replaces Google Routes with a stub that waits the latencies in [`backend/tests/fixtures/planner-google-latencies.json`](../backend/tests/fixtures/planner-google-latencies.json) (35 ms for the driving matrix, 50 ms for the transit matrix and 40 ms for each route's details) before answering, so the timing covers the whole request through Express, the session check, MongoDB, and the Planner's candidate selection, scheduling, pricing and ranking, without depending on Google's speed or charging the API key. It measures each request with `performance.now()`, checks that every response is `200` with three routes, and passes only if the 95th percentile is at most 4,000 ms. The fixture latencies are far below real Google calls, so this measures the time the Planner itself adds, not Google's.
-  - **Log Output** (2026-11-04, Node 22.21.0, the code of commit `TODO-MERGE-COMMIT-OF-PR-82`)
+  - **Log Output** (2026-11-04, Node 22.21.0, commit `4af7b06`)
     ```
     Planner response times ms: 241.9, 146.5, 151.1, 138.1, 163.3, 149.1, 154.8, 146.4, 145.3, 138.8, 140.5, 152.0, 141.8, 139.3, 166.9, 149.5, 137.5, 138.1, 138.2, 127.2
     Planner p95: 166.9 ms
