@@ -43,7 +43,7 @@ const DETAIL = {
 
 function expectEveryLegHasDecodedGeometry(response: request.Response): void {
   expect(response.body.options.length).toBeGreaterThan(0);
-  for (const option of response.body.options as Array<{ legs: Array<{ mode: string; polyline: string }> }>) {
+  for (const option of response.body.options as { legs: { mode: string; polyline: string }[] }[]) {
     expect(option.legs.length).toBeGreaterThan(0);
     for (const leg of option.legs) {
       expect(leg.mode).toBeTruthy();
@@ -67,13 +67,15 @@ function step(mode: 'WALK' | 'TRANSIT', seconds: number, line?: { name: string; 
     polyline: { encodedPolyline: ROUTE_POLYLINE },
     startLocation: { latLng: { latitude: 49.26, longitude: -123.24 } },
     endLocation: { latLng: { latitude: 49.27, longitude: -123.2 } },
-    ...(mode === 'TRANSIT' ? {
-      transitDetails: {
-        headsign: 'Downtown',
-        stopDetails: { departureStop: { name: `${line?.name ?? 'Line'} stop` }, arrivalStop: { name: 'Next stop' }, stopCount: 4 },
-        transitLine: { name: line?.name ?? 'Line', nameShort: line?.nameShort, color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
-      },
-    } : {}),
+    ...(mode === 'TRANSIT'
+      ? {
+        transitDetails: {
+          headsign: 'Downtown',
+          stopDetails: { departureStop: { name: `${line?.name ?? 'Line'} stop` }, arrivalStop: { name: 'Next stop' }, stopCount: 4 },
+          transitLine: { name: line?.name ?? 'Line', nameShort: line?.nameShort, color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
+        },
+      }
+      : {}),
   };
 }
 
@@ -133,7 +135,7 @@ describe('Mocked: POST /api/routes/plan', () => {
       lastGasPrice: { centsPerLitre: 200, savedAt },
       parkingSpots,
     });
-    const fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = String(input);
       const body = JSON.parse(String(init?.body)) as {
         travelMode?: string;
@@ -141,7 +143,7 @@ describe('Mocked: POST /api/routes/plan', () => {
         destination?: { location?: { latLng?: { latitude?: number } } };
       };
       if (url.includes('computeRouteMatrix')) {
-        return googleSays(body.travelMode === 'DRIVE'
+        return Promise.resolve(googleSays(body.travelMode === 'DRIVE'
           ? points.map((_, destinationIndex) => ({
             originIndex: 0,
             destinationIndex,
@@ -155,34 +157,36 @@ describe('Mocked: POST /api/routes/plan', () => {
             duration: '1800s',
             distanceMeters: 15000,
             condition: 'ROUTE_EXISTS',
-          })));
+          }))));
       }
       const spotLatitude = body.travelMode === 'DRIVE'
         ? body.destination?.location?.latLng?.latitude
         : body.origin?.location?.latLng?.latitude;
-      if (body.travelMode === 'DRIVE' && spotLatitude === points[0]?.lat) return googleSays({ routes: [] });
+      if (body.travelMode === 'DRIVE' && spotLatitude === points[0]?.lat) return Promise.resolve(googleSays({ routes: [] }));
       const isDrive = body.travelMode === 'DRIVE';
-      return googleSays({
+      return Promise.resolve(googleSays({
         routes: [{
           duration: isDrive ? '900s' : '1800s',
           distanceMeters: isDrive ? 10000 : 15000,
           polyline: { encodedPolyline: ROUTE_POLYLINE },
           legs: [{
-            steps: isDrive ? [] : [{
-              travelMode: 'TRANSIT',
-              staticDuration: '1800s',
-              distanceMeters: 15000,
-              polyline: { encodedPolyline: ROUTE_POLYLINE },
-              startLocation: { latLng: { latitude: BODY.origin.lat, longitude: BODY.origin.lng } },
-              endLocation: { latLng: { latitude: BODY.destination.lat, longitude: BODY.destination.lng } },
-              transitDetails: {
-                transitLine: { name: '99', color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
-                stopDetails: { departureStop: { name: 'UBC Exchange' }, arrivalStop: { name: 'Waterfront' }, stopCount: 8 },
-              },
-            }],
+            steps: isDrive
+              ? []
+              : [{
+                travelMode: 'TRANSIT',
+                staticDuration: '1800s',
+                distanceMeters: 15000,
+                polyline: { encodedPolyline: ROUTE_POLYLINE },
+                startLocation: { latLng: { latitude: BODY.origin.lat, longitude: BODY.origin.lng } },
+                endLocation: { latLng: { latitude: BODY.destination.lat, longitude: BODY.destination.lng } },
+                transitDetails: {
+                  transitLine: { name: '99', color: '#00843D', vehicle: { name: 'Bus', type: 'BUS' } },
+                  stopDetails: { departureStop: { name: 'UBC Exchange' }, arrivalStop: { name: 'Waterfront' }, stopCount: 8 },
+                },
+              }],
           }],
         }],
-      });
+      }));
     });
 
     const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
@@ -225,11 +229,11 @@ describe('Mocked: POST /api/routes/plan', () => {
         createdAt: new Date('2026-11-01T00:00:00Z'),
       }],
     });
-    const fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = String(input);
       const body = JSON.parse(String(init?.body)) as { travelMode?: string };
       if (url.includes('computeRouteMatrix')) {
-        return googleSays(body.travelMode === 'DRIVE'
+        return Promise.resolve(googleSays(body.travelMode === 'DRIVE'
           ? [
             { originIndex: 0, destinationIndex: 0, duration: '900s', distanceMeters: 12000, condition: 'ROUTE_EXISTS' },
             { originIndex: 0, destinationIndex: 1, duration: '1800s', distanceMeters: 16000, condition: 'ROUTE_EXISTS' },
@@ -237,40 +241,42 @@ describe('Mocked: POST /api/routes/plan', () => {
           : [
             { originIndex: 0, destinationIndex: 0, duration: '1800s', distanceMeters: 14000, condition: 'ROUTE_EXISTS' },
             { originIndex: 1, destinationIndex: 0, duration: '3600s', distanceMeters: 20000, condition: 'ROUTE_EXISTS' },
-          ]);
+          ]));
       }
-      return googleSays({
+      return Promise.resolve(googleSays({
         routes: [{
           duration: body.travelMode === 'DRIVE' ? '900s' : '1800s',
           distanceMeters: body.travelMode === 'DRIVE' ? 12000 : 14000,
           polyline: { encodedPolyline: ROUTE_POLYLINE },
           legs: [{
-            steps: body.travelMode === 'TRANSIT' ? [
-              {
-                travelMode: 'WALK',
-                staticDuration: '120s',
-                distanceMeters: 100,
-                polyline: { encodedPolyline: ROUTE_POLYLINE },
-                startLocation: { latLng: { latitude: 49.271, longitude: -123.187 } },
-                endLocation: { latLng: { latitude: 49.272, longitude: -123.186 } },
-              },
-              {
-                travelMode: 'TRANSIT',
-                staticDuration: '1680s',
-                distanceMeters: 13900,
-                polyline: { encodedPolyline: ROUTE_POLYLINE },
-                startLocation: { latLng: { latitude: 49.272, longitude: -123.186 } },
-                endLocation: { latLng: { latitude: 49.285, longitude: -123.111 } },
-                transitDetails: {
-                  headsign: 'Waterfront',
-                  stopDetails: { departureStop: { name: 'Oakridge-41st Avenue' }, arrivalStop: { name: 'Waterfront' }, stopCount: 6 },
-                  transitLine: { name: 'Canada Line', color: '#0067A0', vehicle: { name: 'SkyTrain', type: 'RAIL' } },
+            steps: body.travelMode === 'TRANSIT'
+              ? [
+                {
+                  travelMode: 'WALK',
+                  staticDuration: '120s',
+                  distanceMeters: 100,
+                  polyline: { encodedPolyline: ROUTE_POLYLINE },
+                  startLocation: { latLng: { latitude: 49.271, longitude: -123.187 } },
+                  endLocation: { latLng: { latitude: 49.272, longitude: -123.186 } },
                 },
-              },
-            ] : [],
+                {
+                  travelMode: 'TRANSIT',
+                  staticDuration: '1680s',
+                  distanceMeters: 13900,
+                  polyline: { encodedPolyline: ROUTE_POLYLINE },
+                  startLocation: { latLng: { latitude: 49.272, longitude: -123.186 } },
+                  endLocation: { latLng: { latitude: 49.285, longitude: -123.111 } },
+                  transitDetails: {
+                    headsign: 'Waterfront',
+                    stopDetails: { departureStop: { name: 'Oakridge-41st Avenue' }, arrivalStop: { name: 'Waterfront' }, stopCount: 6 },
+                    transitLine: { name: 'Canada Line', color: '#0067A0', vehicle: { name: 'SkyTrain', type: 'RAIL' } },
+                  },
+                },
+              ]
+              : [],
           }],
         }],
-      });
+      }));
     });
 
     const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
@@ -283,7 +289,7 @@ describe('Mocked: POST /api/routes/plan', () => {
     expect(response.status).toBe(200);
     expectEveryLegHasDecodedGeometry(response);
     expect(response.body.options).toHaveLength(3);
-    expect(response.body.options.some((option: { transferPoints: unknown[]; legs: Array<{ mode: string }> }) =>
+    expect(response.body.options.some((option: { transferPoints: unknown[]; legs: { mode: string }[] }) =>
       option.transferPoints.length === 1 && option.legs.length === 3 && option.legs[1]?.mode === 'WALK')).toBe(true);
     expect(response.body.options.map((option: { label: string }) => option.label)).toEqual([
       'CHEAPEST', 'FASTEST', 'BALANCED',
@@ -304,8 +310,8 @@ describe('Mocked: POST /api/routes/plan', () => {
 
     const response = await submitPlan();
     const matrixRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      origins: Array<{ waypoint?: { location?: { latLng?: { latitude?: number; longitude?: number } } } }>;
-      destinations: Array<{ waypoint?: { location?: { latLng?: { latitude?: number; longitude?: number } } } }>;
+      origins: { waypoint?: { location?: { latLng?: { latitude?: number; longitude?: number } } } }[];
+      destinations: { waypoint?: { location?: { latLng?: { latitude?: number; longitude?: number } } } }[];
     };
 
     expect(response.status).toBe(200);
@@ -403,7 +409,7 @@ describe('Mocked: POST /api/routes/plan', () => {
     });
     expect(response.body.options[0].legs.flatMap((leg: { from: { label: string }; to: { label: string } }) =>
       [leg.from.label, leg.to.label])).not.toContain('Transit connection');
-    expect(decodePolyline(response.body.options[0].legs[0].polyline)).toHaveLength(9);
+    expect(decodePolyline(response.body.options[0].legs[0].polyline as string)).toHaveLength(9);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

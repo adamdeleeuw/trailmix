@@ -72,9 +72,9 @@ describe('Unmocked: POST /api/routes/plan', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.options.length).toBeGreaterThan(0);
-    for (const option of response.body.options as Array<{
-      legs: Array<{ mode: string; polyline: string; from: { label: string }; to: { label: string } }>;
-    }>) {
+    for (const option of response.body.options as {
+      legs: { mode: string; polyline: string; from: { label: string }; to: { label: string } }[];
+    }[]) {
       expect(option.legs.length).toBeGreaterThan(0);
       for (const leg of option.legs) {
         expect(leg.mode).toBeTruthy();
