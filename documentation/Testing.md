@@ -198,18 +198,19 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
     | 5c. No route exists for any allowed mode. | Not automated yet: Google finds a route between any two places the search offers in Metro Vancouver. |
     | 5d. Google Routes can't be reached, even after one retry. | Not automated yet: causing it needs a mocked backend, and these tests use the real one. Any run where it happens fails in the wait in step 4. The mocked backend tests of `POST /api/routes/plan` check the `503` itself. |
 
-  - **Test Logs:** The run of `scripts/run-frontend-e2e-tests.sh` on 2026-11-04, on the Pixel 9 emulator (API 36). The Docker and Gradle build output is trimmed. Gradle's console only prints totals, so each test's result below comes from the run's JUnit report in `frontend/app/build/outputs/androidTest-results/connected/debug/`.
+  - **Test Logs:** The run of `scripts/run-frontend-e2e-tests.sh` on 2026-11-04, at commit `4af7b06`, on the Pixel 9 emulator (API 36). The Docker and Gradle build output is trimmed. Gradle's console only prints totals, so each test's result below comes from the run's JUnit report in `frontend/app/build/outputs/androidTest-results/connected/debug/`.
     ```
     $ bash scripts/run-frontend-e2e-tests.sh
     ==> Starting backend (scripts/run-backend.sh) ...
      ✔ Image cpen321-project-backend       Built
      ✔ Container cpen321-project-mongo-1   Healthy
-     ✔ Container cpen321-project-backend-1 Running
+     ✔ Container cpen321-project-backend-1 Started
     ==> Backend is up. Stop with: docker compose down
-    ==> Emulator already running.
+    ==> Starting emulator 'Pixel_9' ...
+    ==> Emulator ready.
     ==> Building and installing app...
     Installed on 1 device.
-    BUILD SUCCESSFUL in 25s
+    BUILD SUCCESSFUL in 15s
     ==> Launching app...
     ==> Done. Sign in on the emulator to verify.
     ==> Running frontend E2E tests (com.example.cpen321application.e2e.BackButtonTest,com.example.cpen321application.e2e.NavBarTest,com.example.cpen321application.e2e.PlanTripTest,com.example.cpen321application.e2e.QuestionnaireBackTest) ...
@@ -219,22 +220,22 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
     Pixel_9(AVD) - 16 Tests 12/12 completed. (0 skipped) (0 failed)
     Finished 12 tests on Pixel_9(AVD) - 16
 
-    BUILD SUCCESSFUL in 2m 16s
+    BUILD SUCCESSFUL in 1m 26s
     ==> Frontend E2E tests finished.
 
     Results (JUnit report, 12 tests, 0 failures, 0 errors, 0 skipped):
-    PASSED  PlanTripTest.driveWithNoParkingSpotsShowsTheBanner          21.36 s
-    PASSED  PlanTripTest.plansUpToThreeRoutesAndPreviewsOne             25.58 s
-    PASSED  BackButtonTest.backOnSignInExitsApp                          3.87 s
-    PASSED  BackButtonTest.backOnMainExitsApp                            3.20 s
-    PASSED  NavBarTest.barIsHiddenOnTheEditScreenAndBackReturnsToProfile 5.10 s
-    PASSED  NavBarTest.tabKeepsItsPlaceWhenSwitchingAwayAndBack          5.54 s
-    PASSED  NavBarTest.backFromHistoryOrProfileGoesToMap                 8.58 s
-    PASSED  NavBarTest.opensOnMapWithMapSelected                         3.01 s
-    PASSED  NavBarTest.historyTabShowsTheHistoryScreen                   3.48 s
-    PASSED  QuestionnaireBackTest.keepGoingClosesTheDialog               3.27 s
-    PASSED  QuestionnaireBackTest.signOutSignsOut                        3.14 s
-    PASSED  QuestionnaireBackTest.backAgainClosesTheDialog               3.05 s
+    PASSED  PlanTripTest.driveWithNoParkingSpotsShowsTheBanner          14.79 s
+    PASSED  PlanTripTest.plansUpToThreeRoutesAndPreviewsOne             18.14 s
+    PASSED  BackButtonTest.backOnSignInExitsApp                          3.17 s
+    PASSED  BackButtonTest.backOnMainExitsApp                            2.38 s
+    PASSED  NavBarTest.barIsHiddenOnTheEditScreenAndBackReturnsToProfile 3.92 s
+    PASSED  NavBarTest.tabKeepsItsPlaceWhenSwitchingAwayAndBack          4.12 s
+    PASSED  NavBarTest.backFromHistoryOrProfileGoesToMap                 4.45 s
+    PASSED  NavBarTest.opensOnMapWithMapSelected                         1.96 s
+    PASSED  NavBarTest.historyTabShowsTheHistoryScreen                   2.35 s
+    PASSED  QuestionnaireBackTest.keepGoingClosesTheDialog               2.26 s
+    PASSED  QuestionnaireBackTest.signOutSignsOut                        2.45 s
+    PASSED  QuestionnaireBackTest.backAgainClosesTheDialog               2.66 s
     ```
 
 - **Use Case: Preview Route** ([Requirements_and_Design.md, Use Case 2](Requirements_and_Design.md#uc2))
