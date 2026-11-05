@@ -101,7 +101,8 @@ async function submitPlan(): Promise<request.Response> {
 }
 
 const SAVED_AT = new Date('2026-11-02T00:00:00Z');
-const HOUR_MS = 60 * 60 * 1000;
+const HOUR_SECONDS = 60 * 60;
+const HOUR_MS = HOUR_SECONDS * 1000;
 
 // a user with a car, a gas price and a fare, so every route can be priced
 const DRIVER = {
@@ -147,12 +148,27 @@ function detailedRoute(seconds: number, steps: object[] = []): object {
 interface GoogleRequest {
   travelMode?: string;
   destination?: { location?: { latLng?: { latitude?: number } } };
-  origins?: unknown[];
-  destinations?: unknown[];
+  origins?: unknown[]; // only matrix requests have origins
 }
 
 function googleRequest(init: { body?: unknown } | undefined): GoogleRequest {
   return JSON.parse(String(init?.body)) as GoogleRequest;
+}
+
+// a matrix element saying Google found a route of [seconds] from origin [originIndex] to destination [destinationIndex]
+function routeExists(originIndex: number, destinationIndex: number, seconds: number): object {
+  return { originIndex, destinationIndex, duration: `${seconds}s`, distanceMeters: 8000, condition: 'ROUTE_EXISTS' };
+}
+
+// answers the Planner's Google calls: [matrix] gives each mode's matrix, and [details] each route's details,
+// given the mode and the latitude of the route's destination
+function fakeGoogle(matrix: (mode: string) => object[], details: (mode: string, latitude: number) => object): void {
+  jest.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+    const body = googleRequest(init);
+    const mode = body.travelMode ?? '';
+    if (body.origins !== undefined) return Promise.resolve(googleSays(matrix(mode)));
+    return Promise.resolve(googleSays(details(mode, body.destination?.location?.latLng?.latitude ?? 0)));
+  });
 }
 
 beforeEach(() => {
@@ -720,25 +736,17 @@ describe('Mocked: POST /api/routes/plan', () => {
   test('Plans backward from an arrive-by time', async () => {
     const arriveBy = new Date(Date.now() + 3 * HOUR_MS).toISOString();
     const { token } = await createSignedInUser({ ...DRIVER, parkingSpots: spotsOnTheWay(1) });
-    jest.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
-      const body = googleRequest(init);
-      if (body.origins !== undefined && body.travelMode === 'DRIVE') {
-        return Promise.resolve(googleSays([
-          { originIndex: 0, destinationIndex: 0, duration: '600s', distanceMeters: 6000, condition: 'ROUTE_EXISTS' },
-          { originIndex: 0, destinationIndex: 1, distanceMeters: 12000, condition: 'ROUTE_EXISTS' },
-        ]));
-      }
-      if (body.origins !== undefined) {
-        return Promise.resolve(googleSays([0, 1].map((originIndex) => ({
-          originIndex, destinationIndex: 0, duration: '1200s', distanceMeters: 8000, condition: 'ROUTE_EXISTS',
-        }))));
-      }
-      if (body.travelMode === 'DRIVE') return Promise.resolve(googleSays(detailedRoute(600)));
-      return Promise.resolve(googleSays(detailedRoute(1200, [
-        { travelMode: 'WALK', staticDuration: '60s', distanceMeters: 60 },
-        step('TRANSIT', 1140, { name: '99' }),
-      ])));
-    });
+    fakeGoogle(
+      (mode) => (mode === 'DRIVE'
+        ? [routeExists(0, 0, 600), { originIndex: 0, destinationIndex: 1, distanceMeters: 12000, condition: 'ROUTE_EXISTS' }]
+        : [routeExists(0, 0, 1200), routeExists(1, 0, 1200)]),
+      (mode) => (mode === 'DRIVE'
+        ? detailedRoute(600)
+        : detailedRoute(1200, [
+          { travelMode: 'WALK', staticDuration: '60s', distanceMeters: 60 },
+          step('TRANSIT', 1140, { name: '99' }),
+        ])),
+    );
 
     const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
       ...BODY, modes: ['DRIVE', 'TRANSIT'], arriveBy, costVsTime: 80,
@@ -754,24 +762,25 @@ describe('Mocked: POST /api/routes/plan', () => {
     }
   });
 
-  // Mocked behavior: Google's only route takes 20 minutes
-  // Input: valid session, transit only, and an arrive-by time one minute away
+  // Mocked behavior: Google's direct drive takes 15 minutes and its direct transit route 20 minutes
+  // Input: valid session, both modes, no saved spots, and an arrive-by time one minute away
   // Expected status code: 200
   // Expected behavior: no route arrives on time, so the planner falls back to the one that arrives earliest
-  // Expected output: one route labelled FASTEST that says how late it is
+  // Expected output: one drive route labelled FASTEST that says how late it is
   test('Returns the earliest route when every route is late', async () => {
-    jest.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(googleSays(MATRIX))
-      .mockResolvedValueOnce(googleSays(DETAIL));
-    const { token } = await createSignedInUser();
+    const { token } = await createSignedInUser(DRIVER);
+    fakeGoogle(
+      (mode) => [routeExists(0, 0, mode === 'DRIVE' ? 900 : 1200)],
+      (mode) => (mode === 'DRIVE' ? detailedRoute(900) : DETAIL),
+    );
 
     const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
-      ...BODY, arriveBy: new Date(Date.now() + 60_000).toISOString(),
+      ...BODY, modes: ['DRIVE', 'TRANSIT'], arriveBy: new Date(Date.now() + 60_000).toISOString(),
     });
 
     expect(response.status).toBe(200);
     expect(response.body.options).toHaveLength(1);
-    expect(response.body.options[0].label).toBe('FASTEST');
+    expect(response.body.options[0]).toMatchObject({ label: 'FASTEST', legs: [{ mode: 'DRIVE' }] });
     expect(response.body.options[0].lateByMinutes).toBeGreaterThan(0);
   });
 
@@ -786,23 +795,16 @@ describe('Mocked: POST /api/routes/plan', () => {
     const spots = spotsOnTheWay(8);
     const lateLatitudes = new Set<number>();
     const { token } = await createSignedInUser({ ...DRIVER, parkingSpots: spots });
-    jest.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
-      const body = googleRequest(init);
-      if (body.origins !== undefined) {
-        const isDrive = body.travelMode === 'DRIVE';
-        return Promise.resolve(googleSays(spots.map((_, index) => ({
-          originIndex: isDrive ? 0 : index,
-          destinationIndex: isDrive ? index : 0,
-          duration: isDrive ? '600s' : `${1800 - index * 60}s`, // the further along the spot, the shorter the ride
-          distanceMeters: 8000,
-          condition: 'ROUTE_EXISTS',
-        }))));
-      }
-      if (body.travelMode !== 'DRIVE') return Promise.resolve(googleSays(transitRoute([step('TRANSIT', 1200, { name: '99' })])));
-      const spotLatitude = body.destination?.location?.latLng?.latitude ?? 0;
-      if (lateLatitudes.size < 4) lateLatitudes.add(spotLatitude); // the three first picks, then the first replacement
-      return Promise.resolve(googleSays(detailedRoute(lateLatitudes.has(spotLatitude) ? 3 * 60 * 60 : 600)));
-    });
+    fakeGoogle(
+      (mode) => spots.map((_, index) => (mode === 'DRIVE'
+        ? routeExists(0, index, 600)
+        : routeExists(index, 0, 1800 - index * 60))), // the further along the spot, the shorter the ride
+      (mode, latitude) => {
+        if (mode !== 'DRIVE') return transitRoute([step('TRANSIT', 1200, { name: '99' })]);
+        if (lateLatitudes.size < 4) lateLatitudes.add(latitude); // the three first picks, then the first replacement
+        return detailedRoute(lateLatitudes.has(latitude) ? 3 * HOUR_SECONDS : 600);
+      },
+    );
 
     const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
       ...BODY, modes: ['DRIVE', 'TRANSIT'], arriveBy: new Date(Date.now() + 2 * HOUR_MS).toISOString(),
@@ -815,6 +817,57 @@ describe('Mocked: POST /api/routes/plan', () => {
     for (const option of options) {
       expect(option.lateByMinutes).toBe(0);
       expect(lateLatitudes.has(option.transferPoints[0]?.lat ?? 0)).toBe(false);
+    }
+  });
+
+  // Mocked behavior: the matrix says the chains through three saved spots arrive on time, but every detailed
+  //                  drive takes three hours, so every chain arrives late
+  // Input: valid session, both modes, three saved spots and an arrive-by time two hours away
+  // Expected status code: 200
+  // Expected behavior: no pick or replacement arrives on time, so the planner falls back to the earliest late route
+  // Expected output: one chain labelled FASTEST that says how late it is
+  test('Returns the earliest late route when every pick turns out late', async () => {
+    const spots = spotsOnTheWay(3);
+    const { token } = await createSignedInUser({ ...DRIVER, parkingSpots: spots });
+    fakeGoogle(
+      (mode) => spots.map((_, index) => (mode === 'DRIVE' ? routeExists(0, index, 600) : routeExists(index, 0, 1800))),
+      (mode) => (mode === 'DRIVE' ? detailedRoute(3 * HOUR_SECONDS) : transitRoute([step('TRANSIT', 1200, { name: '99' })])),
+    );
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
+      ...BODY, modes: ['DRIVE', 'TRANSIT'], arriveBy: new Date(Date.now() + 2 * HOUR_MS).toISOString(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.options).toHaveLength(1);
+    expect(response.body.options[0].label).toBe('FASTEST');
+    expect(response.body.options[0].transferPoints).toHaveLength(1);
+    expect(response.body.options[0].lateByMinutes).toBeGreaterThan(0);
+  });
+
+  // Mocked behavior: the transit ride from the only saved spot takes 30 hours, and the direct routes are normal
+  // Input: valid session, both modes, and one saved spot that doesn't allow overnight parking
+  // Expected status code: 200
+  // Expected behavior: the chain would leave the car parked past midnight, so the planner drops it
+  // Expected output: only the direct routes, with no transfer point
+  test('Drops a chain that would park overnight where it is not allowed', async () => {
+    const parkingSpots = spotsOnTheWay(1).map((spot) => ({ ...spot, overnightAllowed: false }));
+    const { token } = await createSignedInUser({ ...DRIVER, parkingSpots });
+    fakeGoogle(
+      (mode) => (mode === 'DRIVE'
+        ? [routeExists(0, 0, 600), routeExists(0, 1, 900)]
+        : [routeExists(0, 0, 30 * HOUR_SECONDS), routeExists(1, 0, 1200)]),
+      (mode) => (mode === 'DRIVE' ? detailedRoute(900) : DETAIL),
+    );
+
+    const response = await request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send({
+      ...BODY, modes: ['DRIVE', 'TRANSIT'],
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.options).toHaveLength(2);
+    for (const option of response.body.options as { transferPoints: unknown[] }[]) {
+      expect(option.transferPoints).toHaveLength(0);
     }
   });
 
