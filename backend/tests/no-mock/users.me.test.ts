@@ -37,6 +37,23 @@ describe('Unmocked: GET /api/users/me', () => {
     });
   });
 
+  // Input: Authorization header for an account made before the Planner, so it has no planning preferences stored
+  // Expected status code: 200
+  // Expected behavior: the account is read without schema defaults (lean), and the response fills in the defaults
+  // Expected output: { user } with costVsTime 50, default modes Drive and Transit, and maxWalkMinutes 10
+  test('Account with no planning preferences stored', async () => {
+    const { user, token } = await createSignedInUser();
+    await UserModel.collection.updateOne(
+      { _id: user._id },
+      { $unset: { costVsTime: '', defaultModes: '', maxWalkMinutes: '' } },
+    );
+
+    const response = await request(createApp()).get('/api/users/me').set('Authorization', bearer(token));
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject({ costVsTime: 50, defaultModes: ['DRIVE', 'TRANSIT'], maxWalkMinutes: 10 });
+  });
+
   // Input: Authorization header for a user who has submitted the questionnaire
   // Expected status code: 200
   // Expected behavior: the saved profile is returned with the account

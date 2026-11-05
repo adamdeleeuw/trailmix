@@ -92,7 +92,7 @@ class NavigationFormatTest {
 
     @Test
     fun theSummaryUsesTheActualTimes() {
-        val trip = testTrip(cost = 765, duration = 39 * 60, route = route)
+        val trip = testTrip(cost = 765, duration = 39 * 60).copy(route = route)
             .copy(actualStart = ROUTE_LEAVES, actualEnd = ROUTE_LEAVES.plusSeconds(42 * MINUTE))
 
         assertEquals("42 min · $7.65", finishedText(trip))

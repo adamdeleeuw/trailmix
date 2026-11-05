@@ -89,12 +89,14 @@ class GooglePlaceSearch(context: Context) : PlaceSearch {
         return PlaceDetails(placeId, name, place.formattedAddress, location)
     }
 
-    override suspend fun nearestAddress(location: LatLng): String? = withContext(Dispatchers.IO) {
-        if (!Geocoder.isPresent()) return@withContext null
-        try {
-            firstAddress(Geocoder(appContext), location)?.getAddressLine(0)
-        } catch (e: IOException) {
-            null // no network: the pin is still saved, just without an address
+    override suspend fun nearestAddress(location: LatLng): String? {
+        if (!Geocoder.isPresent()) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                firstAddress(Geocoder(appContext), location)?.getAddressLine(0)
+            } catch (e: IOException) {
+                null // no network: the pin is still saved, just without an address
+            }
         }
     }
 
@@ -120,7 +122,7 @@ private suspend fun firstAddress(geocoder: Geocoder, location: LatLng): Address?
         geocoder.getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()
     }
 
-/** Waits for a Play services task, turning its failure into a [PlaceSearchException]. */
+// waits for a Play services task, turning its failure into a [PlaceSearchException]
 private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
     addOnSuccessListener { continuation.resume(it) }
     addOnFailureListener { continuation.resumeWithException(PlaceSearchException(it)) }

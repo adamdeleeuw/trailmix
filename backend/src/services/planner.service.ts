@@ -1,6 +1,6 @@
 import type { Types } from 'mongoose';
 import type { Leg, Place } from '../models/trip.model';
-import { DEFAULT_MAX_WALK_MINUTES, type ParkingSpot, type User } from '../models/user.model';
+import { DEFAULT_COST_VS_TIME, DEFAULT_MAX_WALK_MINUTES, type ParkingSpot, type User } from '../models/user.model';
 import type { PlanRequest } from '../validation/plan-request.validation';
 import { getParkingSpots } from './parking-spot.service';
 import {
@@ -374,14 +374,16 @@ export async function planTrip(userId: Types.ObjectId, user: User, request: Plan
     ? { departureTime: new Date(now.getTime() + PARKING_BUFFER_SECONDS * 1000).toISOString() }
     : { arrivalTime: request.arriveBy.toISOString() };
   const [driveMatrix, transitMatrix] = await Promise.all([
-    canDrive ? computeRouteMatrix([request.origin], driveDestinations, 'DRIVE', {
-      departureTime: new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS).toISOString(),
-    }) : Promise.resolve([]),
+    canDrive
+      ? computeRouteMatrix([request.origin], driveDestinations, 'DRIVE', {
+        departureTime: new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS).toISOString(),
+      })
+      : Promise.resolve([]),
     canTransit ? computeRouteMatrix(transitOrigins, [request.destination], 'TRANSIT', transitTime) : Promise.resolve([]),
   ]);
   const driveByDestination = new Map(driveMatrix.map((element) => [element.destinationIndex, element]));
   const transitByOrigin = new Map(transitMatrix.map((element) => [element.originIndex, element]));
-  const costVsTime = request.costVsTime ?? user.costVsTime ?? 50;
+  const costVsTime = request.costVsTime ?? user.costVsTime ?? DEFAULT_COST_VS_TIME;
   const candidates: PlanCandidate[] = [];
 
   spots.forEach((spot, index) => {

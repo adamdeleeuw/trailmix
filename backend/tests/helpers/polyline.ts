@@ -1,5 +1,5 @@
-export function decodePolyline(encoded: string): Array<[number, number]> {
-  const points: Array<[number, number]> = [];
+export function decodePolyline(encoded: string): [number, number][] {
+  const points: [number, number][] = [];
   let index = 0;
   let latitude = 0;
   let longitude = 0;

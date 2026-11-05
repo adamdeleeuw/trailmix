@@ -55,10 +55,10 @@ export function parsePlanRequest(body: unknown): PlanRequestParseResult {
     request: {
       origin,
       destination,
-      arriveBy: body.arriveBy === null ? null : new Date(body.arriveBy as string),
+      arriveBy: body.arriveBy === null ? null : new Date(body.arriveBy),
       modes: [...body.modes] as PlannerMode[],
-      ...(body.costVsTime === undefined ? {} : { costVsTime: body.costVsTime as number }),
-      ...(body.maxWalkMinutes === undefined ? {} : { maxWalkMinutes: body.maxWalkMinutes as number }),
+      ...(body.costVsTime === undefined ? {} : { costVsTime: body.costVsTime }),
+      ...(body.maxWalkMinutes === undefined ? {} : { maxWalkMinutes: body.maxWalkMinutes }),
     },
   };
 }

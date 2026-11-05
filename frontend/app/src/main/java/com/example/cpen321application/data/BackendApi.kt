@@ -236,9 +236,6 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, Pl
     private const val PARKING_SPOTS_PATH = "/api/users/me/parking-spots"
     private const val TRIPS_PATH = "/api/users/me/trips"
 
-    private const val TIMEOUT_MS = 10_000
-    private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
-
     override suspend fun signIn(idToken: String) =
         request("POST", "/api/auth/google", body = JSONObject().put("idToken", idToken)) {
             SignInResponse(it.getString("sessionToken"), parseUser(it.getJSONObject("user")))
@@ -319,36 +316,6 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, Pl
     override suspend fun deleteParkingSpot(sessionToken: String, id: String) =
         request("DELETE", "$PARKING_SPOTS_PATH/${encodePathSegment(id)}", sessionToken) {}
 
-    // JSONObject.NULL so an unknown cost is sent as an explicit null
-    private fun ParkingSpotDetails.toJson() = JSONObject()
-        .put("label", label)
-        .put("rateCents", rateCents ?: JSONObject.NULL)
-        .put("ratePer", ratePer?.name ?: JSONObject.NULL)
-        .put("overnightAllowed", overnightAllowed)
-
-    // URLEncoder is for query strings, so its "+" for a space is swapped for the path form
-    private fun encodePathSegment(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-
-    private fun JSONArray.toStrings() = List(length()) { getString(it) }
-
-    // JSONObject.NULL because put(key, null) would drop the key, and the backend needs an explicit null
-    private fun Profile.toJson() = JSONObject()
-        .put("timezone", timezone)
-        .put("vehicle", vehicle?.let {
-            JSONObject()
-                .put("make", it.make)
-                .put("model", it.model)
-                .put("colour", it.colour ?: JSONObject.NULL)
-                .put("litresPer100km", it.litresPer100km)
-        } ?: JSONObject.NULL)
-        .put("transit", transit?.let {
-            JSONObject()
-                .put("fareType", it.fareType.name)
-                .put("monthlyPassZones", it.monthlyPassZones ?: JSONObject.NULL)
-        } ?: JSONObject.NULL)
-
-    private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
-
     override suspend fun planTrip(sessionToken: String?, trip: PlanRequest) =
         request("POST", "/api/routes/plan", sessionToken, body = trip.toJson()) { it.toTripPlan() }
 
@@ -359,67 +326,100 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, Pl
         request("PUT", "/api/users/me/planning-preferences", sessionToken, body = preferences.toJson()) {
             it.getJSONObject("user").toPlanningPreferences()
         }
+}
 
-    private fun parseUser(json: JSONObject) = User(
-        id = json.getString("id"),
-        email = json.getString("email"),
-        name = json.getString("name"),
-        photoUrl = json.stringOrNull("photoUrl"),
-        profileComplete = json.getBoolean("profileComplete"),
-        timezone = json.stringOrNull("timezone"),
-        vehicle = json.objectOrNull("vehicle")?.let {
-            Vehicle(
-                make = it.getString("make"),
-                model = it.getString("model"),
-                colour = it.stringOrNull("colour"),
-                litresPer100km = it.getDouble("litresPer100km"),
-            )
-        },
-        transit = json.objectOrNull("transit")?.let {
-            Transit(FareType.valueOf(it.getString("fareType")), it.intOrNull("monthlyPassZones"))
-        },
-        lastGasPrice = json.objectOrNull("lastGasPrice")?.let {
-            GasPrice(it.getDouble("centsPerLitre"), Instant.parse(it.getString("savedAt")))
-        },
-    )
+private const val TIMEOUT_MS = 10_000
+private val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
-    // parses inside the try so a malformed body (e.g. a captive portal page) becomes an IOException
-    private suspend fun <T> request(
-        method: String,
-        path: String,
-        sessionToken: String? = null,
-        body: JSONObject? = null,
-        parse: (JSONObject) -> T,
-    ): T = withContext(Dispatchers.IO) {
-        val connection = URL(baseUrl + path).openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = method
-            connection.connectTimeout = TIMEOUT_MS
-            connection.readTimeout = TIMEOUT_MS
-            sessionToken?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
-            body?.let {
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.outputStream.use { out -> out.write(it.toString().toByteArray()) }
-            }
+// JSONObject.NULL so an unknown cost is sent as an explicit null
+private fun ParkingSpotDetails.toJson() = JSONObject()
+    .put("label", label)
+    .put("rateCents", rateCents ?: JSONObject.NULL)
+    .put("ratePer", ratePer?.name ?: JSONObject.NULL)
+    .put("overnightAllowed", overnightAllowed)
 
-            when (val code = connection.responseCode) {
-                HTTP_OK, HTTP_CREATED, HTTP_NO_CONTENT -> {
-                    val text = connection.inputStream.bufferedReader().use { it.readText() }
-                    parse(JSONObject(text.ifEmpty { "{}" })) // a 204 has no body
-                }
-                HTTP_UNAUTHORIZED -> throw UnauthorizedException()
-                else -> throw HttpException(code, connection.errorMessage())
-            }
-        } catch (e: JSONException) {
-            throw IOException("Malformed response", e)
-        } catch (e: IllegalArgumentException) {
-            throw IOException("Unknown enum value", e) // e.g. TripMode or TripStatus valueOf on a value this app doesn't know
-        } catch (e: DateTimeParseException) {
-            throw IOException("Malformed date", e)
-        } finally {
-            connection.disconnect()
+// URLEncoder is for query strings, so its "+" for a space is swapped for the path form
+private fun encodePathSegment(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+private fun JSONArray.toStrings() = List(length()) { getString(it) }
+
+// JSONObject.NULL because put(key, null) would drop the key, and the backend needs an explicit null
+private fun Profile.toJson() = JSONObject()
+    .put("timezone", timezone)
+    .put("vehicle", vehicle?.let {
+        JSONObject()
+            .put("make", it.make)
+            .put("model", it.model)
+            .put("colour", it.colour ?: JSONObject.NULL)
+            .put("litresPer100km", it.litresPer100km)
+    } ?: JSONObject.NULL)
+    .put("transit", transit?.let {
+        JSONObject()
+            .put("fareType", it.fareType.name)
+            .put("monthlyPassZones", it.monthlyPassZones ?: JSONObject.NULL)
+    } ?: JSONObject.NULL)
+
+private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
+
+private fun parseUser(json: JSONObject) = User(
+    id = json.getString("id"),
+    email = json.getString("email"),
+    name = json.getString("name"),
+    photoUrl = json.stringOrNull("photoUrl"),
+    profileComplete = json.getBoolean("profileComplete"),
+    timezone = json.stringOrNull("timezone"),
+    vehicle = json.objectOrNull("vehicle")?.let {
+        Vehicle(
+            make = it.getString("make"),
+            model = it.getString("model"),
+            colour = it.stringOrNull("colour"),
+            litresPer100km = it.getDouble("litresPer100km"),
+        )
+    },
+    transit = json.objectOrNull("transit")?.let {
+        Transit(FareType.valueOf(it.getString("fareType")), it.intOrNull("monthlyPassZones"))
+    },
+    lastGasPrice = json.objectOrNull("lastGasPrice")?.let {
+        GasPrice(it.getDouble("centsPerLitre"), Instant.parse(it.getString("savedAt")))
+    },
+)
+
+// parses inside the try so a malformed body (e.g. a captive portal page) becomes an IOException
+private suspend fun <T> request(
+    method: String,
+    path: String,
+    sessionToken: String? = null,
+    body: JSONObject? = null,
+    parse: (JSONObject) -> T,
+): T = withContext(Dispatchers.IO) {
+    val connection = URL(baseUrl + path).openConnection() as HttpURLConnection
+    try {
+        connection.requestMethod = method
+        connection.connectTimeout = TIMEOUT_MS
+        connection.readTimeout = TIMEOUT_MS
+        sessionToken?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
+        body?.let {
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { out -> out.write(it.toString().toByteArray()) }
         }
+
+        when (val code = connection.responseCode) {
+            HTTP_OK, HTTP_CREATED, HTTP_NO_CONTENT -> {
+                val text = connection.inputStream.bufferedReader().use { it.readText() }
+                parse(JSONObject(text.ifEmpty { "{}" })) // a 204 has no body
+            }
+            HTTP_UNAUTHORIZED -> throw UnauthorizedException()
+            else -> throw HttpException(code, connection.errorMessage())
+        }
+    } catch (e: JSONException) {
+        throw IOException("Malformed response", e)
+    } catch (e: IllegalArgumentException) {
+        throw IOException("Unknown enum value", e) // e.g. TripMode or TripStatus valueOf on a value this app doesn't know
+    } catch (e: DateTimeParseException) {
+        throw IOException("Malformed date", e)
+    } finally {
+        connection.disconnect()
     }
 }
 
