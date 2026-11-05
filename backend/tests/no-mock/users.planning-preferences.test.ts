@@ -46,15 +46,19 @@ describe('Unmocked: PUT /api/users/me/planning-preferences', () => {
     expect(kept.body.user).toMatchObject({ costVsTime: 20, maxWalkMinutes: 15 });
   });
 
-  // Input: invalid cost value, unknown default mode, or a max walk outside 1 to 60 whole minutes
+  // Input: a body that isn't an object, an invalid cost value, empty, unknown or repeated default modes,
+  // or a max walk outside 1 to 60 whole minutes
   // Expected status code: 400
   // Expected behavior: reject without saving
   // Expected output: an error naming the planning preferences
   test('Rejects out-of-range values and unknown modes', async () => {
     const { token } = await createSignedInUser();
     const bodies = [
+      ['not', 'an object'],
       { ...PREFERENCES, costVsTime: 101 },
+      { ...PREFERENCES, defaultModes: [] },
       { ...PREFERENCES, defaultModes: ['BIKE'] },
+      { ...PREFERENCES, defaultModes: ['DRIVE', 'DRIVE'] },
       { ...PREFERENCES, maxWalkMinutes: 61 },
       { ...PREFERENCES, maxWalkMinutes: '10' },
     ];

@@ -20,7 +20,7 @@ export async function upsertGoogleUser(profile: GoogleProfile): Promise<User> {
   return UserModel.findOneAndUpdate(
     { googleId },
     { $set: googleFields },
-    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true },
   ).lean();
 }
 
@@ -50,7 +50,7 @@ export async function saveUserProfile(id: Types.ObjectId, profile: Profile): Pro
   return UserModel.findByIdAndUpdate(
     id,
     { $set: { ...profile, profileComplete: true } },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   ).lean();
 }
 
@@ -66,7 +66,7 @@ export async function saveGasPrice(id: Types.ObjectId, centsPerLitre: number): P
   return UserModel.findByIdAndUpdate(
     id,
     { $set: { lastGasPrice: { centsPerLitre, savedAt: new Date() } } },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   ).lean();
 }
 
@@ -78,7 +78,7 @@ export async function savePlanningPreferences(
   return UserModel.findByIdAndUpdate(
     id,
     { $set: preferences },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   ).lean();
 }
 

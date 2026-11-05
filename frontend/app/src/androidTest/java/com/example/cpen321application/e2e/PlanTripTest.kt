@@ -129,20 +129,20 @@ class PlanTripTest {
         rule.onNode(LOADING).assertDoesNotExist() // the same routes, not a new plan
     }
 
-    /** Searches the Map tab for a place and taps Directions on its sheet. */
+    // searches the Map tab for a place and taps Directions on its sheet
     private fun openPlanningTo(place: String) {
         pickPlace(place)
         rule.waitUntil(LOAD_TIMEOUT_MS) { exists(hasText("Directions")) }
         rule.onNodeWithText("Directions").performClick()
     }
 
-    /** Taps the trip's start (the user's location, or "Choose start point" without one) and searches for [place]. */
+    // taps the trip's start (the user's location, or "Choose start point" without one) and searches for [place]
     private fun chooseStart(place: String) {
         rule.onNode((hasText("Your location") or hasText("Choose start point")) and hasClickAction()).performClick()
         pickPlace(place)
     }
 
-    /** Sets Arrive by to the time picker's default (9:00) tomorrow. */
+    // sets Arrive by to the time picker's default (9:00) tomorrow
     private fun setArriveByTomorrow() {
         rule.onNodeWithText("Leave now ▾").performClick()
         rule.onNodeWithText("Tomorrow").performClick()
@@ -150,7 +150,7 @@ class PlanTripTest {
         rule.onNode(ARRIVE_BY_TOMORROW).assertIsDisplayed()
     }
 
-    /** Waits for the latest plan to finish, and fails if the route service couldn't be reached. */
+    // waits for the latest plan to finish, and fails if the route service couldn't be reached
     private fun waitForPlan() {
         rule.waitUntil(PLAN_TIMEOUT_MS) {
             !exists(LOADING) && (exists(ROUTE_ROW) || exists(hasText(ROUTE_SERVICE_DOWN)))
@@ -158,7 +158,7 @@ class PlanTripTest {
         rule.onNodeWithText(ROUTE_SERVICE_DOWN).assertDoesNotExist()
     }
 
-    /** Saves [place] as a parking spot through its place sheet, then closes the sheet. */
+    // saves [place] as a parking spot through its place sheet, then closes the sheet
     private fun saveSpot(place: String) {
         pickPlace(place)
         val saveButton = hasText("Save as parking spot") and hasClickAction() // not the dialog's title
@@ -171,7 +171,7 @@ class PlanTripTest {
         rule.onNodeWithContentDescription("Clear search").performClick()
     }
 
-    /** Types [name] into the search box on screen and taps the first suggestion that contains it. */
+    // types [name] into the search box on screen and taps the first suggestion that contains it
     private fun pickPlace(name: String) {
         rule.onNode(hasSetTextAction()).performTextReplacement(name)
         val suggestion = hasText(name, substring = true) and hasClickAction() and !hasSetTextAction()
@@ -179,10 +179,10 @@ class PlanTripTest {
         rule.onAllNodes(suggestion).onFirst().performClick()
     }
 
-    /** Whether any node on screen matches [matcher]. */
+    // whether any node on screen matches [matcher]
     private fun exists(matcher: SemanticsMatcher) = rule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
 
-    /** Deletes the parking spots these tests saved, straight through the backend. */
+    // deletes the parking spots these tests saved, straight through the backend
     private fun removeTestSpots() = runBlocking {
         BackendApi.getParkingSpots(token)
             .filter { it.details.label == TEST_SPOT }

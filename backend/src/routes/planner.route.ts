@@ -4,8 +4,6 @@ import { requireSession } from '../middleware/require-session.middleware';
 
 const router = Router(); // Planner endpoints under /api/routes
 
-router.post('/plan', requireSession, (req, res, next) => {
-  planRoute(req, res).catch(next);
-});
+router.post('/plan', requireSession, planRoute); // Express 5 sends a rejected async handler to the error handler
 
 export default router;

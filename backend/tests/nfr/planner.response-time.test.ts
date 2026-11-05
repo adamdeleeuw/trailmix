@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import request from 'supertest';
 import { Types } from 'mongoose';
@@ -16,7 +17,7 @@ interface GoogleLatencies {
   routeDetailsMs: number;
 }
 
-const latencies = JSON.parse(readFileSync(`${__dirname}/../fixtures/planner-google-latencies.json`, 'utf8')) as GoogleLatencies;
+const latencies = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'planner-google-latencies.json'), 'utf8')) as GoogleLatencies;
 const ORIGIN = { label: 'UBC', lat: 49.2606, lng: -123.246, placeId: 'ubc' };
 const DESTINATION = { label: 'Waterfront', lat: 49.2857, lng: -123.111, placeId: 'waterfront' };
 
@@ -61,13 +62,15 @@ function installGoogleFixture(): jest.SpyInstance {
         legs: [{
           startTime: '2026-11-02T08:00:00Z',
           endTime: '2026-11-02T08:25:00Z',
-          steps: isDrive ? [] : [{
-            travelMode: 'TRANSIT',
-            transitDetails: {
-              transitLine: { name: 'SkyTrain', color: '#0067A0', vehicle: { name: 'SkyTrain', type: 'RAIL' } },
-              stopDetails: { departureStop: { name: 'Waterfront' }, arrivalStop: { name: 'Commercial-Broadway' }, stopCount: 6 },
-            },
-          }],
+          steps: isDrive
+            ? []
+            : [{
+              travelMode: 'TRANSIT',
+              transitDetails: {
+                transitLine: { name: 'SkyTrain', color: '#0067A0', vehicle: { name: 'SkyTrain', type: 'RAIL' } },
+                stopDetails: { departureStop: { name: 'Waterfront' }, arrivalStop: { name: 'Commercial-Broadway' }, stopCount: 6 },
+              },
+            }],
         }],
       }],
     });

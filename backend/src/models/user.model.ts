@@ -137,9 +137,10 @@ export interface User {
   transit: Transit | null;
   lastGasPrice: GasPrice | null; // null until a price is saved
   parkingSpots: ParkingSpot[]; // newest first, at most MAX_PARKING_SPOTS
-  costVsTime: number;
-  defaultModes: (typeof PLANNING_MODES)[number][];
-  maxWalkMinutes: number; // longest single walking stretch a planned route may have
+  // users are read with lean(), which skips schema defaults, so accounts made before the Planner have none of these three
+  costVsTime?: number;
+  defaultModes?: (typeof PLANNING_MODES)[number][];
+  maxWalkMinutes?: number; // longest single walking stretch a planned route may have
   createdAt: Date;
   updatedAt: Date;
 }
@@ -263,7 +264,7 @@ export function toUserResponse(user: User): UserResponse {
     },
     costVsTime: user.costVsTime ?? DEFAULT_COST_VS_TIME,
     defaultModes: user.defaultModes ?? [...DEFAULT_PLANNING_MODES],
-    maxWalkMinutes: user.maxWalkMinutes ?? DEFAULT_MAX_WALK_MINUTES, // accounts made before this setting
+    maxWalkMinutes: user.maxWalkMinutes ?? DEFAULT_MAX_WALK_MINUTES,
   };
 }
 

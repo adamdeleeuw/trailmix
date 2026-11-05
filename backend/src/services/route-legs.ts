@@ -23,8 +23,8 @@ const WALK_TRIVIAL_MAX_SECONDS = 60;
 const WALK_TRIVIAL_MAX_METERS = 50;
 const TRANSIT_CONNECTION_LABEL = 'Transit connection';
 
-function decodePolyline(encoded: string): Array<[number, number]> {
-  const points: Array<[number, number]> = [];
+function decodePolyline(encoded: string): [number, number][] {
+  const points: [number, number][] = [];
   let index = 0;
   let latitude = 0;
   let longitude = 0;
