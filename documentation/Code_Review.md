@@ -32,9 +32,7 @@ This is the last commit on `main` that changes code, the same one the tests run 
 
 The issues under the "Others" category are:
 
-![The issues under the "Others" code pattern group, part 1](images/codacy-issues-others.png)
-
-![The issues under the "Others" code pattern group, part 2](images/codacy-issues-others-2.png)
+![The issues under the "Others" code pattern group](images/codacy-issues-others.png)
 
 ### 2.4. Justifications for Unfixed Issues
 
