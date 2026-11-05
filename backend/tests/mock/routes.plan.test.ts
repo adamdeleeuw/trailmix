@@ -151,7 +151,7 @@ interface GoogleRequest {
   destinations?: unknown[];
 }
 
-function googleRequest(init: RequestInit | undefined): GoogleRequest {
+function googleRequest(init: { body?: unknown } | undefined): GoogleRequest {
   return JSON.parse(String(init?.body)) as GoogleRequest;
 }
 
