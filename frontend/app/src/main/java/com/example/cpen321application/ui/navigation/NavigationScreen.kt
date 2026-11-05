@@ -233,12 +233,13 @@ private fun NavigationMap(route: RouteOption, legIndex: Int, here: LatLng?, bear
 @Composable
 private fun FollowCamera(camera: CameraPositionState, route: RouteOption, here: LatLng?, bearing: Float?, active: Boolean) {
     LaunchedEffect(active, here, bearing) {
-        if (!active) return@LaunchedEffect
-        if (here == null) {
-            camera.showAll(routePoints(route), ROUTE_PADDING_PX)
-        } else {
-            val facing = bearing ?: camera.position.bearing // off the line's end, keep the last direction
-            camera.animate(CameraUpdateFactory.newCameraPosition(CameraPosition(here, FOLLOW_ZOOM, FOLLOW_TILT, facing)))
+        when {
+            !active -> Unit
+            here == null -> camera.showAll(routePoints(route), ROUTE_PADDING_PX)
+            else -> {
+                val facing = bearing ?: camera.position.bearing // off the line's end, keep the last direction
+                camera.animate(CameraUpdateFactory.newCameraPosition(CameraPosition(here, FOLLOW_ZOOM, FOLLOW_TILT, facing)))
+            }
         }
     }
 }

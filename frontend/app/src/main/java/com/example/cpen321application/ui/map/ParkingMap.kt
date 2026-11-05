@@ -103,7 +103,7 @@ fun ParkingMap(
     }
 }
 
-/** The P marker, drawn like a parking sign, and larger while its sheet is open. */
+// the P marker, drawn like a parking sign, and larger while its sheet is open
 @Composable
 private fun ParkingMarker(selected: Boolean) {
     Box(

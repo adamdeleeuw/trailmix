@@ -116,12 +116,13 @@ fun MapHomeScreen(
 
     LaunchedEffect(Unit) { models.spots.loadSpots(onUnauthorized) }
     LaunchedEffect(planAgain) {
-        val route = planAgain ?: return@LaunchedEffect
-        // walking alone isn't a mode the Planner takes, so a walk-only trip plans with the defaults
-        val modes = route.legs.map { it.mode }.filter { it != TripMode.WALK }.toSet().ifEmpty { null }
-        models.planner.start(to = route.legs.last().to, from = route.legs.first().from, tripModes = modes)
-        planning = true
-        onPlanAgainOpened()
+        planAgain?.let { route ->
+            // walking alone isn't a mode the Planner takes, so a walk-only trip plans with the defaults
+            val modes = route.legs.map { it.mode }.filter { it != TripMode.WALK }.toSet().ifEmpty { null }
+            models.planner.start(to = route.legs.last().to, from = route.legs.first().from, tripModes = modes)
+            planning = true
+            onPlanAgainOpened()
+        }
     }
 
     if (planning) {
@@ -270,10 +271,11 @@ private fun SheetEffects(sheet: SheetState, isOpen: Boolean, onSwipedAway: () ->
 private fun CameraEffects(location: LocationState, camera: CameraPositionState, spots: ParkingSpotsViewModel) {
     var startedAtUser by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(location.granted) {
-        if (!location.granted) return@LaunchedEffect
-        val here = location.refresh()
-        if (here != null && !startedAtUser) camera.move(CameraUpdateFactory.newLatLngZoom(here, CITY_ZOOM))
-        startedAtUser = startedAtUser || here != null
+        if (location.granted) {
+            val here = location.refresh()
+            if (here != null && !startedAtUser) camera.move(CameraUpdateFactory.newLatLngZoom(here, CITY_ZOOM))
+            startedAtUser = startedAtUser || here != null
+        }
     }
     LaunchedEffect(spots.focus) {
         spots.focus?.let {

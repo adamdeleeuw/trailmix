@@ -50,7 +50,7 @@ fun testRoute() = RouteOption(
     ),
 )
 
-/** Builds a saved trip for tests, from Home to Work, with an even cost split unless given. */
+/** Builds a saved trip for tests, from Home to Work, with an even cost split unless given. Use copy() for its other fields. */
 fun testTrip(
     id: String = "trip",
     status: TripStatus = TripStatus.COMPLETED,
@@ -59,7 +59,6 @@ fun testTrip(
     legs: List<TripLeg> = emptyList(),
     baselineDriveCostCents: Int? = null,
     tripDate: String = "2026-10-19T08:00:00Z",
-    route: RouteOption? = null,
 ) = Trip(
     id = id,
     status = status,
@@ -73,5 +72,4 @@ fun testTrip(
     fareCents = cost - 2 * (cost / 3),
     baselineDriveCostCents = baselineDriveCostCents,
     tripDate = tripDate,
-    route = route,
 )

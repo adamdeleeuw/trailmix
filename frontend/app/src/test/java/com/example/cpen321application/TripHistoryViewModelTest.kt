@@ -49,7 +49,7 @@ private class FakeTrips : TripApi {
         failure?.let { throw it }
         if (status == TripStatus.ACTIVE) refuseSecondActive()
         val actualStart = if (status == TripStatus.ACTIVE) at else null
-        return testTrip(id = "saved-${trips.size}", status = status, route = route).copy(actualStart = actualStart)
+        return testTrip(id = "saved-${trips.size}", status = status).copy(route = route, actualStart = actualStart)
             .also { trips.add(0, it) }
     }
 
