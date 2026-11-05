@@ -8,6 +8,7 @@
 | 2026-10-19        | 2.4 | Justified the "Promise returned in function argument" warning on the chained route and the "Unsafe return of an error typed value" warning in its tests (issue #7) |
 | 2026-10-20        | 2.1, 2.2, 2.3, 2.4, 3 | Added the commit Codacy ran on and the Codacy screenshots for CP1, noted that the remaining issues are carried forward to CP2, and noted that the manual review is filled in after the class peer review |
 | 2026-11-04        | 2.1, 2.2, 2.3, 2.4 | Updated the commit Codacy ran on and the Codacy screenshots for CP2, after the Planner (#72), Planning and Trip Preview (#73) and trip lifecycle (#74) merged. Grouped the justifications by code pattern, added the new false positives with citations, and removed the `routes.chained` justifications, since that endpoint and its tests were deleted |
+| 2026-11-04        | 2.1, 2.4 | Fixed the 43 issues that couldn't be justified (#82), and updated the commit Codacy ran on and the line links that moved |
 
 ---
 
@@ -15,7 +16,7 @@
 
 ### 2.1. Commit Hash Where Codacy Ran
 
-`4631dafd6b64b3c5b533fd9d6ba7736c7338c3f0`
+`TODO-MERGE-COMMIT-OF-PR-82`
 
 This is the last commit on `main` that changes code, the same one the tests run on (see `Testing.md` 2.1.2). Later commits only change documentation, so Codacy reports the same issues on them.
 
@@ -50,21 +51,21 @@ Every issue left open in 2.2 and 2.3 is listed below, grouped by code pattern. E
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/services/google.service.ts#L13`](../backend/src/services/google.service.ts#L13), [`backend/tests/mock/auth.google.test.ts#L30`](../backend/tests/mock/auth.google.test.ts#L30), [`#L34`](../backend/tests/mock/auth.google.test.ts#L34), [`#L35`](../backend/tests/mock/auth.google.test.ts#L35), [`#L115`](../backend/tests/mock/auth.google.test.ts#L115), [`backend/tests/mock/routes.plan.test.ts#L93`](../backend/tests/mock/routes.plan.test.ts#L93), [`#L98`](../backend/tests/mock/routes.plan.test.ts#L98), [`backend/tests/no-mock/users.planning-preferences.test.ts#L35`](../backend/tests/no-mock/users.planning-preferences.test.ts#L35)
+     - **Location in Git:** [`backend/src/services/google.service.ts#L13`](../backend/src/services/google.service.ts#L13), [`backend/tests/mock/auth.google.test.ts#L30`](../backend/tests/mock/auth.google.test.ts#L30), [`#L34`](../backend/tests/mock/auth.google.test.ts#L34), [`#L35`](../backend/tests/mock/auth.google.test.ts#L35), [`#L115`](../backend/tests/mock/auth.google.test.ts#L115), [`backend/tests/mock/routes.plan.test.ts#L95`](../backend/tests/mock/routes.plan.test.ts#L95), [`#L100`](../backend/tests/mock/routes.plan.test.ts#L100), [`backend/tests/no-mock/users.planning-preferences.test.ts#L35`](../backend/tests/no-mock/users.planning-preferences.test.ts#L35)
      - **Justification:** Each line uses a type from an installed package: `OAuth2Client` and `TokenPayload` from `google-auth-library`, and the request built by `supertest` (`@types/supertest`). "Error typed" is what typescript-eslint calls a type TypeScript couldn't resolve, and type-aware rules can only work when the linter has the project's full type information, including its dependencies ([typescript-eslint: Linting with Type Information](https://typescript-eslint.io/getting-started/typed-linting/)). Codacy lints without the installed packages, so these types become the error type, which the rules then treat like `any`. With the real types these are an `OAuth2Client`, a `TokenPayload` and a `supertest` `Test`, and `npm run typecheck` (strict mode, run in CI on every push) passes with no errors.
 
 - **Code Pattern: Generic Object Injection Sink** (`security/detect-object-injection`)
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/config/env.ts#L24`](../backend/src/config/env.ts#L24), [`backend/src/services/planner.constants.ts#L23`](../backend/src/services/planner.constants.ts#L23), [`#L25`](../backend/src/services/planner.constants.ts#L25), [`#L27`](../backend/src/services/planner.constants.ts#L27), [`backend/src/services/planner.service.ts#L479`](../backend/src/services/planner.service.ts#L479), [`backend/src/services/route-legs.ts#L150`](../backend/src/services/route-legs.ts#L150), [`#L159`](../backend/src/services/route-legs.ts#L159), [`#L166`](../backend/src/services/route-legs.ts#L166), [`backend/tests/no-mock/routes.plan.test.ts#L88`](../backend/tests/no-mock/routes.plan.test.ts#L88)
+     - **Location in Git:** [`backend/src/config/env.ts#L24`](../backend/src/config/env.ts#L24), [`backend/src/services/planner.constants.ts#L23`](../backend/src/services/planner.constants.ts#L23), [`#L25`](../backend/src/services/planner.constants.ts#L25), [`#L27`](../backend/src/services/planner.constants.ts#L27), [`backend/src/services/planner.service.ts#L481`](../backend/src/services/planner.service.ts#L481), [`backend/src/services/route-legs.ts#L150`](../backend/src/services/route-legs.ts#L150), [`#L159`](../backend/src/services/route-legs.ts#L159), [`#L166`](../backend/src/services/route-legs.ts#L166), [`backend/tests/no-mock/routes.plan.test.ts#L96`](../backend/tests/no-mock/routes.plan.test.ts#L96)
      - **Justification:** The rule flags every `object[variable]`, whatever the variable is ([eslint-plugin-security: detect-object-injection](https://github.com/eslint-community/eslint-plugin-security/blob/main/docs/rules/detect-object-injection.md)). The risk is a key the user controls, such as `__proto__`, reaching a property lookup or assignment ([OWASP: Prototype Pollution Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html)). None of these keys come from a user. In `planner.service.ts`, `route-legs.ts` and the test, the key is a loop's number index into an array. In `planner.constants.ts` it is `tier`, typed `0 | 1 | 2` and computed from a zone count. In `env.ts` it is the name of a required environment variable, which only the code passes in.
 
 - **Code Pattern: Detect console.log() with non Literal argument** (`security-node/detect-crlf`)
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/index.ts#L12`](../backend/src/index.ts#L12), [`backend/tests/nfr/planner.response-time.test.ts#L124`](../backend/tests/nfr/planner.response-time.test.ts#L124), [`#L125`](../backend/tests/nfr/planner.response-time.test.ts#L125)
+     - **Location in Git:** [`backend/src/index.ts#L12`](../backend/src/index.ts#L12), [`backend/tests/nfr/planner.response-time.test.ts#L127`](../backend/tests/nfr/planner.response-time.test.ts#L127), [`#L128`](../backend/tests/nfr/planner.response-time.test.ts#L128)
      - **Justification:** The rule guards against log injection, where a user-supplied string with line breaks forges extra log lines ([OWASP: Log Injection](https://owasp.org/www-community/attacks/Log_Injection)). These lines only log numbers: `index.ts` logs `env.port`, which `env.ts` parses as an integer at startup, and the NFR test logs response times formatted with `toFixed`. Neither can contain a line break, and neither comes from a request.
 
 - **Code Pattern: Unsafe Regular Expression** (`security/detect-unsafe-regex`)

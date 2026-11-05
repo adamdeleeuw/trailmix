@@ -19,6 +19,7 @@
 | 2026-11-02        | 2.1.1, 2.6, 3.1, 3.2 | Added the Planner endpoint, pure algorithm tests, saved planning preferences, and the response-time NFR test (issue #72) |
 | 2026-11-04        | 2.1.1, 2.6, 4.1 | Added the save, status change and delete trip API tests (issue #74), and removed the `trip.model.ts` coverage note, since saving a trip now reaches the total checks. A trip's total time may now be more than its legs (it includes waiting, as the Planner sends it). Added the trip lifecycle, History totals and Navigation unit tests. Routes and saved trips now carry turn-by-turn steps for in-app navigation and a transit line's short name, with planner, save and `normalizeRouteLegs` tests for them |
 | 2026-11-04        | 2.1.1, 2.1.2, 2.1.3, 2.5, 2.6, 3, 4 | CP2 write-up after the Planner (#72), Planning and Trip Preview (#73) and the trip lifecycle (#74) merged into `main`. Removed the `POST /api/routes/chained` row with the endpoint and its tests, added line anchors to the Planner rows, updated the commit the tests run on, and explained the skipped live Google test. Updated the coverage gaps from the new combined run, and listed the Planner lines that aren't covered yet instead of calling them unreachable. Rewrote the NFR section from a new run on Node 22, and added the Plan Multimodal Trip and Preview Route end-to-end test (`PlanTripTest`), with each use-case step mapped to the test's steps |
+| 2026-11-04        | 2.1.1, 2.1.2, 2.5, 2.6, 3.1, 3.2 | Added API tests for the Planner lines that weren't covered (#82), so every Planner line and function is covered except two the API can't reach, now listed in 2.6 with the Planner branches still not exercised. Updated the coverage, the commit the tests run on, the NFR log, and the line links that moved |
 
 ---
 
@@ -49,7 +50,7 @@ Unit tests for the Planner's own logic and for merging a route's walking legs ar
 | **GET /api/vehicles/makes** | [`backend/tests/no-mock/vehicles.test.ts#L14`](../backend/tests/no-mock/vehicles.test.ts#L14) | _None: nothing external can fail_ | _None_ |
 | **GET /api/vehicles/makes/:make/models** | [`backend/tests/no-mock/vehicles.test.ts#L43`](../backend/tests/no-mock/vehicles.test.ts#L43) | _None: nothing external can fail_ | _None_ |
 | **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
-| **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts#L28`](../backend/tests/no-mock/routes.plan.test.ts#L28) | [`backend/tests/mock/routes.plan.test.ts#L110`](../backend/tests/mock/routes.plan.test.ts#L110) | Google Routes API (`fetch`), User DB for saved parking spots |
+| **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts#L28`](../backend/tests/no-mock/routes.plan.test.ts#L28) | [`backend/tests/mock/routes.plan.test.ts#L183`](../backend/tests/mock/routes.plan.test.ts#L183) | Google Routes API (`fetch`), User DB for saved parking spots |
 | **PUT /api/users/me/planning-preferences** | [`backend/tests/no-mock/users.planning-preferences.test.ts#L12`](../backend/tests/no-mock/users.planning-preferences.test.ts#L12) | [`backend/tests/mock/users.planning-preferences.test.ts#L19`](../backend/tests/mock/users.planning-preferences.test.ts#L19) | User DB |
 
 "No mocks" tests run against a real MongoDB (the same `mongo:7.0` image deployed on the VM). The sign-in tests that need Google to accept a token are in the mocked group, because automated tests can't get a real Google ID token. Every other test signs users in by adding a user and session straight to the test database (`backend/tests/helpers/auth.ts`), so it doesn't need Google.
@@ -58,9 +59,9 @@ The vehicle list endpoints have no mocked group. Their data is `backend/src/data
 
 #### 2.1.2. Commit Hash Where Tests Run
 
-`4631dafd6b64b3c5b533fd9d6ba7736c7338c3f0`
+`TODO-MERGE-COMMIT-OF-PR-82`
 
-This is the last commit on `main` that changes code, with the Planner (#72), Planning and Trip Preview (#73) and the trip lifecycle (#74). Later commits only change documentation.
+This is the last commit on `main` that changes code, with the Planner (#72), Planning and Trip Preview (#73), the trip lifecycle (#74), and the Codacy fixes and Planner tests (#82). Later commits only change documentation.
 
 #### 2.1.3. Explanation on How to Run the Tests
 
@@ -104,7 +105,7 @@ Each run posts a coverage table for all three runs on its summary page and uploa
 
 ![Jest coverage report for tests/mock/ and tests/no-mock/ together](images/backend-coverage-combined.png)
 
-The combined run covers 92.91% of statements, 82.76% of branches, 93.51% of functions and 95.18% of lines. Every file below 100% is listed in 2.6, either with the reason API tests can't reach its lines, or as lines the tests don't cover yet.
+The combined run covers 96.87% of statements, 89.81% of branches, 96.27% of functions and 97.67% of lines. Every file below 100% is listed in 2.6, with the reason API tests can't reach its lines, or the Planner branches they don't exercise yet.
 
 ### 2.6. Lines API Tests Can't Reach
 
@@ -117,22 +118,20 @@ The combined run covers 100% of the statements, branches, functions, and lines i
 | `backend/src/config/env.ts` | 26 | Throwing when a required variable is missing. The test setup always provides `GOOGLE_BACKEND_CLIENT_ID` and `GOOGLE_ROUTES_API_KEY`, and `MONGODB_URI` is only read at startup. |
 | `backend/src/config/env.ts` | 37, 50–51 | The `mongodbUri` getter and `assertEnv()`, which only `index.ts` calls. |
 | `backend/src/middleware/error-handler.middleware.ts` | 18–19 | Handing the error to Express when the response has already started. Every route sends its response in a single call after all of its work succeeds, so no request can fail after headers have gone out. |
+| `backend/src/services/planner.core.ts` | 221 | The schedule estimate used when a transit route has no departure or arrival time. Every route details request the Planner sends includes a time, so `computeRouteDetails` always returns both. |
+| `backend/src/services/route-legs.ts` | 181 | The last `else` when a short walk is merged into a leg next to it. Back-to-back walks are grouped into one first, so a short walk always has a non-walking leg on at least one side. |
 
-#### 2.6.1. Lines Not Covered Yet (issue #72)
+#### 2.6.1. Planner Branches Not Covered (issue #72)
 
-The Planner's files (#72) still have lines and branches the API tests can reach but don't exercise yet. They are listed here rather than justified, because they are test work, not unreachable code.
+The API tests run every line and function of the Planner's files except the two lines above. The branches below are the only parts the tests don't exercise:
 
-| **File** | **Lines** | **What isn't exercised** |
-| -------- | --------- | ------------------------ |
-| `backend/src/services/planner.constants.ts` | 18–23 (branches) | Fares for the U-Pass, monthly passes and concession stored value, since the tests only use adult stored value and contactless. |
-| `backend/src/services/planner.core.ts` | 112–117, 189–190, 221, 226–227 | Scheduling a Drive → Transit trip backward from an arrive-by time, the "every route is late" fallback in `pickThree`, and the estimate used when Google's transit times are missing or already past. |
-| `backend/src/services/planner.google.service.ts` | 139, 260, 276 | Matrix elements without a duration, a transit leg with only an arrival time, and a step without start or end coordinates. |
-| `backend/src/services/planner.service.ts` | 350–352, 506, 511–513 | Sorting replacement candidates, and falling back to the earliest late route when no route arrives on time. |
-| `backend/src/services/route-legs.ts` | 99–112, 173–181 | Merging a walk into the leg after it, or the one before it, when a route has walking between two non-walking legs. |
-| `backend/src/services/transit-zones.ts` | 34 (branch) | A SkyTrain leg whose stops aren't both in the station table. |
-| `backend/src/validation/plan-request.validation.ts` | 21, 23–30, 36–40, 44, 58–60 (branches) | Some malformed places, `arriveBy` values and `costVsTime` values in the request body. |
-| `backend/src/validation/planning-preferences.validation.ts` | 20, 26, 28 (branches) | A body that isn't an object, an empty or unknown mode list, and duplicate modes. |
-| `backend/src/models/user.model.ts` | 264–266 (branches) | The `??` defaults for `costVsTime`, `defaultModes` and `maxWalkMinutes`. The schema already sets these defaults, so the fallbacks never run, and Codacy also reports them as unnecessary. |
+| **File** | **Branches** | **What isn't exercised** |
+| -------- | ------------ | ------------------------ |
+| `backend/src/services/route-legs.ts` | 39 | Errors for a malformed encoded polyline, choosing a leg's start and end labels when its step has no useful label, and joining two polylines that don't meet at the same point. |
+| `backend/src/services/planner.google.service.ts` | 33 | A matrix response that isn't a list or has malformed elements, invalid timestamps, and the fallbacks for optional fields Google always sends in the tests (line names, colours, stop details, distances and step times). |
+| `backend/src/services/planner.service.ts` | 17 | Tie-breakers in the ranking comparators (two routes with the same cost, time or score), and checks that can't fail through the API, like an empty departure time or a chain without a spot. |
+| `backend/src/services/planner.core.ts` | 9 | A chain through a spot with no cost or a daily rate, a chain that would leave in the past or walk too far, an origin equal to the destination, and the same comparator tie-breakers. |
+| `backend/src/services/planner.constants.ts` | 1 | An adult monthly pass with no zones saved. The questionnaire rejects that fare type without zones, so the API can't reach it. |
 
 ---
 
@@ -142,7 +141,7 @@ The Planner's files (#72) still have lines and branches the API tests can reach 
 
 | **Non-Functional Requirement** | **Location in Git** |
 | ------------------------------ | ------------------- |
-| **Planning Response Time** (95% of plans within 4 s) | [`backend/tests/nfr/planner.response-time.test.ts#L77`](../backend/tests/nfr/planner.response-time.test.ts#L77) |
+| **Planning Response Time** (95% of plans within 4 s) | [`backend/tests/nfr/planner.response-time.test.ts#L80`](../backend/tests/nfr/planner.response-time.test.ts#L80) |
 
 Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS / Linux) or `.\scripts\run-backend-nfr-tests.ps1` (Windows), with Docker running for the test MongoDB as in 2.1.3. The Security requirement doesn't have an automated test yet, so the second NFR test is planned for CP3.
 
@@ -151,10 +150,10 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
 - **Planning Response Time**
 
   - **Verification:** The test signs in a user with a car, a gas price, a transit fare and three saved parking spots between UBC and Waterfront Station, then sends 20 authenticated `POST /api/routes/plan` requests from UBC to Waterfront with Drive and Transit allowed. It replaces Google Routes with a stub that waits the latencies in [`backend/tests/fixtures/planner-google-latencies.json`](../backend/tests/fixtures/planner-google-latencies.json) (35 ms for the driving matrix, 50 ms for the transit matrix and 40 ms for each route's details) before answering, so the timing covers the whole request through Express, the session check, MongoDB, and the Planner's candidate selection, scheduling, pricing and ranking, without depending on Google's speed or charging the API key. It measures each request with `performance.now()`, checks that every response is `200` with three routes, and passes only if the 95th percentile is at most 4,000 ms. The fixture latencies are far below real Google calls, so this measures the time the Planner itself adds, not Google's.
-  - **Log Output** (2026-11-04, Node 22.21.0, commit `4631daf`)
+  - **Log Output** (2026-11-04, Node 22.21.0, the code of commit `TODO-MERGE-COMMIT-OF-PR-82`)
     ```
-    Planner response times ms: 281.1, 157.0, 149.7, 137.1, 157.8, 136.6, 141.3, 141.4, 153.0, 139.9, 139.5, 136.8, 143.3, 141.4, 140.6, 139.8, 154.7, 147.5, 146.3, 143.8
-    Planner p95: 157.8 ms
+    Planner response times ms: 241.9, 146.5, 151.1, 138.1, 163.3, 149.1, 154.8, 146.4, 145.3, 138.8, 140.5, 152.0, 141.8, 139.3, 166.9, 149.5, 137.5, 138.1, 138.2, 127.2
+    Planner p95: 166.9 ms
     Test Suites: 1 passed, 1 total
     Tests:       1 passed, 1 total
     ```
