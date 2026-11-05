@@ -344,7 +344,7 @@ These are rough hand-drawn sketches of the planned layout, and the details will 
 
 ### **4.5. Dependencies Diagram**
 
-![Dependency diagram of backend architecture](images/dependency.png)
+See the [Trailmix Dependency Diagram](Dependency_Diagram.md).
 
 
 ### **4.6. Use Case Sequence Diagram (5 Most Major Use Cases)**
