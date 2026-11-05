@@ -17,7 +17,7 @@
 | Nov 1, 2026 | 3.1, 4.3 | Places on the map can now be tapped to open their sheet, and the sheet can be closed, to match Google Maps (#71). The Places API also looks up a tapped place's address. |
 | Nov 2, 2026 | 2, 3, 4.1, 4.2, 4.3 | Replaced the Routes component design with the multimodal Planner, and documented its plan and preferences endpoints (#72). |
 | Nov 4, 2026 | 2, 3.1, 3.4 | The app now plans, previews, saves, starts and navigates trips, and History shows totals (#73, #74), so the description, features and use cases describe what is built instead of goals. Parking spots and trip navigation have their own features and use cases, and Delete Account and Edit Commute Details, which the app already had, are now listed. |
-| Nov 4, 2026 | 3.2, 3.3 | Redrew the use case diagram for CP2, and added the Google Places API and TransLink GTFS-Realtime (CP3) as actors. |
+| Nov 4, 2026 | 3.2, 3.3, 3.4 | Updated the use case diagram, actors and use case descriptions to the current implementation (CP2): parking spots and place search, multimodal planning, and saving, starting and navigating trips. Added the Google Places API and Google Maps SDK as actors. |
 | Nov 4, 2026 | 3.5, 4.6 | The 5 formal use cases are now Plan Multimodal Trip, Preview Route, Navigate Trip, Save Parking Spot, and View History and Totals, the team's 5 most central use cases. Sign In with Google was dropped from them because the course excludes authentication, and View Trip History and View Commute Insights were merged into View History and Totals. Each has a new sequence diagram. |
 | Nov 4, 2026 | 3.7, 4.7 | The response time requirement now covers the Planner (95% of plans within 4 s, as `planner.response-time.test.ts` checks) instead of the old chained route, and describes how the Planner meets it. Added live-update latency as the CP3 requirement. |
 | Nov 4, 2026 | 4.1 | Removed `POST /api/routes/chained`, since the app now calls the Planner and the endpoint was deleted (#72). Added the trip save, status change and delete endpoints (#74), `maxWalkMinutes` in the planning endpoints, a rationale for each component, and the internal interfaces the components call on each other. |
@@ -54,89 +54,42 @@ The Planner schedules each route backward from an optional arrive-by time, price
 
 ### **3.2. Use Case Diagram**
 
-Lines link each actor to the use cases it takes part in. The dashed line is planned for CP3.
-
-```mermaid
-flowchart LR
-    user["«actor»<br/>User"]
-    gsi["«actor»<br/>Google Sign-In"]
-    places["«actor»<br/>Google Places API"]
-    routes["«actor»<br/>Google Routes API"]
-    translink["«actor»<br/>TransLink GTFS-Realtime (CP3)"]
-
-    subgraph trailmix [Trailmix]
-        subgraph f1 [1. Authentication]
-            uc1([1. Sign In with Google])
-            uc2([2. Sign Out])
-            uc3([3. Delete Account])
-        end
-        subgraph f2 [2. Commute Profile]
-            uc4([4. Complete Questionnaire])
-            uc5([5. Edit Commute Details])
-        end
-        subgraph f3 [3. Parking Spots and Place Search]
-            uc6([6. Search for a Place])
-            uc7([7. Save Parking Spot])
-            uc8([8. Edit or Remove Parking Spot])
-        end
-        subgraph f4 [4. Multimodal Trip Planning]
-            uc9([9. Plan Multimodal Trip])
-            uc10([10. Preview Route])
-            uc11([11. Save Trip for Later])
-        end
-        subgraph f5 [5. Navigation]
-            uc12([12. Navigate Trip])
-        end
-        subgraph f6 [6. Trip History and Insights]
-            uc13([13. View History and Totals])
-            uc14([14. View Commute Insights])
-            uc15([15. Plan Again])
-            uc16([16. Delete Planned Trip])
-        end
-    end
-
-    user --- uc1 & uc2 & uc3 & uc4 & uc5 & uc6 & uc7 & uc8
-    user --- uc9 & uc10 & uc11 & uc12 & uc13 & uc14 & uc15 & uc16
-    uc1 --- gsi
-    uc6 --- places
-    uc7 --- places
-    uc9 --- routes
-    uc15 --- routes
-    uc12 -.- translink
-```
+![Use case diagram of Trailmix's current implementation (CP2)](images/use-case-diagram.png)
 
 
 ### **3.3. Actors Description**
-1. **User**: A commuter in Metro Vancouver who drives, takes transit, or combines them.
-2. **Google Sign-In**: Authenticates the user with their Google account.
-3. **Google Places API**: Suggests places as the user searches, and gives the name, address and location of a place they pick or tap.
-4. **Google Routes API**: Gives the Planner travel times between places, and the detailed driving, walking and transit routes for the routes it picks.
-5. **TransLink GTFS-Realtime (CP3)**: TransLink's live feed of transit delays and alerts, which will update the active trip in CP3.
+1. **User**: A commuter using the app.
+2. **Google Sign-In**: Authenticates the user.
+3. **Google Routes API**: Provides driving and transit routes.
+4. **Google Places API**: Suggests places as the user types, and gets the name, address and location of a picked or tapped place.
+5. **Google Maps SDK**: Shows the map, route previews and turn-by-turn navigation, and reports taps and long-presses on the map.
 
 
 ### **3.4. Use Case Description**
 - Use cases for feature 1: **Authentication**
-1. **Sign In with Google**: The user signs in with their Google account, and an account is created on their first sign-in.
+1. **Sign In with Google**: The user signs in, and an account is created on first sign-in.
 2. **Sign Out**: Ends the session on this device.
-3. **Delete Account**: Deletes the user's account with its parking spots, trips and sessions, which signs out every device.
+3. **Delete Account**: Permanently deletes the user's profile and trip history.
 - Use cases for feature 2: **Commute Profile**
-4. **Complete Questionnaire**: On first sign-in, the user saves their car (or that they don't drive) and how they pay for transit.
-5. **Edit Commute Details**: From the Profile tab, the user changes their car, transit fare type, or the last gas price they paid.
-- Use cases for feature 3: **Parking Spots and Place Search**
-6. **Search for a Place**: The user searches the Map tab, or taps a place on the map, to open its place sheet.
-7. **Save Parking Spot**: The user saves a place, or a dropped pin, as a parking spot with a name, an optional cost and an overnight rule.
-8. **Edit or Remove Parking Spot**: The user changes a saved spot's name, cost or overnight rule, or removes it.
-- Use cases for feature 4: **Multimodal Trip Planning**
-9. **Plan Multimodal Trip**: The user picks a destination, start, modes, longest walk and arrive-by time, and the Planner returns up to three priced and ranked routes.
-10. **Preview Route**: The user opens one route to see each leg on the map and the trip's timeline and costs, then goes back to the same routes.
-11. **Save Trip for Later**: From Trip Preview, the user saves the route to History as a planned trip.
-- Use cases for feature 5: **Navigation**
-12. **Navigate Trip**: The user starts a route or a planned trip, and the app guides them through each leg until they arrive or end the trip.
-- Use cases for feature 6: **Trip History and Insights**
-13. **View History and Totals**: The user lists their trips for a date range and sort, and sees the totals of the completed ones.
-14. **View Commute Insights**: The user sees the trip count, average time, average cost, and driving vs transit time for a period.
-15. **Plan Again**: The user opens a saved trip in Trip Preview and plans the same trip again.
-16. **Delete Planned Trip**: The user deletes a trip they saved for later but haven't started.
+4. **Complete Questionnaire**: The user saves their car and transit details.
+5. **View Profile**: Shows the user's vehicle, transit fare type and last gas price.
+6. **Edit Vehicle or Transit**: The user changes their car or how they pay for transit.
+7. **Update Gas Price**: The user sets the gas price (¢/L) used to estimate driving costs.
+- Use cases for feature 3: **Planner**
+8. **Plan Multimodal Trip**: The user picks a start, a destination, allowed modes, a max walk and an optional arrive-by time, and the Planner returns up to three priced and ranked route options.
+9. **Set Planning Preferences**: Saves the user's default modes and max walk, so Planning starts from them.
+10. **Preview Route**: Shows a route option on the map with its legs, times and cost.
+11. **Save Trip for Later**: Saves the previewed route as a planned trip in History.
+12. **Start and Navigate Trip**: Starts the route as the active trip and steps through it leg by leg. Arriving completes the trip, and ending early cancels it. Starting a new trip while one is active cancels the old one.
+- Use cases for feature 4: **Parking Spots and Place Search**
+13. **Search Places**: Suggests places as the user types on the Map tab, and opens the picked or tapped place in a sheet.
+14. **Save Parking Spot**: Saves a place as a parking spot (up to 20) with a name, an optional cost per hour or per day, and whether overnight parking is allowed.
+15. **Edit or Remove Parking Spot**: Changes a saved spot's details, or removes it.
+- Use cases for feature 5: **Trip History and Insights**
+16. **View Trip History**: Lists trips, filtered by date range and sorted by date or cost, with totals for completed trips.
+17. **View Commute Insights**: Shows the average time, average cost and time by transportation for a chosen period.
+18. **Start or Delete Saved Trip**: Starts a planned trip from History, or deletes it.
+19. **Plan Again**: Opens a past trip's route in Planning with its places and modes.
 
 
 ### **3.5. Formal Use Case Specifications (5 Most Major Use Cases)**
