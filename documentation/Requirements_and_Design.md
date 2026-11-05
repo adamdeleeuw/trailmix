@@ -18,11 +18,13 @@
 | Nov 2, 2026 | 2, 3, 4.1, 4.2, 4.3 | Replaced the Routes component design with the multimodal Planner, and documented its plan and preferences endpoints (#72). |
 | Nov 4, 2026 | 2, 3.1, 3.4 | The app now plans, previews, saves, starts and navigates trips, and History shows totals (#73, #74), so the description, features and use cases describe what is built instead of goals. Parking spots and trip navigation have their own features and use cases, and Delete Account and Edit Commute Details, which the app already had, are now listed. |
 | Nov 4, 2026 | 3.2, 3.3, 3.4 | Updated the use case diagram, actors and use case descriptions to the current implementation (CP2): parking spots and place search, multimodal planning, and saving, starting and navigating trips. Added the Google Places API and Google Maps SDK as actors. |
-| Nov 4, 2026 | 3.5, 4.6 | The 5 formal use cases are now Plan Multimodal Trip, Preview Route, Navigate Trip, Save Parking Spot, and View History and Totals, the team's 5 most central use cases. Sign In with Google was dropped from them because the course excludes authentication, and View Trip History and View Commute Insights were merged into View History and Totals. Each has a new sequence diagram. |
+| Nov 4, 2026 | 3.5, 4.6 | The 5 formal use cases are now Plan Multimodal Trip, Preview Route, Start and Navigate Trip, Save Parking Spot, and View Trip History, the team's 5 most central use cases. Sign In with Google was dropped from them because the course excludes authentication, and View Trip History and View Commute Insights were merged into View History and Totals. Each has a new sequence diagram. |
 | Nov 4, 2026 | 3.7, 4.7 | The response time requirement now covers the Planner (95% of plans within 4 s, as `planner.response-time.test.ts` checks) instead of the old chained route, and describes how the Planner meets it. Added live-update latency as the CP3 requirement. |
 | Nov 4, 2026 | 4.1 | Removed `POST /api/routes/chained`, since the app now calls the Planner and the endpoint was deleted (#72). Added the trip save, status change and delete endpoints (#74), `maxWalkMinutes` in the planning endpoints, a rationale for each component, and the internal interfaces the components call on each other. |
 | Nov 4, 2026 | 4.2 | Documented the trips v2 fields (status, transfer points, planned and actual times, cost breakdown, and each leg's times and turn-by-turn steps) and the one-active-trip index (#74). A trip's total time can now be longer than its legs, since it includes waiting between them. |
 | Nov 4, 2026 | 4.3, 4.4, 4.5 | Google Routes now also returns turn-by-turn steps, and Maps Compose is listed with the other libraries. The dependency diagram is redrawn in Mermaid for the CP2 components, grouped by feature with the Google APIs and SDKs the app and back-end use (#81). |
+| Nov 4, 2026 | 3.1, 3.5, 4.3, 4.6 | Renamed use cases 3 and 5 to Start and Navigate Trip and View Trip History, and made Navigation part of Multimodal Trip Planning, to match the updated use case diagram. TransLink GTFS-Realtime is no longer listed as an actor or external module, since it isn't used until CP3, and LiveUpdates (4.1) still describes that plan. |
+| Nov 4, 2026 | 4.6 | Added Timmy's sequence diagram updates (#83): Planning loads the saved preferences before the first plan and leaves `costVsTime` out, and History can start or delete a planned trip. |
 
 
 ---
@@ -47,9 +49,8 @@ The Planner schedules each route backward from an optional arrive-by time, price
 1. **Authentication**: Sign in with Google, sign out, and delete the account.
 2. **Commute Profile**: A first-time questionnaire about the user's car (make, model, fuel use) and transit fare type, which can be edited later from the Profile tab along with the last gas price paid. The Planner uses them to price trips.
 3. **Parking Spots and Place Search**: Search for places on the Map tab, and save up to 20 parking spots (a name, an optional cost per hour or per day, and whether overnight parking is allowed) from search, by tapping a place on the map, or by long-pressing the map. Each place opens in a sheet like Google Maps', with Directions and Save as parking spot. Saved spots show as P markers, and are the only places the Planner switches from driving to transit.
-4. **Multimodal Trip Planning**: From a place's Directions, choose the start, the allowed modes, the longest single walk, and Leave now or an arrive-by time, and get up to three routes (Cheapest, Fastest, Balanced) that the Planner schedules and prices. Each route opens in Trip Preview, with every leg on the map and a timeline, and can be saved for later or started.
-5. **Navigation**: Starting a trip opens Navigation, which follows the user's location through each leg, showing the next turn on a drive or walk and what to board and where to get off on transit, and completes the trip at the destination. In CP3, live TransLink delays and alerts will update the active trip.
-6. **Trip History and Insights**: View saved trips by date range and sort, start or delete planned ones, reopen a trip in Trip Preview to plan it again, and see the totals of completed trips (time, distance, cost, time by mode, and saved vs driving) and the commute insights for a period.
+4. **Multimodal Trip Planning**: From a place's Directions, choose the start, the allowed modes, the longest single walk, and Leave now or an arrive-by time, and get up to three routes (Cheapest, Fastest, Balanced) that the Planner schedules and prices. Each route opens in Trip Preview, with every leg on the map and a timeline, and can be saved for later or started. Starting a trip opens Navigation, which follows the user's location through each leg, showing the next turn on a drive or walk and what to board and where to get off on transit, and completes the trip at the destination. In CP3, live TransLink delays and alerts will update the active trip.
+5. **Trip History and Insights**: View saved trips by date range and sort, start or delete planned ones, reopen a trip in Trip Preview to plan it again, and see the totals of completed trips (time, distance, cost, time by mode, and saved vs driving) and the commute insights for a period.
 
 
 ### **3.2. Use Case Diagram**
@@ -154,13 +155,13 @@ The Planner schedules each route backward from an optional arrive-by time, price
 <a name="uc3"></a>
 
 
-#### Use Case 3: Navigate Trip
+#### Use Case 3: Start and Navigate Trip
 
 
 **Description**: The user starts a route or a planned trip, and the app guides them through each leg until they arrive or end the trip.
 
 
-**Primary actor(s)**: User, TransLink GTFS-Realtime (CP3)
+**Primary actor(s)**: User
 
 **Main success scenario**:
 1. The user taps **Start** in Trip Preview, or on a planned trip in History.
@@ -216,7 +217,7 @@ The Planner schedules each route backward from an optional arrive-by time, price
 <a name="uc5"></a>
 
 
-#### Use Case 5: View History and Totals
+#### Use Case 5: View Trip History
 
 
 **Description**: The user lists their trips for a date range and sort, and sees the totals of the completed ones.
@@ -384,10 +385,6 @@ Every request except sign-in first passes Auth's `requireSession`, which finds t
 - **Purpose**: Displays the map and routes, and reports taps on its place labels (with their Google place IDs) and long-presses.
 4. **Google Places API (New)**
 - **Purpose**: Suggests places as the user types on the Map tab, biased to Metro Vancouver, and gets the name, address and location of the one they pick, or the address of a place label tapped on the map. Called from the app with a key restricted to the app's package and signing certificate.
-5. **TransLink GTFS-Realtime (CP3)**
-- **Purpose**: Will give LiveUpdates the live delays and alerts for TransLink's lines.
-
-
 
 
 ### **4.4. Frameworks and Libraries**
@@ -530,6 +527,10 @@ sequenceDiagram
     App->>Places: autocomplete, then fetch the picked place
     Places-->>App: name, address and location
     User->>App: tap "Directions"
+    opt the saved preferences aren't loaded yet
+        App->>Users: GET /api/users/me
+        Users-->>App: 200 { user } with the default modes, max walk and cost vs time
+    end
     App->>App: open Planning with the user's location, default modes and max walk
     opt location is off
         App-->>User: "Choose start point"
@@ -537,6 +538,7 @@ sequenceDiagram
     end
     User->>App: change modes, max walk or arrive-by
     App->>Planner: POST /api/routes/plan { origin, destination, arriveBy, modes, maxWalkMinutes }
+    Note over App,Planner: costVsTime is left out, so the Planner uses the saved preference
     Planner->>Users: getParkingSpots(userId)
     Users-->>Planner: saved parking spots
     Planner->>Planner: select the spots near the way as candidates
@@ -586,7 +588,7 @@ sequenceDiagram
     Note over App: Trip Preview uses the routes Planning already has, so it makes no request
 ```
 
-3. [**Navigate Trip**](#uc3)
+3. [**Start and Navigate Trip**](#uc3)
 
 ```mermaid
 sequenceDiagram
@@ -671,7 +673,7 @@ sequenceDiagram
     end
 ```
 
-5. [**View History and Totals**](#uc5)
+5. [**View Trip History**](#uc5)
 
 ```mermaid
 sequenceDiagram
@@ -701,6 +703,18 @@ sequenceDiagram
         App-->>User: updated list and totals
         User->>App: tap a trip
         App-->>User: Trip Preview, read-only, with Plan again
+        opt tap Start on a planned trip
+            App->>Trips: PATCH /api/users/me/trips/:id { status: ACTIVE, actualStart }
+            Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: PLANNED })
+            Trips-->>App: 200 { trip }
+            App-->>User: open Navigation (see Start and Navigate Trip)
+        end
+        opt tap Delete on a planned trip
+            App->>Trips: DELETE /api/users/me/trips/:id
+            Trips->>DB: trips.deleteOne({ _id, userId, status: PLANNED })
+            Trips-->>App: 204
+            App-->>User: "Trip deleted", and the trip leaves the list
+        end
     end
     Note over App,Trips: Changing the period or sort reuses the loaded trips, so it makes no new request
 ```
