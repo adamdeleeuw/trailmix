@@ -31,7 +31,9 @@ This is the last commit on `main` that changes code, the same one the tests run 
 
 The issues under the "Others" category are:
 
-![The issues under the "Others" code pattern group](images/codacy-issues-others.png)
+![The issues under the "Others" code pattern group, part 1](images/codacy-issues-others.png)
+
+![The issues under the "Others" code pattern group, part 2](images/codacy-issues-others-2.png)
 
 ### 2.4. Justifications for Unfixed Issues
 
@@ -41,7 +43,7 @@ Every issue left open in 2.2 and 2.3 is listed below, grouped by code pattern. E
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/routes/auth.route.ts#L7`](../backend/src/routes/auth.route.ts#L7), [`#L8`](../backend/src/routes/auth.route.ts#L8), [`backend/src/routes/users.route.ts#L15`](../backend/src/routes/users.route.ts#L15) to [`#L27`](../backend/src/routes/users.route.ts#L27) (13 issues, one per route), [`backend/src/routes/planner.route.ts#L7`](../backend/src/routes/planner.route.ts#L7), and the 3 issues ignored in Codacy in CP1 on [`backend/src/routes/vehicles.route.ts#L7`](../backend/src/routes/vehicles.route.ts#L7) and [`#L8`](../backend/src/routes/vehicles.route.ts#L8)
+     - **Location in Git:** [`backend/src/routes/auth.route.ts#L7`](../backend/src/routes/auth.route.ts#L7), [`#L8`](../backend/src/routes/auth.route.ts#L8), [`backend/src/routes/users.route.ts#L15`](../backend/src/routes/users.route.ts#L15) to [`#L27`](../backend/src/routes/users.route.ts#L27) (13 issues, one per route), and the 3 issues ignored in Codacy in CP1 on [`backend/src/routes/vehicles.route.ts#L7`](../backend/src/routes/vehicles.route.ts#L7) and [`#L8`](../backend/src/routes/vehicles.route.ts#L8)
      - **Justification:** The rule's `checksVoidReturn` option reports a promise-returning function passed where a function returning `void` is expected, because a plain callback that returns a promise can lose its rejection ([typescript-eslint: no-misused-promises](https://typescript-eslint.io/rules/no-misused-promises/#checksvoidreturn)). Express 5 route handlers don't have that problem. Express documents that "starting with Express 5, route handlers and middleware that return a Promise will call `next(value)` automatically when they reject or throw an error" ([Express: Error Handling](https://expressjs.com/en/guide/error-handling.html#catching-errors)), so every rejection from `requireSession` or a controller reaches our error handler. Express 5's own types (`@types/express-serve-static-core` 5) declare a handler's return type as `unknown`, not `void`, so with the installed types the rule has nothing to report. Codacy reports it because its analysis doesn't load the project's installed type definitions. The mocked API tests show it in practice: a failing database call returns a 500 instead of crashing the server. Wrapping every handler to silence the rule would add code that does nothing Express 5 doesn't already do.
 
 - **Code Pattern: Unsafe return of an error typed value, unsafe argument, and redundant type constituents** (`@typescript-eslint/no-unsafe-return`, `@typescript-eslint/no-unsafe-argument`, `@typescript-eslint/no-redundant-type-constituents`)
