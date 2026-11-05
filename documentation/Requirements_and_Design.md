@@ -417,6 +417,8 @@ Every request except sign-in first passes Auth's `requireSession`, which finds t
 
 The diagram groups components by the feature they support. Shared infrastructure and external providers are shown separately. Arrows indicate a dependency or request direction.
 
+> **Note:** The diagram is too wide to show inline on GitHub. Click the expand button (↔) at the top right of the diagram box to view it full screen.
+
 ```mermaid
 flowchart LR
     subgraph Android[Android app]
