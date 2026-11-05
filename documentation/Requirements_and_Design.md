@@ -22,7 +22,7 @@
 | Nov 4, 2026 | 3.7, 4.7 | The response time requirement now covers the Planner (95% of plans within 4 s, as `planner.response-time.test.ts` checks) instead of the old chained route, and describes how the Planner meets it. Added live-update latency as the CP3 requirement. |
 | Nov 4, 2026 | 4.1 | Removed `POST /api/routes/chained`, since the app now calls the Planner and the endpoint was deleted (#72). Added the trip save, status change and delete endpoints (#74), `maxWalkMinutes` in the planning endpoints, a rationale for each component, and the internal interfaces the components call on each other. |
 | Nov 4, 2026 | 4.2 | Documented the trips v2 fields (status, transfer points, planned and actual times, cost breakdown, and each leg's times and turn-by-turn steps) and the one-active-trip index (#74). A trip's total time can now be longer than its legs, since it includes waiting between them. |
-| Nov 4, 2026 | 4.3, 4.4, 4.5 | Google Routes now also returns turn-by-turn steps, and Maps Compose is listed with the other libraries. The dependency diagram is redrawn in Mermaid for the CP2 components, so it can't drift from a separate image file. |
+| Nov 4, 2026 | 4.3, 4.4, 4.5 | Google Routes now also returns turn-by-turn steps, and Maps Compose is listed with the other libraries. The dependency diagram is redrawn in Mermaid for the CP2 components, grouped by feature with the Google APIs and SDKs the app and back-end use (#81). |
 
 
 ---
@@ -418,49 +418,96 @@ Every request except sign-in first passes Auth's `requireSession`, which finds t
 
 ### **4.5. Dependencies Diagram**
 
-Each arrow points from the caller to the component it calls. Every request from the front-end except sign-in also goes through Auth's session check first. Dashed arrows are planned for CP3.
+The diagram groups components by the feature they support. Shared infrastructure and external providers are shown separately. Arrows indicate a dependency or request direction.
 
 ```mermaid
-flowchart TB
-    fe["Front-end (Android app)"]
-
-    subgraph backend [Back-end]
-        direction LR
-        auth[Auth]
-        users[Users]
-        planner[Planner]
-        trips[Trips]
-        live["LiveUpdates (CP3)"]
+flowchart LR
+    subgraph Android[Android app]
+        AuthUI[Sign-in UI and Google sign-in client]
+        ProfileUI[Profile and questionnaire UI]
+        TripsUI[Trip history UI]
+        ParkingUI[Saved parking spots UI]
+        PlannerUI[Map and route planning UI]
+        Client[Backend API client and session store]
     end
 
-    subgraph external [Databases and external modules]
-        direction LR
-        gsi[Google Sign-In]
-        db[(MongoDB)]
-        groutes[Google Routes API]
-        gplaces[Google Places API]
-        gmaps[Google Maps SDK]
-        translink["TransLink GTFS-Realtime (CP3)"]
+    subgraph Backend[Trailmix backend]
+        subgraph AuthFeature[Authentication and sessions]
+            AuthEndpoint[Auth route and controller]
+            AuthServices[Google verification and session services]
+        end
+        subgraph ProfileFeature[Profile and planning preferences]
+            ProfileEndpoint[User profile and preference endpoints]
+            ProfileService[User service and profile validation]
+        end
+        subgraph TripsFeature[Saved trips]
+            TripsEndpoint[Trip endpoints]
+            TripsService[Trip service]
+        end
+        subgraph ParkingFeature[Saved parking spots]
+            ParkingEndpoint[Parking spot endpoints]
+            ParkingService[Parking spot service]
+        end
+        subgraph PlannerFeature[Route planning]
+            PlanEndpoint[Plan route endpoint]
+            Planner[Planner service and candidate scoring]
+        end
+        subgraph VehiclesFeature[Vehicle catalog]
+            VehiclesEndpoint[Vehicle lookup endpoints]
+            VehiclesService[Vehicle service and catalog]
+        end
+        Http[Express app, routing, session middleware and error handling]
+        Models[Mongoose user, session and trip models]
+        Startup[Startup and configuration]
     end
 
-    fe -->|sign in, sign out| auth
-    fe -->|profile, preferences, parking spots| users
-    fe -->|POST /api/routes/plan| planner
-    fe -->|save, start, end, delete trips| trips
-    live -.->|push delays and alerts| fe
-    auth -->|upsertGoogleUser| users
-    users -->|deleteUserSessions| auth
-    planner -->|getParkingSpots| users
-    users -->|deleteUserTrips| trips
-    auth -->|verifyIdToken| gsi
-    auth --> db
-    users --> db
-    trips --> db
-    planner -->|computeRouteMatrix, computeRoutes| groutes
-    live -.-> translink
-    fe --> gplaces
-    fe --> gmaps
-    fe --> gsi
+    subgraph Platform[Shared infrastructure]
+        Proxy[Caddy HTTPS reverse proxy]
+        Database[(MongoDB)]
+    end
+
+    subgraph Google[Google APIs and SDKs]
+        Identity[Google Identity Services]
+        Maps[Google Maps SDK for Android]
+        Places["Google Places API (New)"]
+        Routes[Google Routes API]
+    end
+
+    AuthUI --> Client
+    ProfileUI --> Client
+    TripsUI --> Client
+    ParkingUI --> Client
+    PlannerUI --> Client
+    AuthUI --> Identity
+    PlannerUI --> Maps
+    PlannerUI --> Places
+    Client -->|feature API requests| Proxy
+    Client -->|local development| Http
+    Proxy --> Http
+
+    Startup --> Http
+    Startup --> Models
+    Http --> AuthEndpoint
+    Http --> ProfileEndpoint
+    Http --> TripsEndpoint
+    Http --> ParkingEndpoint
+    Http --> PlanEndpoint
+    Http --> VehiclesEndpoint
+    AuthEndpoint --> AuthServices
+    ProfileEndpoint --> ProfileService
+    TripsEndpoint --> TripsService
+    ParkingEndpoint --> ParkingService
+    PlanEndpoint -->|authenticated user and plan request| Planner
+    Planner --> ParkingService
+    VehiclesEndpoint --> VehiclesService
+    Http -->|session middleware lookup| AuthServices
+    AuthServices --> Models
+    ProfileService --> Models
+    TripsService --> Models
+    ParkingService --> Models
+    Models --> Database
+    AuthServices -->|ID token verification| Identity
+    Planner -->|route matrix and route details| Routes
 ```
 
 
