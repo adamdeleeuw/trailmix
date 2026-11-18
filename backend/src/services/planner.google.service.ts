@@ -2,7 +2,7 @@ import { env } from '../config/env';
 import type { NavigationStep } from '../models/trip.model';
 import type { PlannerPlace } from './planner.core';
 
-export type PlannerMode = 'DRIVE' | 'TRANSIT';
+export type PlannerMode = 'DRIVE' | 'TRANSIT' | 'BICYCLE';
 
 export interface MatrixElement {
   originIndex: number;

@@ -1,7 +1,9 @@
 import type { Types } from 'mongoose';
+import { env } from '../config/env';
 import type { Leg, Place } from '../models/trip.model';
 import { DEFAULT_COST_VS_TIME, DEFAULT_MAX_WALK_MINUTES, type ParkingSpot, type User } from '../models/user.model';
 import type { PlanRequest } from '../validation/plan-request.validation';
+import { findBikeStationCandidates, type BikeStationCandidate } from './bike-station.service';
 import { getParkingSpots } from './parking-spot.service';
 import { performance } from 'node:perf_hooks';
 import {
@@ -11,6 +13,7 @@ import {
   pickThree,
   priceChain,
   pruneSpots,
+  scheduleBikeTransit,
   scheduleChain,
   scheduleDetailedChain,
   scheduleDetailedSingle,
@@ -34,6 +37,7 @@ const PARKING_BUFFER_SECONDS = 300;
 const GOOGLE_DEPARTURE_BUFFER_MS = 60_000;
 const BASELINE_DRIVE_ID = 'BASELINE_DRIVE';
 const BASELINE_TRANSIT_ID = 'BASELINE_TRANSIT';
+const BASELINE_BICYCLE_ID = 'BASELINE_BICYCLE';
 
 export type RouteLabel = 'CHEAPEST' | 'FASTEST' | 'BALANCED';
 
@@ -68,10 +72,13 @@ export interface PlanResponse {
 }
 
 interface PlanCandidate extends CandidateRoute {
-  kind: 'CHAIN' | 'DRIVE' | 'TRANSIT';
+  kind: 'CHAIN' | 'DRIVE' | 'TRANSIT' | 'BICYCLE' | 'BIKE_TRANSIT' | 'TRANSIT_BIKE';
   spot: CandidateSpot | null;
   drive: MatrixElement | null;
   transit: MatrixElement | null;
+  bicycle: MatrixElement | null;
+  station: BikeStationCandidate | null;
+  transferPlaces: PlannerPlace[];
 }
 
 interface DetailedCandidate {
@@ -102,6 +109,7 @@ function makeCandidate(input: {
   spot: CandidateSpot | null;
   drive: MatrixElement | null;
   transit: MatrixElement | null;
+  spotId?: string;
   driveDistanceMeters: number;
   transitDistanceMeters: number;
   schedule: ReturnType<typeof scheduleChain>;
@@ -109,7 +117,7 @@ function makeCandidate(input: {
 }): PlanCandidate {
   return {
     ...input.price,
-    spotId: input.spot?._id?.toString() ?? (input.kind === 'DRIVE' ? BASELINE_DRIVE_ID : BASELINE_TRANSIT_ID),
+    spotId: input.spotId ?? input.spot?._id?.toString() ?? (input.kind === 'DRIVE' ? BASELINE_DRIVE_ID : BASELINE_TRANSIT_ID),
     label: 'BALANCED',
     leaveAt: input.schedule.leaveAt,
     parkedFromAt: input.schedule.driveArriveAt,
@@ -122,6 +130,69 @@ function makeCandidate(input: {
     spot: input.spot,
     drive: input.drive,
     transit: input.transit,
+    bicycle: null,
+    station: null,
+    transferPlaces: [],
+  };
+}
+
+function bikeStationPlace(station: BikeStationCandidate): PlannerPlace {
+  return { label: station.name, lat: station.lat, lng: station.lng, placeId: null };
+}
+
+function bicycleCandidate(input: {
+  kind: 'BICYCLE' | 'BIKE_TRANSIT' | 'TRANSIT_BIKE';
+  station: BikeStationCandidate | null;
+  bicycle: MatrixElement;
+  transit: MatrixElement | null;
+  context: ScreeningContext;
+}): PlanCandidate {
+  const bicycleFirst = input.kind !== 'TRANSIT_BIKE';
+  const transferBufferSeconds = input.station === null
+    ? 0
+    : bicycleFirst ? env.bikeToTransitBufferSeconds : env.transitToBikeBufferSeconds;
+  const durationSeconds = input.bicycle.durationSeconds + (input.transit?.durationSeconds ?? 0) + transferBufferSeconds;
+  const schedule = scheduleDetailedSingle(
+    durationSeconds,
+    null,
+    null,
+    input.context.request.arriveBy,
+    input.context.now,
+  );
+  const price = priceCandidate({
+    user: input.context.user,
+    spot: NO_PARKING_SPOT,
+    driveDistanceMeters: 0,
+    transitDistanceMeters: input.transit?.distanceMeters ?? 0,
+    durationSeconds,
+    parkedSeconds: 0,
+    costVsTime: input.context.costVsTime,
+    zones: 1,
+    includeFuel: false,
+    includeFare: input.transit !== null,
+  });
+  const stationPlace = input.station === null ? null : bikeStationPlace(input.station);
+  return {
+    ...price,
+    totalDistanceMeters: input.bicycle.distanceMeters + (input.transit?.distanceMeters ?? 0),
+    spotId: input.station === null
+      ? BASELINE_BICYCLE_ID
+      : `${input.kind}:${input.station.source}:${input.station.id}`,
+    label: 'BALANCED',
+    leaveAt: schedule.leaveAt,
+    parkedFromAt: schedule.driveArriveAt,
+    arriveAt: schedule.arriveAt,
+    lateByMinutes: schedule.lateByMinutes,
+    overnightAllowed: true,
+    transferPoint: stationPlace,
+    transferPlaces: stationPlace === null ? [] : [stationPlace],
+    walkSeconds: 0,
+    kind: input.kind,
+    spot: null,
+    drive: null,
+    transit: input.transit,
+    bicycle: input.bicycle,
+    station: input.station,
   };
 }
 
@@ -171,7 +242,7 @@ function toDetailedLeg(
     costCents,
     polyline: detail.polyline,
     transitLines: detail.transitLines,
-    steps: mode === 'DRIVE' ? detail.navigation : [], // a transit leg is boarded, not turned through
+    steps: mode === 'TRANSIT' ? [] : detail.navigation,
   };
 }
 
@@ -215,6 +286,156 @@ function transitLegs(origin: PlannerPlace, destination: PlannerPlace, detail: Ro
   });
 }
 
+function dateOrNull(value: string): Date | null {
+  if (value === '') return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+async function getDetailedBicycleCandidate(
+  candidate: PlanCandidate,
+  label: RouteLabel,
+  request: PlanRequest,
+  user: User,
+  now: Date,
+  costVsTime: number,
+  baselineDriveCostCents: number | null,
+): Promise<DetailedCandidate | null> {
+  const maxWalk = maxWalkSeconds(request, user);
+  if (candidate.kind === 'BICYCLE') {
+    const routes = await computeRouteDetails(request.origin, request.destination, 'BICYCLE', {});
+    const detail = chooseRoute(
+      routes.filter((route) => route.distanceMeters <= env.maxBicycleLegDistanceMeters),
+      maxWalk,
+    );
+    if (detail === null) return null;
+    const schedule = scheduleDetailedSingle(detail.durationSeconds, null, null, request.arriveBy, now);
+    const timedDetail = {
+      ...detail,
+      departAt: schedule.leaveAt.toISOString(),
+      arriveAt: new Date(schedule.leaveAt.getTime() + detail.durationSeconds * 1000).toISOString(),
+    };
+    const price = priceCandidate({
+      user,
+      spot: NO_PARKING_SPOT,
+      driveDistanceMeters: 0,
+      transitDistanceMeters: 0,
+      durationSeconds: detail.durationSeconds,
+      parkedSeconds: 0,
+      costVsTime,
+      zones: 1,
+      includeFuel: false,
+      includeFare: false,
+    });
+    const legs = [toDetailedLeg('BICYCLE', request.origin, request.destination, timedDetail, 0)];
+    return {
+      option: makeOption(candidate, schedule, price, legs, label, baselineDriveCostCents, request.origin, request.destination),
+      score: price.score,
+      spotId: candidate.spotId,
+    };
+  }
+
+  const station = candidate.station;
+  if (station === null) return null;
+  const stationLocation = bikeStationPlace(station);
+  const bikeFirst = candidate.kind === 'BIKE_TRANSIT';
+  const bicycleOrigin = bikeFirst ? request.origin : stationLocation;
+  const bicycleDestination = bikeFirst ? stationLocation : request.destination;
+  const bicycleRoutes = await computeRouteDetails(bicycleOrigin, bicycleDestination, 'BICYCLE', {});
+  const bicycleDetail = chooseRoute(
+    bicycleRoutes.filter((route) => route.distanceMeters <= env.maxBicycleLegDistanceMeters),
+    maxWalk,
+  );
+  if (bicycleDetail === null) return null;
+
+  const bufferSeconds = bikeFirst ? env.bikeToTransitBufferSeconds : env.transitToBikeBufferSeconds;
+  const earliestRoutingTime = new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS);
+  const bicycleReadyAt = new Date(
+    earliestRoutingTime.getTime() + (bicycleDetail.durationSeconds + bufferSeconds) * 1000,
+  );
+  const transitCanMeetDeadline = request.arriveBy !== null &&
+    candidate.transit !== null &&
+    request.arriveBy.getTime() - candidate.transit.durationSeconds * 1000 >= bicycleReadyAt.getTime();
+  const transitTime = bikeFirst
+    ? transitCanMeetDeadline && request.arriveBy !== null
+      ? { arrivalTime: request.arriveBy.toISOString() }
+      : { departureTime: bicycleReadyAt.toISOString() }
+    : request.arriveBy !== null &&
+      request.arriveBy.getTime() - (bicycleDetail.durationSeconds + bufferSeconds) * 1000 > earliestRoutingTime.getTime()
+      ? {
+        arrivalTime: new Date(
+          request.arriveBy.getTime() - (bicycleDetail.durationSeconds + bufferSeconds) * 1000,
+        ).toISOString(),
+      }
+      : { departureTime: earliestRoutingTime.toISOString() };
+  const transitOrigin = bikeFirst ? stationLocation : request.origin;
+  const transitDestination = bikeFirst ? request.destination : stationLocation;
+  let transitRoutes = await computeRouteDetails(transitOrigin, transitDestination, 'TRANSIT', transitTime);
+  let transitDetail = chooseRoute(transitRoutes, maxWalk);
+  if (transitDetail === null) return null;
+
+  let schedule = scheduleBikeTransit(
+    bikeFirst ? 'BIKE_TRANSIT' : 'TRANSIT_BIKE',
+    bicycleDetail.durationSeconds,
+    transitDetail.durationSeconds,
+    dateOrNull(transitDetail.departAt),
+    dateOrNull(transitDetail.arriveAt),
+    request.arriveBy,
+    now,
+    bufferSeconds,
+  );
+  if (schedule === null) {
+    const earliestTransitTime = bikeFirst ? bicycleReadyAt : earliestRoutingTime;
+    transitRoutes = await computeRouteDetails(transitOrigin, transitDestination, 'TRANSIT', {
+      departureTime: earliestTransitTime.toISOString(),
+    });
+    transitDetail = chooseRoute(transitRoutes, maxWalk);
+    if (transitDetail === null) return null;
+    schedule = scheduleBikeTransit(
+      bikeFirst ? 'BIKE_TRANSIT' : 'TRANSIT_BIKE',
+      bicycleDetail.durationSeconds,
+      transitDetail.durationSeconds,
+      dateOrNull(transitDetail.departAt),
+      dateOrNull(transitDetail.arriveAt),
+      request.arriveBy,
+      now,
+      bufferSeconds,
+    );
+  }
+  if (schedule === null) return null;
+  const price = priceCandidate({
+    user,
+    spot: NO_PARKING_SPOT,
+    driveDistanceMeters: 0,
+    transitDistanceMeters: transitDetail.distanceMeters,
+    durationSeconds: Math.max(0, (schedule.arriveAt.getTime() - schedule.leaveAt.getTime()) / 1000),
+    parkedSeconds: 0,
+    costVsTime,
+    zones: zonesForTransitLines(transitDetail.transitLines),
+    includeFuel: false,
+    includeFare: true,
+  });
+  const bicycleTimedDetail = {
+    ...bicycleDetail,
+    departAt: schedule.bikeDepartAt.toISOString(),
+    arriveAt: schedule.bikeArriveAt.toISOString(),
+  };
+  const legs = bikeFirst
+    ? [
+      toDetailedLeg('BICYCLE', request.origin, stationLocation, bicycleTimedDetail, 0),
+      ...transitLegs(stationLocation, request.destination, transitDetail, price.costBreakdown.fareCents),
+    ]
+    : [
+      ...transitLegs(request.origin, stationLocation, transitDetail, price.costBreakdown.fareCents),
+      toDetailedLeg('BICYCLE', stationLocation, request.destination, bicycleTimedDetail, 0),
+    ];
+  return {
+    option: makeOption(candidate, schedule, price, legs, label, baselineDriveCostCents, request.origin, request.destination),
+    score: price.score,
+    spotId: candidate.spotId,
+  };
+}
+
 // how many times the trip changes vehicle: car to bus, or bus to train; walking between doesn't count
 function vehicleChanges(legs: readonly PlanLeg[]): number {
   return Math.max(0, legs.filter((leg) => leg.mode !== 'WALK').length - 1);
@@ -247,7 +468,9 @@ function makeOption(
     costBreakdown: price.costBreakdown,
     costEstimated: price.costEstimated,
     baselineDriveCostCents,
-    transferPoints: candidate.spot === null ? [] : [toPlace(spotPlace(candidate.spot))],
+    transferPoints: candidate.transferPlaces.length > 0
+      ? candidate.transferPlaces.map(toPlace)
+      : candidate.spot === null ? [] : [toPlace(spotPlace(candidate.spot))],
     transfers: vehicleChanges(normalizedLegs),
     legs: normalizedLegs,
   };
@@ -307,6 +530,18 @@ async function getDetailedCandidate(
       score: price.score,
       spotId: candidate.spotId,
     };
+  }
+
+  if (candidate.kind === 'BICYCLE' || candidate.kind === 'BIKE_TRANSIT' || candidate.kind === 'TRANSIT_BIKE') {
+    return getDetailedBicycleCandidate(
+      candidate,
+      label,
+      request,
+      user,
+      now,
+      costVsTime,
+      baselineDriveCostCents,
+    );
   }
 
   const mode = candidate.kind;
@@ -525,11 +760,100 @@ async function screenCandidates(
   return [...chains, ...baselines];
 }
 
+function transitScreenTime(request: PlanRequest, now: Date): { departureTime?: string; arrivalTime?: string } {
+  return request.arriveBy === null
+    ? { departureTime: new Date(now.getTime() + GOOGLE_DEPARTURE_BUFFER_MS).toISOString() }
+    : { arrivalTime: request.arriveBy.toISOString() };
+}
+
+/** Screens direct bicycle and one-transfer bike/transit journeys with batched Route Matrix calls. */
+async function screenBicycleCandidates(
+  canBicycle: boolean,
+  canTransit: boolean,
+  context: ScreeningContext,
+): Promise<PlanCandidate[]> {
+  if (!canBicycle) return [];
+  const { request, now } = context;
+  const bicycleStations = canTransit
+    ? await Promise.all([
+      findBikeStationCandidates({
+        origin: request.origin,
+        destination: request.destination,
+        bikeLegEndpoint: 'ORIGIN',
+        maxCyclingDistanceMeters: env.maxBicycleLegDistanceMeters,
+      }),
+      findBikeStationCandidates({
+        origin: request.origin,
+        destination: request.destination,
+        bikeLegEndpoint: 'DESTINATION',
+        maxCyclingDistanceMeters: env.maxBicycleLegDistanceMeters,
+      }),
+    ])
+    : [[], []];
+  const [originStations, destinationStations] = bicycleStations;
+  const time = transitScreenTime(request, now);
+  const [directBike, bikeToStations, bikeFromStations, transitFromStations, transitToStations] = await Promise.all([
+    computeRouteMatrix([request.origin], [request.destination], 'BICYCLE'),
+    originStations.length === 0
+      ? Promise.resolve([])
+      : computeRouteMatrix(
+        [request.origin],
+        originStations.map(bikeStationPlace),
+        'BICYCLE',
+      ),
+    destinationStations.length === 0
+      ? Promise.resolve([])
+      : computeRouteMatrix(
+        destinationStations.map(bikeStationPlace),
+        [request.destination],
+        'BICYCLE',
+      ),
+    destinationStations.length === 0
+      ? Promise.resolve([])
+      : computeRouteMatrix(
+        [request.origin],
+        destinationStations.map(bikeStationPlace),
+        'TRANSIT',
+        time,
+      ),
+    originStations.length === 0
+      ? Promise.resolve([])
+      : computeRouteMatrix(
+        originStations.map(bikeStationPlace),
+        [request.destination],
+        'TRANSIT',
+        time,
+      ),
+  ]);
+  const candidates: PlanCandidate[] = [];
+  const direct = directBike[0];
+  if (direct !== undefined) {
+    candidates.push(bicycleCandidate({ kind: 'BICYCLE', station: null, bicycle: direct, transit: null, context }));
+  }
+
+  for (const [index, station] of originStations.entries()) {
+    const bicycle = bikeToStations.find((element) => element.destinationIndex === index);
+    const transit = transitToStations.find((element) => element.originIndex === index);
+    if (bicycle !== undefined && transit !== undefined) {
+      candidates.push(bicycleCandidate({ kind: 'BIKE_TRANSIT', station, bicycle, transit, context }));
+    }
+  }
+  for (const [index, station] of destinationStations.entries()) {
+    const transit = transitFromStations.find((element) => element.destinationIndex === index);
+    const bicycle = bikeFromStations.find((element) => element.originIndex === index);
+    if (transit !== undefined && bicycle !== undefined) {
+      candidates.push(bicycleCandidate({ kind: 'TRANSIT_BIKE', station, bicycle, transit, context }));
+    }
+  }
+  return candidates;
+}
+
 export async function planTrip(userId: Types.ObjectId, user: User, request: PlanRequest): Promise<PlanResponse> {
   const now = new Date();
   const warnings: PlannerWarning[] = [];
   const canDrive = request.modes.includes('DRIVE');
   const canTransit = request.modes.includes('TRANSIT');
+  const canBicycle = request.modes.includes('BICYCLE');
   const savedSpots: ParkingSpot[] = canDrive ? await getParkingSpots(userId) : [];
   const spots = canDrive && canTransit
     ? selectCandidates(request.origin, request.destination, savedSpots as CandidateSpot[])
@@ -540,7 +864,11 @@ export async function planTrip(userId: Types.ObjectId, user: User, request: Plan
   if (canDrive && user.vehicle === null) warnings.push('VEHICLE_MISSING');
 
   const costVsTime = request.costVsTime ?? user.costVsTime ?? DEFAULT_COST_VS_TIME;
-  const candidates = await screenCandidates(spots, canDrive, canTransit, { request, user, now, costVsTime });
+  const context = { request, user, now, costVsTime };
+  const candidates = [
+    ...await screenCandidates(spots, canDrive, canTransit, context),
+    ...await screenBicycleCandidates(canBicycle, canTransit, context),
+  ];
 
   const feasible = filterChains(candidates, now, user.timezone ?? 'UTC');
   const initialPicks = pickThree(feasible);

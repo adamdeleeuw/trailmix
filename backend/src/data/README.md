@@ -39,6 +39,10 @@ coordinates and a transit-station type (bus-only stops are rejected). Places res
 are cached for five minutes and duplicate locations are removed. If Places is
 unconfigured, unavailable or empty, the service returns the seeded candidates it found.
 
-`BIKE_STATION_MAX_CYCLING_DISTANCE_METERS` defaults to `5000`, and
-`BIKE_STATION_CANDIDATE_COUNT` defaults to `3`. Set `GOOGLE_PLACES_API_KEY` to enable
+`MAX_BICYCLE_LEG_DISTANCE_METERS` defaults to `5000` and limits both station search
+and routed bicycle legs. For backwards compatibility, the previous
+`BIKE_STATION_MAX_CYCLING_DISTANCE_METERS` setting is still used if the new setting
+is absent. `BIKE_STATION_CANDIDATE_COUNT` defaults to `3`.
+`BIKE_TO_TRANSIT_BUFFER_SECONDS` and `TRANSIT_TO_BIKE_BUFFER_SECONDS` each default to
+`120` seconds. Set `GOOGLE_PLACES_API_KEY` to enable
 the fallback; it should be restricted to the Places API.

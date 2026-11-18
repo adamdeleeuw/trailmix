@@ -40,8 +40,13 @@ function positiveIntegerEnv(name: string, defaultValue: number): number {
 
 export const env = {
   port,
-  bikeStationMaxCyclingDistanceMeters: positiveIntegerEnv('BIKE_STATION_MAX_CYCLING_DISTANCE_METERS', 5000),
+  maxBicycleLegDistanceMeters: positiveIntegerEnv(
+    'MAX_BICYCLE_LEG_DISTANCE_METERS',
+    positiveIntegerEnv('BIKE_STATION_MAX_CYCLING_DISTANCE_METERS', 5000),
+  ),
   bikeStationCandidateCount: positiveIntegerEnv('BIKE_STATION_CANDIDATE_COUNT', 3),
+  bikeToTransitBufferSeconds: positiveIntegerEnv('BIKE_TO_TRANSIT_BUFFER_SECONDS', 120),
+  transitToBikeBufferSeconds: positiveIntegerEnv('TRANSIT_TO_BIKE_BUFFER_SECONDS', 120),
   get googleClientId(): string { // must match the server client ID the Android app requests tokens for
     return requireEnv('GOOGLE_BACKEND_CLIENT_ID');
   },

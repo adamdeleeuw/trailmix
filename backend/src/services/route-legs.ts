@@ -2,7 +2,7 @@ import type { NavigationStep, Place } from '../models/trip.model';
 import type { TransitLineDetail } from './planner.google.service';
 
 export interface NormalizableLeg {
-  mode: 'DRIVE' | 'TRANSIT' | 'WALK';
+  mode: 'DRIVE' | 'TRANSIT' | 'BICYCLE' | 'WALK';
   from: Place;
   to: Place;
   departAt: string;

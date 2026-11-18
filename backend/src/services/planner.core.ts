@@ -346,3 +346,72 @@ export function scheduleDetailedSingle(
     lateByMinutes: arriveBy === null ? 0 : Math.max(0, Math.ceil((exactArriveAt.getTime() - arriveBy.getTime()) / 60_000)),
   };
 }
+
+export type BikeTransitOrder = 'BIKE_TRANSIT' | 'TRANSIT_BIKE';
+
+export interface BikeTransitSchedule extends ScheduledChain {
+  bikeDepartAt: Date;
+  bikeArriveAt: Date;
+  transitDepartAt: Date;
+  transitArriveAt: Date;
+}
+
+/** Schedules a single bicycle/transit transfer while keeping its buffer out of the walking-time calculation. */
+export function scheduleBikeTransit(
+  order: BikeTransitOrder,
+  bicycleSeconds: number,
+  transitSeconds: number,
+  transitDepartAt: Date | null,
+  transitArriveAt: Date | null,
+  arriveBy: Date | null,
+  now: Date,
+  transferBufferSeconds: number,
+): BikeTransitSchedule | null {
+  const validTime = (time: Date | null): time is Date => time !== null && !Number.isNaN(time.getTime());
+  const totalSeconds = bicycleSeconds + transitSeconds + transferBufferSeconds;
+  const estimatedLeaveAt = arriveBy !== null && arriveBy.getTime() - totalSeconds * 1000 >= now.getTime()
+    ? new Date(arriveBy.getTime() - totalSeconds * 1000)
+    : new Date(now);
+
+  if (order === 'BIKE_TRANSIT') {
+    const transitDeparture = validTime(transitDepartAt)
+      ? transitDepartAt
+      : new Date(estimatedLeaveAt.getTime() + (bicycleSeconds + transferBufferSeconds) * 1000);
+    const transitArrival = validTime(transitArriveAt)
+      ? transitArriveAt
+      : new Date(transitDeparture.getTime() + transitSeconds * 1000);
+    const bikeArriveAt = new Date(transitDeparture.getTime() - transferBufferSeconds * 1000);
+    const bikeDepartAt = new Date(bikeArriveAt.getTime() - bicycleSeconds * 1000);
+    if (bikeDepartAt < now || transitArrival < transitDeparture) return null;
+    return {
+      leaveAt: bikeDepartAt,
+      driveArriveAt: bikeArriveAt,
+      transitDepartAt: transitDeparture,
+      arriveAt: transitArrival,
+      lateByMinutes: arriveBy === null ? 0 : Math.max(0, Math.ceil((transitArrival.getTime() - arriveBy.getTime()) / 60_000)),
+      bikeDepartAt,
+      bikeArriveAt,
+      transitArriveAt: transitArrival,
+    };
+  }
+
+  const transitArrival = validTime(transitArriveAt)
+    ? transitArriveAt
+    : new Date(estimatedLeaveAt.getTime() + transitSeconds * 1000);
+  const transitDeparture = validTime(transitDepartAt)
+    ? transitDepartAt
+    : new Date(transitArrival.getTime() - transitSeconds * 1000);
+  const bikeDepartAt = new Date(transitArrival.getTime() + transferBufferSeconds * 1000);
+  const bikeArriveAt = new Date(bikeDepartAt.getTime() + bicycleSeconds * 1000);
+  if (transitDeparture < now || transitArrival < transitDeparture) return null;
+  return {
+    leaveAt: transitDeparture,
+    driveArriveAt: transitArrival,
+    transitDepartAt: transitDeparture,
+    arriveAt: bikeArriveAt,
+    lateByMinutes: arriveBy === null ? 0 : Math.max(0, Math.ceil((bikeArriveAt.getTime() - arriveBy.getTime()) / 60_000)),
+    bikeDepartAt,
+    bikeArriveAt,
+    transitArriveAt: transitArrival,
+  };
+}

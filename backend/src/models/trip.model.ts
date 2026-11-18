@@ -1,7 +1,7 @@
 import { Schema, model, type HydratedDocument, type Types } from 'mongoose';
 
 /** Travel modes supported by a trip leg. */
-export const TRIP_MODES = ['DRIVE', 'TRANSIT', 'WALK'] as const;
+export const TRIP_MODES = ['DRIVE', 'TRANSIT', 'BICYCLE', 'WALK'] as const;
 
 /** Where a trip is in its lifecycle, from saved for later to finished. */
 const TRIP_STATUSES = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as const;
@@ -39,7 +39,7 @@ export interface NavigationStep {
   lng: number;
 }
 
-/** One driving, transit or walking segment of a trip. */
+/** One driving, transit, bicycle or walking segment of a trip. */
 export interface Leg {
   mode: TripMode;
   from: Place;

@@ -224,7 +224,7 @@ function cachedNearbyStations(center: PlannerPlace, radiusMeters: number): Promi
  * cannot fill the requested candidate count.
  */
 export async function findBikeStationCandidates(search: BikeStationSearch): Promise<BikeStationCandidate[]> {
-  const maxDistance = search.maxCyclingDistanceMeters ?? env.bikeStationMaxCyclingDistanceMeters;
+  const maxDistance = search.maxCyclingDistanceMeters ?? env.maxBicycleLegDistanceMeters;
   const candidateCount = search.candidateCount ?? env.bikeStationCandidateCount;
   validateSearch(search, maxDistance, candidateCount);
   const seeded = rankBikeStationCandidates(search, SEEDED_STATIONS, maxDistance, candidateCount);
