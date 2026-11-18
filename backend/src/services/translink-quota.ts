@@ -3,21 +3,21 @@
  *
  * @remarks
  * TransLink allows 1,000 requests a day per key, so the backend stops at {@link DAILY_REQUEST_CAP}, which leaves room
- * for requests made by hand with the same key. The day resets at midnight Pacific time.
+ * for requests made by hand with the same key. The day resets at midnight Pacific time, which is a fixed UTC-7 (see
+ * `bc-time.ts`).
  */
 import { mongo } from 'mongoose';
 import { TranslinkQuotaModel } from '../models/translink-quota.model';
+import { bcDay } from './bc-time';
 
 /** The most requests the backend sends TransLink in one Pacific day. */
 export const DAILY_REQUEST_CAP = 950;
 const LOG_EVERY = 100; // log the running count every this many requests
 const DUPLICATE_KEY = 11000;
 
-const pacificDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Vancouver', year: 'numeric', month: '2-digit', day: '2-digit' });
-
-/** The Pacific-time day a moment falls on, as YYYY-MM-DD (en-CA formats dates that way). */
+/** The Pacific-time day a moment falls on, as YYYY-MM-DD. Midnight Pacific is 07:00 UTC all year. */
 export function pacificDay(at: Date): string {
-  return pacificDate.format(at);
+  return bcDay(at);
 }
 
 /**

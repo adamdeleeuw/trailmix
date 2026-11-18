@@ -15,11 +15,15 @@ afterEach(() => {
 });
 
 describe('pacificDay', () => {
-  // Input: moments either side of midnight in Vancouver, in PST (UTC-8) and PDT (UTC-7)
-  // Expected output: the Pacific date, which changes at local midnight, not UTC midnight
+  // Input: explicit UTC moments either side of 07:00Z in winter and summer
+  // Expected output: the Pacific date, which changes at 07:00 UTC all year (B.C.'s permanent UTC-7), not UTC midnight
+  // nor 08:00 UTC, whatever the machine's time zone database says
   test('uses the date in Vancouver', () => {
-    expect(pacificDay(new Date('2026-11-18T07:59:59Z'))).toBe('2026-11-17');
-    expect(pacificDay(new Date('2026-11-18T08:00:00Z'))).toBe('2026-11-18');
+    expect(pacificDay(new Date('2026-11-18T06:59:59Z'))).toBe('2026-11-17');
+    expect(pacificDay(new Date('2026-11-18T07:00:00Z'))).toBe('2026-11-18');
+    expect(pacificDay(new Date('2026-11-18T07:59:59Z'))).toBe('2026-11-18');
+    expect(pacificDay(new Date('2027-01-15T06:59:59Z'))).toBe('2027-01-14');
+    expect(pacificDay(new Date('2027-01-15T07:00:00Z'))).toBe('2027-01-15');
     expect(pacificDay(new Date('2026-07-01T06:59:59Z'))).toBe('2026-06-30');
     expect(pacificDay(new Date('2026-07-01T07:00:00Z'))).toBe('2026-07-01');
   });
@@ -54,9 +58,9 @@ describe('reserveTranslinkRequest', () => {
     await TranslinkQuotaModel.create({ _id: '2026-11-18', count: DAILY_REQUEST_CAP });
     const log = jest.spyOn(console, 'log');
 
-    expect(await reserveTranslinkRequest(new Date('2026-11-19T07:59:00Z'))).toBe(false);
-    expect(await reserveTranslinkRequest(new Date('2026-11-19T08:00:00Z'))).toBe(true);
-    expect(await translinkRequestsOn(new Date('2026-11-19T08:00:00Z'))).toBe(1);
+    expect(await reserveTranslinkRequest(new Date('2026-11-19T06:59:00Z'))).toBe(false);
+    expect(await reserveTranslinkRequest(new Date('2026-11-19T07:00:00Z'))).toBe(true);
+    expect(await translinkRequestsOn(new Date('2026-11-19T07:00:00Z'))).toBe(1);
     expect(log).toHaveBeenCalledWith(`TransLink requests on 2026-11-19 (Pacific): 1/${DAILY_REQUEST_CAP}`);
   });
 

@@ -219,6 +219,29 @@ describe('filterChains', () => {
 
     expect(filterChains(chains, now).map(({ spotId }) => spotId)).toEqual(['valid']);
   });
+
+  // Input: a Vancouver user parking at 23:30 and arriving at 00:30 B.C. time (06:30Z and 07:30Z), in winter
+  // Expected: B.C.'s midnight is 07:00Z (permanent UTC-7), so the route crosses midnight and is removed, while one
+  // parked from 07:00Z, after midnight, stays, whatever the machine's time zone database says
+  test("uses B.C.'s fixed UTC-7 midnight for a Vancouver user", () => {
+    const now = new Date('2026-11-18T00:00:00Z');
+    const chains = [
+      route('crosses', {
+        leaveAt: new Date('2026-11-18T06:00:00Z'),
+        parkedFromAt: new Date('2026-11-18T06:30:00Z'),
+        arriveAt: new Date('2026-11-18T07:30:00Z'),
+        overnightAllowed: false,
+      }),
+      route('after', {
+        leaveAt: new Date('2026-11-18T06:45:00Z'),
+        parkedFromAt: new Date('2026-11-18T07:00:00Z'),
+        arriveAt: new Date('2026-11-18T07:45:00Z'),
+        overnightAllowed: false,
+      }),
+    ];
+
+    expect(filterChains(chains, now, 'America/Vancouver').map(({ spotId }) => spotId)).toEqual(['after']);
+  });
 });
 
 describe('pickThree', () => {
