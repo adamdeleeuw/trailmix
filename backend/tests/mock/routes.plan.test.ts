@@ -183,6 +183,7 @@ function mockBikeTransitGoogle(
   transitFromStationSeconds: ReadonlyMap<number, number>,
   transitToStationSeconds: ReadonlyMap<number, number>,
   bikeFromStationSeconds: ReadonlyMap<number, number>,
+  bicycleDistanceMeters: (from: number, to: number) => number = () => 2000,
 ): jest.SpiedFunction<typeof fetch> {
   const originLat = journey.origin.lat;
   const destinationLat = journey.destination.lat;
@@ -208,7 +209,7 @@ function mockBikeTransitGoogle(
     const from = body.origin?.location?.latLng?.latitude ?? 0;
     const to = body.destination?.location?.latLng?.latitude ?? 0;
     return Promise.resolve(googleSays(mode === 'BICYCLE'
-      ? bicycleDetails(bikeSeconds(from, to))
+      ? bicycleDetails(bikeSeconds(from, to), bicycleDistanceMeters(from, to))
       : transitDetails(transitSeconds(from, to))));
   });
 }
@@ -231,8 +232,19 @@ test('Plans a bicycle-only journey and keeps bicycle time out of the walking lim
     totalDistanceMeters: 3000,
     totalCostCents: 0,
     costBreakdown: { fuelCents: 0, parkingCents: 0, fareCents: 0 },
-    legs: [{ mode: 'BICYCLE', costCents: 0, distanceMeters: 3000, durationSeconds: 900 }],
+    legs: [{
+      mode: 'BICYCLE',
+      from: { label: BODY.origin.label, lat: BODY.origin.lat, lng: BODY.origin.lng },
+      to: { label: BODY.destination.label, lat: BODY.destination.lat, lng: BODY.destination.lng },
+      costCents: 0,
+      distanceMeters: 3000,
+      durationSeconds: 900,
+      polyline: ROUTE_POLYLINE,
+      transitLines: [],
+    }],
   });
+  expect(response.body.options[0].legs[0].departAt).toEqual(expect.any(String));
+  expect(response.body.options[0].legs[0].arriveAt).toEqual(expect.any(String));
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(googleRequest(fetch.mock.calls[0]?.[1]).travelMode).toBe('BICYCLE');
 });
@@ -260,7 +272,9 @@ test('Plans bicycle-to-transit and prefers a farther station when its full journ
     new Map(),
     new Map(),
   );
-  const { token } = await createSignedInUser();
+  const { token } = await createSignedInUser({
+    transit: { fareType: 'ADULT_STORED_VALUE', monthlyPassZones: null },
+  });
 
   const response = await request(createApp())
     .post('/api/routes/plan')
@@ -272,9 +286,56 @@ test('Plans bicycle-to-transit and prefers a farther station when its full journ
   expect(fastest.transferPoints[0].label).toBe(journey.originStations[2]?.name);
   expect(fastest.legs.map((leg: { mode: string }) => leg.mode)).toEqual(['BICYCLE', 'TRANSIT']);
   expect(fastest.legs[0].costCents).toBe(0);
+  expect(fastest.legs[0]).toMatchObject({
+    from: { label: journey.origin.label },
+    to: { label: journey.originStations[2]?.name },
+    distanceMeters: 2000,
+    durationSeconds: bikeTimes.get(journey.originStations[2]?.lat ?? 0),
+    polyline: ROUTE_POLYLINE,
+    transitLines: [],
+  });
+  expect(fastest.legs[1].distanceMeters).toBeGreaterThan(0);
+  expect(fastest.legs[1].durationSeconds).toBeGreaterThan(0);
+  expect(fastest.legs[1].polyline).toBe(ROUTE_POLYLINE);
+  expect(fastest.legs[1].costCents).toBeGreaterThan(0);
+  expect(fastest.costBreakdown.fareCents).toBe(fastest.legs[1].costCents);
   expect(fastest.totalCostCents).toBe(fastest.legs.reduce((total: number, leg: { costCents: number }) => total + leg.costCents, 0));
-  expect(fastest.totalDurationSeconds - fastest.legs.reduce((total: number, leg: { durationSeconds: number }) => total + leg.durationSeconds, 0)).toBe(120);
+  expect(fastest.totalDurationSeconds - fastest.legs.reduce((total: number, leg: { durationSeconds: number }) => total + leg.durationSeconds, 0))
+    .toBe(env.bikeToTransitBufferSeconds);
   expect(fetch.mock.calls.every(([url]) => !String(url).includes('places.googleapis.com'))).toBe(true);
+});
+
+test('Rejects an over-limit station route and compares the remaining bicycle-transit alternatives', async () => {
+  const journey = stationJourney();
+  const bikeTimes = new Map(journey.originStations.map((station, index) => [station.lat, 120 + index * 120]));
+  const transitTimes = new Map(journey.originStations.map((station, index) => [station.lat, [100, 1500, 1000][index] ?? 1800]));
+  const rejectedStationLat = journey.originStations[0]?.lat;
+  if (rejectedStationLat === undefined) throw new Error('Station fixture is missing its first candidate');
+  mockBikeTransitGoogle(
+    journey,
+    bikeTimes,
+    transitTimes,
+    new Map(),
+    new Map(),
+    (from, to) => from === journey.origin.lat && to === rejectedStationLat
+      ? env.maxBicycleLegDistanceMeters + 1
+      : 2000,
+  );
+  const { token } = await createSignedInUser({
+    transit: { fareType: 'ADULT_STORED_VALUE', monthlyPassZones: null },
+  });
+
+  const response = await request(createApp())
+    .post('/api/routes/plan')
+    .set('Authorization', bearer(token))
+    .send({ origin: journey.origin, destination: journey.destination, arriveBy: null, modes: ['BICYCLE', 'TRANSIT'] });
+
+  expect(response.status).toBe(200);
+  expect(response.body.options.length).toBeGreaterThan(0);
+  expect(response.body.options.flatMap((option: { transferPoints: { label: string }[] }) =>
+    option.transferPoints.map((point) => point.label))).not.toContain(journey.originStations[0]?.name);
+  const fastest = response.body.options.find((option: { label: string }) => option.label === 'FASTEST');
+  expect(fastest.transferPoints[0].label).toBe(journey.originStations[2]?.name);
 });
 
 test('Plans transit-to-bicycle with the retrieval buffer and zero bicycle cost', async () => {
@@ -289,7 +350,9 @@ test('Plans transit-to-bicycle with the retrieval buffer and zero bicycle cost',
     transitTimes,
     bikeTimes,
   );
-  const { token } = await createSignedInUser();
+  const { token } = await createSignedInUser({
+    transit: { fareType: 'ADULT_STORED_VALUE', monthlyPassZones: null },
+  });
 
   const response = await request(createApp())
     .post('/api/routes/plan')
@@ -300,11 +363,23 @@ test('Plans transit-to-bicycle with the retrieval buffer and zero bicycle cost',
   const transitBike = response.body.options.find((option: { legs: { mode: string }[] }) =>
     option.legs[0]?.mode === 'TRANSIT' && option.legs[1]?.mode === 'BICYCLE');
   expect(transitBike).toBeDefined();
+  expect(transitBike.transferPoints[0].label).toBe(transitBike.legs[1].from.label);
+  expect(transitBike.legs[1]).toMatchObject({
+    to: { label: journey.destination.label },
+    distanceMeters: 2000,
+    polyline: ROUTE_POLYLINE,
+    transitLines: [],
+  });
+  expect(transitBike.legs[1].durationSeconds).toBeGreaterThan(0);
+  expect(transitBike.legs[1].departAt).toEqual(expect.any(String));
+  expect(transitBike.legs[1].arriveAt).toEqual(expect.any(String));
   expect(transitBike.legs[1].costCents).toBe(0);
+  expect(transitBike.legs[0].costCents).toBeGreaterThan(0);
+  expect(transitBike.costBreakdown.fareCents).toBe(transitBike.legs[0].costCents);
   expect(transitBike.totalDurationSeconds - transitBike.legs.reduce(
     (total: number, leg: { durationSeconds: number }) => total + leg.durationSeconds,
     0,
-  )).toBe(120);
+  )).toBe(env.transitToBikeBufferSeconds);
 });
 
 const SAVED_AT = new Date('2026-11-02T00:00:00Z');

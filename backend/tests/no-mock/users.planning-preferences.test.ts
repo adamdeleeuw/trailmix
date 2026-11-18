@@ -28,15 +28,20 @@ describe('Unmocked: PUT /api/users/me/planning-preferences', () => {
 
   test('Saves and returns the bicycle planning mode', async () => {
     const { token } = await createSignedInUser();
-    const preferences = { costVsTime: 75, defaultModes: ['DRIVE', 'BICYCLE'] };
+    const preferences = { costVsTime: 75, defaultModes: ['BICYCLE', 'TRANSIT'] };
 
     const response = await request(createApp())
       .put('/api/users/me/planning-preferences')
       .set('Authorization', bearer(token))
       .send(preferences);
+    const loaded = await request(createApp())
+      .get('/api/users/me')
+      .set('Authorization', bearer(token));
 
     expect(response.status).toBe(200);
     expect(response.body.user).toMatchObject(preferences);
+    expect(loaded.status).toBe(200);
+    expect(loaded.body.user.defaultModes).toEqual(['BICYCLE', 'TRANSIT']);
   });
 
   // Input: valid session and a max walk of 15 minutes, then a save that leaves the max walk out

@@ -201,6 +201,32 @@ describe('findBikeStationCandidates', () => {
     }
   });
 
+  test('keeps seeded candidates when Places responds with an HTTP error', async () => {
+    const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 503 }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const oldKey = process.env.GOOGLE_PLACES_API_KEY;
+    process.env.GOOGLE_PLACES_API_KEY = 'test-places-api-key';
+
+    try {
+      const ranked = await findBikeStationCandidates({
+        origin: { label: 'Waterfront', lat: 49.285687, lng: -123.111773, placeId: null },
+        destination: { label: 'North', lat: 49.295687, lng: -123.111773, placeId: null },
+        bikeLegEndpoint: 'ORIGIN',
+        maxCyclingDistanceMeters: 500,
+        candidateCount: 2,
+      });
+
+      expect(ranked.map(({ name, source }) => ({ name, source }))).toEqual([
+        { name: 'Waterfront Station', source: 'GTFS' },
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Places fallback failed'), expect.any(Error));
+    } finally {
+      if (oldKey === undefined) delete process.env.GOOGLE_PLACES_API_KEY;
+      else process.env.GOOGLE_PLACES_API_KEY = oldKey;
+    }
+  });
+
   test('keeps seeded candidates when the Places fallback fails', async () => {
     const fetch = jest.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network unavailable'));
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
