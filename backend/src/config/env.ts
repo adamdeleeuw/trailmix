@@ -39,6 +39,11 @@ export const env = {
   get googleRoutesApiKey(): string { // server-only key restricted to the Routes API
     return requireEnv('GOOGLE_ROUTES_API_KEY');
   },
+  // TransLink Open API key for live trip updates and alerts (#87). Optional: without it, live updates say live: false
+  get translinkApiKey(): string | null {
+    const value = process.env.TRANSLINK_API_KEY?.trim();
+    return value === undefined || value === '' ? null : value;
+  },
 };
 
 /**

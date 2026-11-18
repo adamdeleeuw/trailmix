@@ -1,5 +1,5 @@
 import { env } from '../config/env';
-import type { NavigationStep } from '../models/trip.model';
+import type { NavigationStep, StopLocation } from '../models/trip.model';
 import type { PlannerPlace } from './planner.core';
 
 export type PlannerMode = 'DRIVE' | 'TRANSIT';
@@ -20,6 +20,12 @@ export interface TransitLineDetail {
   departureStop: string;
   arrivalStop: string;
   stopCount: number;
+  // where the stops are and the scheduled times there, which LiveUpdates matches to TransLink's stops and runs; null
+  // when Google leaves them out. A leg's own from, to and times can include a walk merged into it, so they aren't these
+  departureStopLocation: StopLocation | null;
+  arrivalStopLocation: StopLocation | null;
+  departAt: string | null;
+  arriveAt: string | null;
 }
 
 export interface RouteDetail {
@@ -163,8 +169,8 @@ interface GoogleDetailsResponse {
         transitDetails?: {
           headsign?: string;
           stopDetails?: {
-            departureStop?: { name?: string };
-            arrivalStop?: { name?: string };
+            departureStop?: GoogleStop;
+            arrivalStop?: GoogleStop;
             stopCount?: number;
             departureTime?: string;
             arrivalTime?: string;
@@ -179,6 +185,11 @@ interface GoogleDetailsResponse {
       }[];
     }[];
   }[];
+}
+
+interface GoogleStop {
+  name?: string;
+  location?: { latLng?: { latitude?: number; longitude?: number } };
 }
 
 type GoogleStep = NonNullable<NonNullable<NonNullable<GoogleDetailsResponse['routes']>[number]['legs']>[number]['steps']>[number];
@@ -208,7 +219,18 @@ function toTransitLine(details: GoogleTransitDetails): TransitLineDetail {
     departureStop: details.stopDetails?.departureStop?.name ?? '',
     arrivalStop: details.stopDetails?.arrivalStop?.name ?? '',
     stopCount: details.stopDetails?.stopCount ?? 0,
+    departureStopLocation: stopLocation(details.stopDetails?.departureStop),
+    arrivalStopLocation: stopLocation(details.stopDetails?.arrivalStop),
+    departAt: isoTimestamp(details.stopDetails?.departureTime) ?? null,
+    arriveAt: isoTimestamp(details.stopDetails?.arrivalTime) ?? null,
   };
+}
+
+/** Where Google says a transit stop is, or null when it leaves the location out. */
+function stopLocation(stop: GoogleStop | undefined): StopLocation | null {
+  const latLng = stop?.location?.latLng;
+  if (latLng?.latitude === undefined || latLng.longitude === undefined) return null;
+  return { lat: latLng.latitude, lng: latLng.longitude };
 }
 
 /** The longest run of back-to-back walking steps, in seconds; riding a vehicle ends a run. */

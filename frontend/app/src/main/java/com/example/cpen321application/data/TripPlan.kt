@@ -57,6 +57,10 @@ data class CostBreakdown(val fuelCents: Int, val parkingCents: Int, val fareCent
 /**
  * A bus or train a transit leg rides. [colour] is a hex string like "#0060A9", or `null` if Google gives none.
  * [shortName] is what the line is signed as, like "99" or "R4", or `null` when it has none (SkyTrain lines).
+ *
+ * [departureStopLocation], [arrivalStopLocation], [departAt] and [arriveAt] are where the stops are and the
+ * scheduled times there, which the backend matches to TransLink's live data. They are `null` when Google leaves
+ * them out and on trips saved before them, and the app only passes them back when it saves the trip.
  */
 data class TransitLine(
     val name: String,
@@ -67,6 +71,10 @@ data class TransitLine(
     val arrivalStop: String,
     val stopCount: Int,
     val shortName: String? = null,
+    val departureStopLocation: LatLng? = null,
+    val arrivalStopLocation: LatLng? = null,
+    val departAt: Instant? = null,
+    val arriveAt: Instant? = null,
 ) {
     /** The name for badges: the short name when there is one, like Google Maps. */
     val badgeName: String get() = shortName ?: name
@@ -167,7 +175,20 @@ private fun JSONObject.toTransitLine() = TransitLine(
     arrivalStop = getString("arrivalStop"),
     stopCount = getInt("stopCount"),
     shortName = if (isNull("shortName")) null else optString("shortName").ifEmpty { null },
+    departureStopLocation = optLatLng("departureStopLocation"),
+    arrivalStopLocation = optLatLng("arrivalStopLocation"),
+    departAt = optInstant("departAt"),
+    arriveAt = optInstant("arriveAt"),
 )
+
+// a { lat, lng } field, or null when it is missing or null
+private fun JSONObject.optLatLng(name: String): LatLng? =
+    optJSONObject(name)?.let { LatLng(it.getDouble("lat"), it.getDouble("lng")) }
+
+// an ISO 8601 time field, or null when it is missing or null
+private fun JSONObject.optInstant(name: String): Instant? = if (isNull(name)) null else Instant.parse(getString(name))
+
+private fun LatLng.toJson() = JSONObject().put("lat", latitude).put("lng", longitude)
 
 private fun JSONObject.toNavigationStep() = NavigationStep(
     instruction = getString("instruction"),
@@ -217,6 +238,10 @@ private fun TransitLine.toJson() = JSONObject()
     .put("departureStop", departureStop)
     .put("arrivalStop", arrivalStop)
     .put("stopCount", stopCount)
+    .put("departureStopLocation", departureStopLocation?.toJson() ?: JSONObject.NULL)
+    .put("arrivalStopLocation", arrivalStopLocation?.toJson() ?: JSONObject.NULL)
+    .put("departAt", departAt?.toString() ?: JSONObject.NULL)
+    .put("arriveAt", arriveAt?.toString() ?: JSONObject.NULL)
 
 private fun PlanLeg.toJson() = JSONObject()
     .put("mode", mode.name)

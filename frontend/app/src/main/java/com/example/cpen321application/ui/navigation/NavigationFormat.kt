@@ -109,10 +109,16 @@ fun turnDistanceText(metres: Double): String = when {
  * The top card's title when there's no turn to show: [legTitle], or once the user is riding a
  * transit leg, where to get off, like "Ride Expo Line to Main Street · 6 stops".
  */
-fun cardTitle(route: RouteOption, index: Int, alongMetres: Double?, zone: ZoneId = ZoneId.systemDefault()): String {
+fun cardTitle(
+    route: RouteOption,
+    index: Int,
+    alongMetres: Double?,
+    zone: ZoneId = ZoneId.systemDefault(),
+    liveDepartAt: Instant? = null,
+): String {
     val leg = route.legs[index]
     val riding = leg.mode == TripMode.TRANSIT && alongMetres != null && alongMetres >= BOARDED_M
-    return if (riding) rideTitle(leg) else legTitle(route, index, zone)
+    return if (riding) rideTitle(leg) else legTitle(route, index, zone, liveDepartAt)
 }
 
 // where a transit leg gets off, with its stop count
@@ -159,8 +165,9 @@ fun isFarFromDestination(route: RouteOption, here: LatLng?): Boolean =
 /**
  * The top card's title for a leg, like "Drive to North Parkade · 14 min",
  * "Board Expo Line toward King George at 8:31 · 6 stops" or "Walk to destination · 4 min".
+ * A transit leg boards at [liveDepartAt] when TransLink's live time is known (#87), else at its scheduled time.
  */
-fun legTitle(route: RouteOption, index: Int, zone: ZoneId = ZoneId.systemDefault()): String {
+fun legTitle(route: RouteOption, index: Int, zone: ZoneId = ZoneId.systemDefault(), liveDepartAt: Instant? = null): String {
     val leg = route.legs[index]
     val duration = "${minutes(leg.durationSeconds)} min"
     return when (leg.mode) {
@@ -171,7 +178,7 @@ fun legTitle(route: RouteOption, index: Int, zone: ZoneId = ZoneId.systemDefault
             val parts = listOfNotNull(
                 "Board ${line?.badgeName ?: "transit"}",
                 line?.headsign?.takeIf { it.isNotBlank() }?.let { "toward $it" },
-                "at ${clockText(leg.departAt, zone)}",
+                "at ${clockText(liveDepartAt ?: leg.departAt, zone)}",
             )
             val stops = line?.stopCount?.takeIf { it > 0 }?.let { if (it == 1) " · 1 stop" else " · $it stops" }.orEmpty()
             parts.joinToString(" ") + stops
@@ -192,10 +199,17 @@ private const val TRANSIT_CONNECTION = "Transit connection" // the Planner's lab
 
 /**
  * The bottom bar's arrival, like "Arrive 8:56 · 4 min early". The planned arrival moves with the
- * actual start, so a trip started late from History shows when it will really arrive.
+ * actual start, so a trip started late from History shows when it will really arrive. [liveArrival],
+ * from TransLink's live times (#87), replaces it when it's known.
  */
-fun etaText(route: RouteOption, actualStart: Instant?, arriveBy: Instant?, zone: ZoneId = ZoneId.systemDefault()): String {
-    val eta = actualStart?.plus(Duration.between(route.leaveAt, route.arriveAt)) ?: route.arriveAt
+fun etaText(
+    route: RouteOption,
+    actualStart: Instant?,
+    arriveBy: Instant?,
+    zone: ZoneId = ZoneId.systemDefault(),
+    liveArrival: Instant? = null,
+): String {
+    val eta = liveArrival ?: actualStart?.plus(Duration.between(route.leaveAt, route.arriveAt)) ?: route.arriveAt
     val lateSeconds = arriveBy?.let { Duration.between(it, eta).seconds } ?: 0
     val lateBy = if (lateSeconds <= 0) 0 else ((lateSeconds + SECONDS_PER_MINUTE - 1) / SECONDS_PER_MINUTE).toInt()
     return arrivalSummaryText(route.copy(arriveAt = eta, lateByMinutes = lateBy), arriveBy, zone)

@@ -35,6 +35,10 @@ function leg(
         departureStop: 'UBC Exchange Bay 1',
         arrivalStop: 'Downtown',
         stopCount: 8,
+        departureStopLocation: null,
+        arrivalStopLocation: null,
+        departAt: null,
+        arriveAt: null,
       }]
       : [],
     steps: [],

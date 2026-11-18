@@ -5,7 +5,7 @@ import {
   getMyParkingSpots,
   removeParkingSpot,
 } from '../controllers/parking-spots.controller';
-import { changeTripStatus, createTrip, getMyTrips, removeTrip } from '../controllers/trips.controller';
+import { changeTripStatus, createTrip, getLiveUpdate, getMyTrips, removeTrip } from '../controllers/trips.controller';
 import { deleteMe, getMe, saveGasPrice, savePlanningPreferences, saveProfile } from '../controllers/users.controller';
 import { requireSession } from '../middleware/require-session.middleware';
 
@@ -21,6 +21,7 @@ router.get('/me/trips', requireSession, getMyTrips);
 router.post('/me/trips', requireSession, createTrip);
 router.patch('/me/trips/:id', requireSession, changeTripStatus);
 router.delete('/me/trips/:id', requireSession, removeTrip);
+router.get('/me/trips/:id/live', requireSession, getLiveUpdate);
 router.get('/me/parking-spots', requireSession, getMyParkingSpots);
 router.post('/me/parking-spots', requireSession, createParkingSpot);
 router.put('/me/parking-spots/:id', requireSession, editParkingSpot);

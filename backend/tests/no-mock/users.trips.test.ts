@@ -87,7 +87,10 @@ describe('Unmocked: GET /api/users/me/trips', () => {
       .set('Authorization', bearer(token));
 
     const oldLegDefaults = { departAt: null, arriveAt: null, steps: [] };
-    const noDetails = { shortName: null, colour: null, headsign: null, departureStop: null, arrivalStop: null, stopCount: null };
+    const noDetails = {
+      shortName: null, colour: null, headsign: null, departureStop: null, arrivalStop: null, stopCount: null,
+      departureStopLocation: null, arrivalStopLocation: null, departAt: null, arriveAt: null,
+    };
     expect(response.status).toBe(200);
     expect(response.body).toStrictEqual({
       trips: [{

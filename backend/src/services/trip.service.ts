@@ -1,6 +1,7 @@
 import { Error as MongooseError, mongo, type Types } from 'mongoose';
 import {
   TripModel,
+  type Leg,
   toTripResponse,
   type NewTrip,
   type TripResponse,
@@ -149,4 +150,24 @@ export async function deletePlannedTrip(userId: Types.ObjectId, tripId: Types.Ob
   const { deletedCount } = await TripModel.deleteOne({ _id: tripId, userId, status: 'PLANNED' });
   if (deletedCount === 1) return 'DELETED';
   return (await findTripStatus(userId, tripId)) === null ? 'NOT_FOUND' : 'NOT_ALLOWED';
+}
+
+/** A trip's legs for its live update, or why there's no live update. */
+export type LiveTripResult =
+  | { status: 'ACTIVE'; legs: Leg[] }
+  | { status: 'NOT_FOUND' } // no trip with that id belongs to the user
+  | { status: 'NOT_ACTIVE' }; // the trip is planned or has ended
+
+/**
+ * Loads the legs of one of a user's trips, if it's the active one, for its live update (#87).
+ *
+ * @param userId - The signed-in user.
+ * @param tripId - The trip.
+ * @returns `ACTIVE` with the legs, `NOT_FOUND`, or `NOT_ACTIVE`.
+ * @throws If the database operation fails.
+ */
+export async function findLiveTrip(userId: Types.ObjectId, tripId: Types.ObjectId): Promise<LiveTripResult> {
+  const trip = await TripModel.findOne({ _id: tripId, userId }, { status: 1, legs: 1 });
+  if (trip === null) return { status: 'NOT_FOUND' };
+  return trip.status === 'ACTIVE' ? { status: 'ACTIVE', legs: trip.toObject().legs } : { status: 'NOT_ACTIVE' };
 }

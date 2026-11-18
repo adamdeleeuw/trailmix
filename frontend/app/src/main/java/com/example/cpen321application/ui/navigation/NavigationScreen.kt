@@ -3,6 +3,7 @@ package com.example.cpen321application.ui.navigation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,9 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +50,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.example.cpen321application.data.LiveAlert
+import com.example.cpen321application.data.LiveUpdate
 import com.example.cpen321application.data.LOCATION_PERMISSIONS
 import com.example.cpen321application.data.PlanLeg
 import com.example.cpen321application.data.RouteOption
@@ -86,6 +95,7 @@ private val DONE_GREY = Color(0xFF9AA0A6)
 private val CARD_SPACE = 180.dp // the leg card's height, so the map keeps the user clear of it
 private val BAR_SPACE = 120.dp // the bottom bar's height
 private val ARROW_SIZE = 40.dp
+private const val ALERT_COLLAPSED_LINES = 2
 
 /**
  * Navigation (#74), shown whenever the user has an active trip, so reopening the app mid-trip
@@ -100,20 +110,25 @@ private val ARROW_SIZE = 40.dp
  * destination and cancels the trip if they confirm. After a completed trip, a summary shows
  * until **Done**.
  *
+ * While the screen is open, [live] polls the backend every 15 s for TransLink's live times (#87): a transit leg's
+ * card shows when its bus or train really leaves and how late it is, the arrival moves with it, and service alerts
+ * on the legs ahead show in a banner under the card. When the times aren't live, the card says "Scheduled times,
+ * not live".
+ *
  * Without location permission everything works except the turns and the automatic steps. The
  * screen stays on.
  *
  * @param onUnauthorized Called when the session is no longer valid.
  */
 @Composable
-fun NavigationScreen(trips: TripHistoryViewModel, onUnauthorized: () -> Unit) {
+fun NavigationScreen(trips: TripHistoryViewModel, live: LiveUpdatesViewModel, onUnauthorized: () -> Unit) {
     val snackbar = rememberTripSnackbar(trips)
     KeepScreenOn()
     Box(Modifier.fillMaxSize()) {
         val active = trips.activeTrip
         val finished = trips.finishedTrip
         when {
-            active != null -> ActiveTrip(trips, active, onUnauthorized)
+            active != null -> ActiveTrip(trips, live, active, onUnauthorized)
             finished != null -> FinishedTrip(finished, onDone = trips::finishedShown)
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = BAR_SPACE))
@@ -129,7 +144,7 @@ private class LegLine(leg: PlanLeg) {
 
 // the map, the current leg on top and the arrival with End below, following the user's location
 @Composable
-private fun ActiveTrip(trips: TripHistoryViewModel, trip: Trip, onUnauthorized: () -> Unit) {
+private fun ActiveTrip(trips: TripHistoryViewModel, live: LiveUpdatesViewModel, trip: Trip, onUnauthorized: () -> Unit) {
     val route = trip.route
     var legIndex by rememberSaveable(trip.id) {
         mutableIntStateOf(route?.let { currentLegAt(it, trip.actualStart, Instant.now()) } ?: 0)
@@ -141,6 +156,8 @@ private fun ActiveTrip(trips: TripHistoryViewModel, trip: Trip, onUnauthorized: 
     val leg = route?.legs?.get(legIndex)
     val line = remember(leg) { leg?.let(::LegLine) }
     val position = line?.let { l -> here?.let { linePosition(l.points, it) } }
+    PollLiveUpdates(live, trip.id, legIndex, onUnauthorized)
+    val update = live.update
 
     if (route != null && line != null) {
         FollowLocation { fix ->
@@ -152,11 +169,15 @@ private fun ActiveTrip(trips: TripHistoryViewModel, trip: Trip, onUnauthorized: 
             }
         }
         NavigationMap(route, legIndex, here, position?.bearing)
-        LegCard(route, legIndex, line, position?.alongMetres, onNext = { legIndex++ }, Modifier.statusBarsPadding().padding(12.dp))
+        Column(Modifier.statusBarsPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LegCard(route, legIndex, line, position?.alongMetres, update, onNext = { legIndex++ })
+            alertsAhead(update, legIndex).takeIf { it.isNotEmpty() }?.let { AlertBanner(it) }
+        }
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
         BottomBar(
-            arrival = route?.let { etaText(it, trip.actualStart, trip.arriveBy) } ?: "Trip in progress",
+            arrival = route?.let { etaText(it, trip.actualStart, trip.arriveBy, liveArrival = liveArrival(it, legIndex, update)) }
+                ?: "Trip in progress",
             remaining = if (route != null && line != null && position != null) {
                 remainingText(route, legIndex, line.length - position.alongMetres)
             } else {
@@ -174,6 +195,16 @@ private fun ActiveTrip(trips: TripHistoryViewModel, trip: Trip, onUnauthorized: 
             },
             onDismiss = { confirmingEarly = false },
         )
+    }
+}
+
+// polls the backend for live times while the screen is started, from the current leg; a new leg asks again at once
+@Composable
+private fun PollLiveUpdates(live: LiveUpdatesViewModel, tripId: String, legIndex: Int, onUnauthorized: () -> Unit) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val latestOnUnauthorized by rememberUpdatedState(onUnauthorized)
+    LaunchedEffect(live, tripId, legIndex, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { live.poll(tripId, legIndex) { latestOnUnauthorized() } }
     }
 }
 
@@ -261,12 +292,14 @@ private fun NavigationLegLine(leg: PlanLeg, done: Boolean, current: Boolean) {
     )
 }
 
-// the next turn on a drive or walk leg, else what to do on this leg, with Next leg before the last one
+// the next turn on a drive or walk leg, else what to do on this leg, with its live status on transit, and Next leg
+// before the last one
 @Composable
-private fun LegCard(route: RouteOption, legIndex: Int, line: LegLine, along: Double?, onNext: () -> Unit, modifier: Modifier) {
+private fun LegCard(route: RouteOption, legIndex: Int, line: LegLine, along: Double?, update: LiveUpdate?, onNext: () -> Unit) {
     val leg = route.legs[legIndex]
     val turn = along?.takeIf { leg.mode != TripMode.TRANSIT }?.let { upcomingTurn(leg.steps, line.turns, it) }
-    Card(modifier.fillMaxWidth()) {
+    val status = liveStatus(route, legIndex, update)
+    Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 "Leg ${legIndex + 1} of ${route.legs.size}",
@@ -276,10 +309,52 @@ private fun LegCard(route: RouteOption, legIndex: Int, line: LegLine, along: Dou
             if (turn != null) {
                 TurnRow(turn)
             } else {
-                Text(cardTitle(route, legIndex, along), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    cardTitle(route, legIndex, along, liveDepartAt = liveDeparture(update, legIndex)),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            status?.let {
+                val colour = when {
+                    it.late || it.cancelled -> MaterialTheme.colorScheme.error
+                    it.live -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Text(it.text, style = MaterialTheme.typography.bodyMedium, color = colour)
             }
             if (legIndex < route.legs.lastIndex) {
                 OutlinedButton(onClick = onNext) { Text("Next leg") }
+            }
+        }
+    }
+}
+
+// the first alert on the legs ahead, like "Detour · 99 detour at Main St", tapped to show its details and the rest
+@Composable
+private fun AlertBanner(alerts: List<LiveAlert>) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Card(
+        Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Filled.Warning, contentDescription = "Service alert")
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                (if (expanded) alerts else alerts.take(1)).forEach { alert ->
+                    Text(effectLabel(alert.effect), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        alert.header,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = if (expanded) Int.MAX_VALUE else ALERT_COLLAPSED_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (expanded) alert.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
+                if (!expanded) moreAlertsText(alerts.size)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
             }
         }
     }

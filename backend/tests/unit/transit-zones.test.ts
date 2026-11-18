@@ -11,6 +11,10 @@ function line(overrides: Partial<TransitLineDetail> = {}): TransitLineDetail {
     departureStop: 'Waterfront',
     arrivalStop: 'Surrey Central',
     stopCount: 12,
+    departureStopLocation: null,
+    arrivalStopLocation: null,
+    departAt: null,
+    arriveAt: null,
     ...overrides,
   };
 }

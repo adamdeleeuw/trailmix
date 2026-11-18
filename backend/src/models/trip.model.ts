@@ -19,6 +19,12 @@ export interface Place {
   placeId: string | null; // optional provider place identifier
 }
 
+/** Where a transit stop is, in WGS84. */
+export interface StopLocation {
+  lat: number;
+  lng: number;
+}
+
 /** A transit line used by a trip leg. */
 export interface TransitLine {
   name: string; // route or line name
@@ -29,6 +35,12 @@ export interface TransitLine {
   departureStop: string | null;
   arrivalStop: string | null;
   stopCount: number | null; // stops ridden, null for trips saved before CP2
+  // where the stops are and the scheduled times there, for matching to TransLink's live data (#87); null for trips
+  // saved before #87 and when Google leaves them out
+  departureStopLocation: StopLocation | null;
+  arrivalStopLocation: StopLocation | null;
+  departAt: Date | null; // scheduled departure from departureStop
+  arriveAt: Date | null; // scheduled arrival at arrivalStop
 }
 
 /** One turn-by-turn instruction on a driving or walking leg, for in-app navigation. */
@@ -141,6 +153,14 @@ const placeSchema = new Schema<Place>(
   { _id: false },
 );
 
+const stopLocationSchema = new Schema<StopLocation>(
+  {
+    lat: { type: Number, required: true, min: -90, max: 90 },
+    lng: { type: Number, required: true, min: -180, max: 180 },
+  },
+  { _id: false },
+);
+
 const transitLineSchema = new Schema<TransitLine>(
   {
     name: { type: String, required: true },
@@ -151,6 +171,10 @@ const transitLineSchema = new Schema<TransitLine>(
     departureStop: { type: String, default: null },
     arrivalStop: { type: String, default: null },
     stopCount: { type: Number, default: null, min: 0, validate: isWholeOrNull },
+    departureStopLocation: { type: stopLocationSchema, default: null },
+    arrivalStopLocation: { type: stopLocationSchema, default: null },
+    departAt: { type: Date, default: null },
+    arriveAt: { type: Date, default: null },
   },
   { _id: false },
 );

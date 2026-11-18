@@ -1,3 +1,6 @@
 # shell scripts and Caddyfiles run on Linux; keep LF endings even on Windows checkouts
 *.sh text eol=lf
 Caddyfile text eol=lf
+
+# trimmed copies of TransLink's static GTFS, written by scripts/update-translink-gtfs.js (#87)
+backend/src/data/translink-*.json linguist-generated=true
