@@ -28,8 +28,25 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function positiveIntegerEnv(name: string, defaultValue: number): number {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === '') return defaultValue;
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`Invalid ${name}: ${rawValue}`);
+  }
+  return value;
+}
+
 export const env = {
   port,
+  maxBicycleLegDistanceMeters: positiveIntegerEnv(
+    'MAX_BICYCLE_LEG_DISTANCE_METERS',
+    positiveIntegerEnv('BIKE_STATION_MAX_CYCLING_DISTANCE_METERS', 5000),
+  ),
+  bikeStationCandidateCount: positiveIntegerEnv('BIKE_STATION_CANDIDATE_COUNT', 3),
+  bikeToTransitBufferSeconds: positiveIntegerEnv('BIKE_TO_TRANSIT_BUFFER_SECONDS', 120),
+  transitToBikeBufferSeconds: positiveIntegerEnv('TRANSIT_TO_BIKE_BUFFER_SECONDS', 120),
   get googleClientId(): string { // must match the server client ID the Android app requests tokens for
     return requireEnv('GOOGLE_BACKEND_CLIENT_ID');
   },
@@ -39,6 +56,12 @@ export const env = {
   get googleRoutesApiKey(): string { // server-only key restricted to the Routes API
     return requireEnv('GOOGLE_ROUTES_API_KEY');
   },
+
+  get googlePlacesApiKey(): string | undefined { // optional server-only key restricted to the Places API
+    const value = process.env.GOOGLE_PLACES_API_KEY;
+    return value === undefined || value.trim() === '' ? undefined : value;
+  },
+  
   // TransLink Open API key for live trip updates and alerts (#87). Optional: without it, live updates say live: false
   get translinkApiKey(): string | null {
     const value = process.env.TRANSLINK_API_KEY?.trim();

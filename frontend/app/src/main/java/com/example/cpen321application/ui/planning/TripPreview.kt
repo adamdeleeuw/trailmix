@@ -1,5 +1,9 @@
 package com.example.cpen321application.ui.planning
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,8 +46,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cpen321application.data.PlanLeg
@@ -51,6 +58,7 @@ import com.example.cpen321application.data.RouteOption
 import com.example.cpen321application.data.TripMode
 import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.Dot
@@ -63,10 +71,6 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import java.time.Instant
 import kotlinx.coroutines.launch
 
-private val WALK_GREY = Color(0xFF80868B)
-private const val DRIVE_WIDTH = 16f
-private const val TRANSIT_WIDTH = 12f
-private const val WALK_WIDTH = 10f
 private const val WALK_GAP_PX = 12f
 private const val ROUTE_PADDING_PX = 120
 private const val ROW_ZOOM = 16f // close enough to see the stop or the parkade
@@ -100,7 +104,8 @@ fun TripPreview(planner: PlanningViewModel, trips: TripHistoryViewModel, onUnaut
 
 /**
  * One route in detail, for Planning's Trip Preview and a trip opened from History. Each leg
- * on the map in its own colour (drive blue, transit in its line's colour, walking dotted grey)
+ * on the map in its own colour (drive blue, transit in its line's colour, walking dotted grey,
+ * bicycle green)
  * with markers at the start, the parking spot, each stop and the destination. Underneath, a
  * summary and a timeline of the trip, then [buttons]. Tapping a timeline row pans the map there.
  *
@@ -133,7 +138,7 @@ fun RoutePreview(
                 route,
                 arriveBy,
                 label,
-                onRow = { row -> scope.launch { camera.animate(CameraUpdateFactory.newLatLngZoom(row.at, ROW_ZOOM)) } },
+                onRow = { row -> scope.launch { camera.animate(CameraUpdateFactory.newLatLngZoom(row.endAt ?: row.at, ROW_ZOOM)) } },
                 buttons,
             )
         }
@@ -156,18 +161,68 @@ private fun PreviewMap(route: RouteOption, camera: com.google.maps.android.compo
             key(i) { LegLine(leg) }
         }
         PreviewMarkers(route)
+        BicycleLegMarkers(route)
     }
 }
 
-// one leg's line: drive solid blue, transit solid in its line's colour, walking dotted grey
+// one leg's line, using its routed geometry and mode-specific style
 @Composable
 private fun LegLine(leg: PlanLeg) {
     val points = remember(leg.polyline) { legPoints(leg) }
+    if (points.size < 2) return
+    val style = mapLegStyle(leg.mode, leg.transitLines.firstOrNull()?.colour)
     when (leg.mode) {
-        TripMode.DRIVE -> Polyline(points = points, color = DRIVE_BLUE, width = DRIVE_WIDTH)
-        TripMode.TRANSIT -> Polyline(points = points, color = lineColour(leg.transitLines.firstOrNull()?.colour), width = TRANSIT_WIDTH, zIndex = 1f)
-        TripMode.WALK -> Polyline(points = points, color = WALK_GREY, width = WALK_WIDTH, pattern = listOf(Dot(), Gap(WALK_GAP_PX)))
+        TripMode.DRIVE, TripMode.TRANSIT, TripMode.BICYCLE ->
+            Polyline(points = points, color = style.colour, width = style.width, zIndex = style.zIndex)
+        TripMode.WALK -> Polyline(
+            points = points,
+            color = style.colour,
+            width = style.width,
+            pattern = if (style.dotted) listOf(Dot(), Gap(WALK_GAP_PX)) else null,
+            zIndex = style.zIndex,
+        )
     }
+}
+
+@Composable
+internal fun BicycleLegMarkers(route: RouteOption) {
+    if (route.legs.none { it.mode == TripMode.BICYCLE }) return
+    val icon = rememberBicycleMarkerIcon()
+    route.legs.forEachIndexed { index, leg ->
+        if (leg.mode == TripMode.BICYCLE) {
+            val location = bicycleMarkerLocation(route, index) ?: return@forEachIndexed
+            key(index) {
+                Marker(
+                    state = remember(index, location) { MarkerState(location) },
+                    title = "Bicycle leg: ${leg.from.label} to ${leg.to.label}",
+                    icon = icon,
+                    zIndex = 2f,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberBicycleMarkerIcon(): BitmapDescriptor {
+    val context = LocalContext.current
+    return remember(context) { BitmapDescriptorFactory.fromBitmap(bicycleMarkerBitmap(context)) }
+}
+
+internal fun bicycleMarkerBitmap(context: Context): Bitmap {
+    val size = 64
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bitmap)
+    val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = BICYCLE_GREEN.toArgb() }
+    canvas.drawCircle(size / 2f, size / 2f, 31f, background)
+    val drawable = checkNotNull(context.getDrawable(com.example.cpen321application.R.drawable.ic_bicycle)) {
+        "Bicycle marker drawable is missing"
+    }
+    drawable.mutate()
+    drawable.setTint(android.graphics.Color.WHITE)
+    drawable.setBounds(15, 15, 49, 49)
+    drawable.draw(canvas)
+    return bitmap
 }
 
 // start, the parking spot (P), each boarding and getting-off stop, and the destination
@@ -257,7 +312,7 @@ private fun Summary(route: RouteOption, arriveBy: Instant?, label: String?) {
 
 // a timeline row: its time on the left, a marker, then what happens
 @Composable
-private fun TimelineItem(row: TimelineRow, onClick: () -> Unit) {
+internal fun TimelineItem(row: TimelineRow, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -291,6 +346,12 @@ private val BOLD_ROWS = setOf(RowKind.LEAVE, RowKind.ARRIVE, RowKind.PARK)
 private fun RowMarker(row: TimelineRow) {
     Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
         when (row.kind) {
+            RowKind.BICYCLE, RowKind.BICYCLE_TRANSFER -> Icon(
+                painter = painterResource(com.example.cpen321application.R.drawable.ic_bicycle),
+                contentDescription = if (row.kind == RowKind.BICYCLE) "Bicycle" else "Bicycle transfer",
+                tint = BICYCLE_GREEN,
+                modifier = Modifier.size(20.dp),
+            )
             RowKind.PARK -> Box(
                 Modifier.size(18.dp).background(DRIVE_BLUE, RoundedCornerShape(3.dp)),
                 contentAlignment = Alignment.Center,
@@ -302,8 +363,9 @@ private fun RowMarker(row: TimelineRow) {
     }
 }
 
-private fun markerColour(row: TimelineRow): Color = when (row.kind) {
+internal fun markerColour(row: TimelineRow): Color = when (row.kind) {
     RowKind.DRIVE -> DRIVE_BLUE
+    RowKind.BICYCLE, RowKind.BICYCLE_TRANSFER -> BICYCLE_GREEN
     RowKind.BOARD, RowKind.ALIGHT -> lineColour(row.colour)
     RowKind.WALK -> WALK_GREY
     RowKind.ARRIVE -> Color(0xFFEA4335)

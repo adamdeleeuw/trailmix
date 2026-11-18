@@ -67,6 +67,7 @@ import com.example.cpen321application.data.locationUpdates
 import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.example.cpen321application.ui.main.rememberTripSnackbar
 import com.example.cpen321application.ui.planning.DRIVE_BLUE
+import com.example.cpen321application.ui.planning.BICYCLE_GREEN
 import com.example.cpen321application.ui.planning.VANCOUVER
 import com.example.cpen321application.ui.planning.legPoints
 import com.example.cpen321application.ui.planning.lineColour
@@ -278,10 +279,12 @@ private fun FollowCamera(camera: CameraPositionState, route: RouteOption, here: 
 @Composable
 private fun NavigationLegLine(leg: PlanLeg, done: Boolean, current: Boolean) {
     val points = remember(leg.polyline) { legPoints(leg) }
+    if (points.size < 2) return
     val colour = when {
         done -> DONE_GREY
         leg.mode == TripMode.TRANSIT -> lineColour(leg.transitLines.firstOrNull()?.colour)
         leg.mode == TripMode.WALK -> DONE_GREY.copy(alpha = UPCOMING_ALPHA)
+        leg.mode == TripMode.BICYCLE -> BICYCLE_GREEN
         else -> DRIVE_BLUE
     }
     Polyline(

@@ -87,7 +87,7 @@ export async function saveGasPrice(req: Request, res: Response<unknown, AuthLoca
 export async function savePlanningPreferences(req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
   const preferences = parsePlanningPreferences(req.body);
   if (preferences === undefined) {
-    res.status(BAD_REQUEST).json({ error: 'Invalid planning preferences: costVsTime must be 0..100 and defaultModes must contain DRIVE and/or TRANSIT' });
+    res.status(BAD_REQUEST).json({ error: 'Invalid planning preferences: costVsTime must be 0..100 and defaultModes must contain at least one supported planning mode' });
     return;
   }
   const user = await saveUserPlanningPreferences(res.locals.auth.user._id, preferences);

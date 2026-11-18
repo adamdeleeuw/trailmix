@@ -72,7 +72,7 @@ describe('Mocked: POST /api/auth/google', () => {
         transit: null,
         lastGasPrice: null,
         costVsTime: 50,
-        defaultModes: ['DRIVE', 'TRANSIT'],
+        defaultModes: ['DRIVE', 'TRANSIT', 'BICYCLE'],
         maxWalkMinutes: 10,
       },
     });

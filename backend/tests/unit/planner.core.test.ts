@@ -6,6 +6,7 @@ import {
   priceChain,
   pruneSpots,
   transitLowerBoundSeconds,
+  scheduleBikeTransit,
   scheduleChain,
   scheduleDetailedChain,
   scheduleDetailedSingle,
@@ -85,6 +86,69 @@ describe('scheduleChain', () => {
     expect(schedule.arriveAt.toISOString()).toBe(deadline.toISOString());
     expect(schedule.leaveAt.toISOString()).toBe('2026-11-02T08:15:00.000Z');
     expect(schedule.lateByMinutes).toBe(0);
+  });
+
+  describe('scheduleBikeTransit', () => {
+    const now = new Date('2026-11-18T15:00:00Z');
+
+    test('includes the bike-to-transit locking buffer in the overall schedule', () => {
+      const transitDepartAt = new Date(now.getTime() + 10 * 60_000);
+      const transitArriveAt = new Date(transitDepartAt.getTime() + 20 * 60_000);
+      const schedule = scheduleBikeTransit(
+        'BIKE_TRANSIT',
+        300,
+        1200,
+        transitDepartAt,
+        transitArriveAt,
+        null,
+        now,
+        120,
+      );
+      if (schedule === null) throw new Error('Expected a feasible bike-to-transit schedule');
+
+      expect(schedule).toMatchObject({
+        leaveAt: new Date(transitDepartAt.getTime() - 420_000),
+        bikeArriveAt: new Date(transitDepartAt.getTime() - 120_000),
+        transitDepartAt,
+        arriveAt: transitArriveAt,
+      });
+      expect(schedule.arriveAt.getTime() - schedule.leaveAt.getTime()).toBe((300 + 120 + 1200) * 1000);
+    });
+
+    test('includes the transit-to-bike retrieval buffer and bicycle time after transit', () => {
+      const transitDepartAt = new Date(now.getTime() + 5 * 60_000);
+      const transitArriveAt = new Date(transitDepartAt.getTime() + 20 * 60_000);
+      const schedule = scheduleBikeTransit(
+        'TRANSIT_BIKE',
+        600,
+        1200,
+        transitDepartAt,
+        transitArriveAt,
+        null,
+        now,
+        90,
+      );
+      if (schedule === null) throw new Error('Expected a feasible transit-to-bike schedule');
+
+      expect(schedule.bikeDepartAt).toEqual(new Date(transitArriveAt.getTime() + 90_000));
+      expect(schedule.arriveAt).toEqual(new Date(transitArriveAt.getTime() + 90_000 + 600_000));
+      expect(schedule.arriveAt.getTime() - schedule.leaveAt.getTime()).toBe(1200 * 1000 + 90_000 + 600_000);
+    });
+
+    test('rejects a bike-to-transit schedule when the connecting service leaves before cycling is possible', () => {
+      const schedule = scheduleBikeTransit(
+        'BIKE_TRANSIT',
+        900,
+        600,
+        new Date(now.getTime() + 5 * 60_000),
+        new Date(now.getTime() + 15 * 60_000),
+        null,
+        now,
+        120,
+      );
+
+      expect(schedule).toBeNull();
+    });
   });
 
   // Input: a deadline that cannot be met from now

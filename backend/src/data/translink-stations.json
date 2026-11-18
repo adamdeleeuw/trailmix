@@ -1,0 +1,391 @@
+{
+  "source": "https://gtfs-static.translink.ca/gtfs/google_transit.zip",
+  "minimumWeekdayDepartures": 24,
+  "stations": [
+    {
+      "id": "99944",
+      "name": "22nd Street Station",
+      "lat": 49.200059,
+      "lng": -122.94898,
+      "weekdayDepartures": 782
+    },
+    {
+      "id": "99938",
+      "name": "29th Avenue Station",
+      "lat": 49.244283,
+      "lng": -123.046113,
+      "weekdayDepartures": 775
+    },
+    {
+      "id": "99906",
+      "name": "Aberdeen Station",
+      "lat": 49.184,
+      "lng": -123.136325,
+      "weekdayDepartures": 312
+    },
+    {
+      "id": "99948",
+      "name": "Braid Station",
+      "lat": 49.233244,
+      "lng": -122.8828,
+      "weekdayDepartures": 322
+    },
+    {
+      "id": "99921",
+      "name": "Brentwood Town Centre Station",
+      "lat": 49.266396,
+      "lng": -123.001829,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99907",
+      "name": "Bridgeport Station",
+      "lat": 49.195538,
+      "lng": -123.126062,
+      "weekdayDepartures": 626
+    },
+    {
+      "id": "99912",
+      "name": "Broadway-City Hall Station",
+      "lat": 49.262717,
+      "lng": -123.114822,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99927",
+      "name": "Burquitlam Station",
+      "lat": 49.261403,
+      "lng": -122.889834,
+      "weekdayDepartures": 482
+    },
+    {
+      "id": "99933",
+      "name": "Burrard Station",
+      "lat": 49.285614,
+      "lng": -123.119557,
+      "weekdayDepartures": 779
+    },
+    {
+      "id": "99959",
+      "name": "Capstan Station",
+      "lat": 49.189147,
+      "lng": -123.131862,
+      "weekdayDepartures": 312
+    },
+    {
+      "id": "99946",
+      "name": "Columbia Station",
+      "lat": 49.20483,
+      "lng": -122.906175,
+      "weekdayDepartures": 785
+    },
+    {
+      "id": "99917",
+      "name": "Commercial-Broadway Station",
+      "lat": 49.26267,
+      "lng": -123.068765,
+      "weekdayDepartures": 1260
+    },
+    {
+      "id": "99930",
+      "name": "Coquitlam Central Station",
+      "lat": 49.27434,
+      "lng": -122.800421,
+      "weekdayDepartures": 492
+    },
+    {
+      "id": "99943",
+      "name": "Edmonds Station",
+      "lat": 49.211936,
+      "lng": -122.959104,
+      "weekdayDepartures": 788
+    },
+    {
+      "id": "99950",
+      "name": "Gateway Station",
+      "lat": 49.198955,
+      "lng": -122.85061,
+      "weekdayDepartures": 464
+    },
+    {
+      "id": "99920",
+      "name": "Gilmore Station",
+      "lat": 49.264974,
+      "lng": -123.013554,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99934",
+      "name": "Granville Station",
+      "lat": 49.283173,
+      "lng": -123.115721,
+      "weekdayDepartures": 778
+    },
+    {
+      "id": "99922",
+      "name": "Holdom Station",
+      "lat": 49.264734,
+      "lng": -122.982169,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99929",
+      "name": "Inlet Centre Station",
+      "lat": 49.27721,
+      "lng": -122.828187,
+      "weekdayDepartures": 482
+    },
+    {
+      "id": "99939",
+      "name": "Joyce-Collingwood Station",
+      "lat": 49.238398,
+      "lng": -123.031811,
+      "weekdayDepartures": 775
+    },
+    {
+      "id": "99911",
+      "name": "King Edward Station",
+      "lat": 49.249175,
+      "lng": -123.11545,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99952",
+      "name": "King George Station",
+      "lat": 49.18279,
+      "lng": -122.844737,
+      "weekdayDepartures": 463
+    },
+    {
+      "id": "99932",
+      "name": "Lafarge Lake-Douglas Station",
+      "lat": 49.285718,
+      "lng": -122.791541,
+      "weekdayDepartures": 492
+    },
+    {
+      "id": "99924",
+      "name": "Lake City Way Station",
+      "lat": 49.254635,
+      "lng": -122.939192,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99909",
+      "name": "Langara-49th Avenue Station",
+      "lat": 49.22573,
+      "lng": -123.116523,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99905",
+      "name": "Lansdowne Station",
+      "lat": 49.174665,
+      "lng": -123.136475,
+      "weekdayDepartures": 312
+    },
+    {
+      "id": "99931",
+      "name": "Lincoln Station",
+      "lat": 49.280423,
+      "lng": -122.793917,
+      "weekdayDepartures": 492
+    },
+    {
+      "id": "99958",
+      "name": "Lonsdale Quay Station",
+      "lat": 49.310142,
+      "lng": -123.083309,
+      "weekdayDepartures": 162
+    },
+    {
+      "id": "99926",
+      "name": "Lougheed Town Centre Station",
+      "lat": 49.248512,
+      "lng": -122.896805,
+      "weekdayDepartures": 648
+    },
+    {
+      "id": "99936",
+      "name": "Main Street-Science World Station",
+      "lat": 49.273137,
+      "lng": -123.100392,
+      "weekdayDepartures": 777
+    },
+    {
+      "id": "99908",
+      "name": "Marine Drive Station",
+      "lat": 49.209666,
+      "lng": -123.117015,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99941",
+      "name": "Metrotown Station",
+      "lat": 49.225825,
+      "lng": -123.00392,
+      "weekdayDepartures": 775
+    },
+    {
+      "id": "99928",
+      "name": "Moody Centre Station",
+      "lat": 49.278012,
+      "lng": -122.846034,
+      "weekdayDepartures": 482
+    },
+    {
+      "id": "99937",
+      "name": "Nanaimo Station",
+      "lat": 49.248321,
+      "lng": -123.055908,
+      "weekdayDepartures": 775
+    },
+    {
+      "id": "99945",
+      "name": "New Westminster Station",
+      "lat": 49.201437,
+      "lng": -122.912614,
+      "weekdayDepartures": 785
+    },
+    {
+      "id": "99910",
+      "name": "Oakridge-41st Avenue Station",
+      "lat": 49.233739,
+      "lng": -123.116295,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99913",
+      "name": "Olympic Village Station",
+      "lat": 49.266596,
+      "lng": -123.115348,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99940",
+      "name": "Patterson Station",
+      "lat": 49.229626,
+      "lng": -123.01267,
+      "weekdayDepartures": 775
+    },
+    {
+      "id": "99925",
+      "name": "Production Way-University Station",
+      "lat": 49.253416,
+      "lng": -122.918223,
+      "weekdayDepartures": 647
+    },
+    {
+      "id": "99918",
+      "name": "Renfrew Station",
+      "lat": 49.258913,
+      "lng": -123.045379,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99904",
+      "name": "Richmond-Brighouse Station",
+      "lat": 49.167943,
+      "lng": -123.136372,
+      "weekdayDepartures": 312
+    },
+    {
+      "id": "99942",
+      "name": "Royal Oak Station",
+      "lat": 49.220068,
+      "lng": -122.98848,
+      "weekdayDepartures": 775
+    },
+    {
+      "id": "99919",
+      "name": "Rupert Station",
+      "lat": 49.260784,
+      "lng": -123.032867,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99947",
+      "name": "Sapperton Station",
+      "lat": 49.224662,
+      "lng": -122.889393,
+      "weekdayDepartures": 322
+    },
+    {
+      "id": "99949",
+      "name": "Scott Road Station",
+      "lat": 49.20442,
+      "lng": -122.874197,
+      "weekdayDepartures": 464
+    },
+    {
+      "id": "99902",
+      "name": "Sea Island Centre Station",
+      "lat": 49.192986,
+      "lng": -123.157887,
+      "weekdayDepartures": 314
+    },
+    {
+      "id": "99923",
+      "name": "Sperling-Burnaby Lake Station",
+      "lat": 49.259195,
+      "lng": -122.963998,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "99935",
+      "name": "Stadium-Chinatown Station",
+      "lat": 49.279223,
+      "lng": -123.109181,
+      "weekdayDepartures": 777
+    },
+    {
+      "id": "99951",
+      "name": "Surrey Central Station",
+      "lat": 49.189562,
+      "lng": -122.847868,
+      "weekdayDepartures": 464
+    },
+    {
+      "id": "99903",
+      "name": "Templeton Station",
+      "lat": 49.196688,
+      "lng": -123.146337,
+      "weekdayDepartures": 314
+    },
+    {
+      "id": "99915",
+      "name": "Vancouver City Centre Station",
+      "lat": 49.282415,
+      "lng": -123.118227,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99916",
+      "name": "VCC-Clark Station",
+      "lat": 49.265845,
+      "lng": -123.079069,
+      "weekdayDepartures": 484
+    },
+    {
+      "id": "12034",
+      "name": "Waterfront Station",
+      "lat": 49.285687,
+      "lng": -123.111773,
+      "weekdayDepartures": 1553
+    },
+    {
+      "id": "99914",
+      "name": "Yaletown-Roundhouse Station",
+      "lat": 49.274492,
+      "lng": -123.122079,
+      "weekdayDepartures": 612
+    },
+    {
+      "id": "99901",
+      "name": "YVR-Airport Station",
+      "lat": 49.194174,
+      "lng": -123.178269,
+      "weekdayDepartures": 314
+    }
+  ]
+}

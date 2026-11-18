@@ -51,7 +51,7 @@ describe('Unmocked: PUT /api/users/me/profile', () => {
         transit: { fareType: 'ADULT_STORED_VALUE', monthlyPassZones: null },
         lastGasPrice: null,
         costVsTime: 50,
-        defaultModes: ['DRIVE', 'TRANSIT'],
+        defaultModes: ['DRIVE', 'TRANSIT', 'BICYCLE'],
         maxWalkMinutes: 10,
       },
     });

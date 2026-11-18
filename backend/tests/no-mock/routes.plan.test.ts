@@ -55,6 +55,7 @@ describe('Unmocked: POST /api/routes/plan', () => {
       [{ ...validBody, modes: [] }, 'modes'],
       [{ ...validBody, modes: ['BIKE'] }, 'modes'],
       [{ ...validBody, modes: ['TRANSIT', 'TRANSIT'] }, 'modes'],
+      [{ ...validBody, modes: ['BICYCLE', 'BICYCLE'] }, 'modes'],
       [{ ...validBody, costVsTime: 101 }, 'costVsTime'],
       [{ ...validBody, maxWalkMinutes: 0 }, 'maxWalkMinutes'],
       [{ ...validBody, maxWalkMinutes: 7.5 }, 'maxWalkMinutes'],

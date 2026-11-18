@@ -14,8 +14,8 @@ import org.json.JSONObject
  * Instants (sent and received as ISO 8601 UTC strings).
  */
 
-/** How a leg is travelled. A trip may only ask for [DRIVE] and [TRANSIT]; legs can also be [WALK]. */
-enum class TripMode { DRIVE, TRANSIT, WALK }
+/** How a leg is travelled. Planning supports [DRIVE], [TRANSIT] and [BICYCLE]; legs can also be [WALK]. */
+enum class TripMode { DRIVE, TRANSIT, BICYCLE, WALK }
 
 /** Which of the 3 routes this is. */
 enum class RouteLabel { CHEAPEST, FASTEST, BALANCED }
@@ -196,19 +196,27 @@ private fun JSONObject.toNavigationStep() = NavigationStep(
     location = LatLng(getDouble("lat"), getDouble("lng")),
 )
 
-private fun JSONObject.toLeg() = PlanLeg(
-    mode = TripMode.valueOf(getString("mode")),
-    from = getJSONObject("from").toPlace(),
-    to = getJSONObject("to").toPlace(),
-    departAt = Instant.parse(getString("departAt")),
-    arriveAt = Instant.parse(getString("arriveAt")),
-    durationSeconds = getInt("durationSeconds"),
-    distanceMeters = getInt("distanceMeters"),
-    costCents = getInt("costCents"),
-    polyline = getString("polyline"),
-    transitLines = optJSONArray("transitLines").objects().map { it.toTransitLine() },
-    steps = optJSONArray("steps").objects().map { it.toNavigationStep() }, // missing on trips saved before steps
-)
+private fun JSONObject.toLeg(): PlanLeg {
+    val mode = TripMode.valueOf(getString("mode"))
+    val polyline = if (mode == TripMode.BICYCLE && (!has("polyline") || isNull("polyline"))) {
+        ""
+    } else {
+        getString("polyline")
+    }
+    return PlanLeg(
+        mode = mode,
+        from = getJSONObject("from").toPlace(),
+        to = getJSONObject("to").toPlace(),
+        departAt = Instant.parse(getString("departAt")),
+        arriveAt = Instant.parse(getString("arriveAt")),
+        durationSeconds = getInt("durationSeconds"),
+        distanceMeters = getInt("distanceMeters"),
+        costCents = getInt("costCents"),
+        polyline = polyline,
+        transitLines = optJSONArray("transitLines").objects().map { it.toTransitLine() },
+        steps = optJSONArray("steps").objects().map { it.toNavigationStep() }, // missing on trips saved before steps
+    )
+}
 
 private fun JSONObject.toRouteOption(): RouteOption {
     val costs = getJSONObject("costBreakdown")

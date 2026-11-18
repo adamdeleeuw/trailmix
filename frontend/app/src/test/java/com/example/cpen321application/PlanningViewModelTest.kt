@@ -123,6 +123,33 @@ class PlanningViewModelTest {
     }
 
     @Test
+    fun bicycleCanBeRequestedAloneOrWithDriveAndTransit() = runTest(dispatcher) {
+        viewModel.start(WATERFRONT, from = HOME, tripModes = setOf(TripMode.BICYCLE))
+        advanceUntilIdle()
+
+        assertEquals(setOf(TripMode.BICYCLE), api.requests.last().modes)
+
+        viewModel.toggleMode(TripMode.TRANSIT)
+        advanceUntilIdle()
+        assertEquals(setOf(TripMode.BICYCLE, TripMode.TRANSIT), api.requests.last().modes)
+
+        viewModel.toggleMode(TripMode.DRIVE)
+        advanceUntilIdle()
+        assertEquals(setOf(TripMode.BICYCLE, TripMode.TRANSIT, TripMode.DRIVE), api.requests.last().modes)
+    }
+
+    @Test
+    fun savedBicyclePreferencesAreRestoredBeforePlanning() = runTest(dispatcher) {
+        preferences.saved = PlanningPreferences(50, setOf(TripMode.BICYCLE, TripMode.TRANSIT), 10)
+
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(setOf(TripMode.BICYCLE, TripMode.TRANSIT), viewModel.modes)
+        assertEquals(setOf(TripMode.BICYCLE, TripMode.TRANSIT), api.requests.single().modes)
+    }
+
+    @Test
     fun withNoStartPointItAsksForOneInsteadOfPlanning() = runTest(dispatcher) {
         viewModel.start(WATERFRONT, from = null)
         advanceUntilIdle()
