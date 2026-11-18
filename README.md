@@ -177,3 +177,22 @@ Then build and run:
 
 1. Go to **Tools → Device Manager** and set up the Pixel 9 emulator as described in [Run the app with the APK](#run-the-app-with-the-apk).
 2. Click **Run app** (the green play button) in Android Studio.
+
+### Frontend end-to-end tests
+
+The instrumented tests in `frontend/app/src/androidTest/.../e2e/` exercise the installed app against the configured backend. Run them locally from the repository root:
+
+```powershell
+.\scripts\run-frontend-e2e-tests.ps1
+```
+
+The script starts the local Docker backend and frontend, then waits for a signed-in app session on the emulator. Before running:
+
+- Configure `backend/.env` with `GOOGLE_BACKEND_CLIENT_ID`, `GOOGLE_ROUTES_API_KEY`, `MONGODB_URI`, and, for station fallback, `GOOGLE_PLACES_API_KEY`.
+- Configure `frontend/local.properties` with `sdk.dir`, `GOOGLE_CLIENT_ID`, `MAPS_API_KEY`, and `API_BASE_URL=http://10.0.2.2:3000`.
+- Start Docker Desktop and create/start the Pixel 9 Android 16 (API 36) Google Play emulator. Sign in to the app with a test account that has completed its profile.
+- Enable the Google Places and Routes APIs and billing for the configured keys. E2E place search and route geometry use these live services.
+
+For example, `BicyclePlanTest` covers Bike + Transit, bicycle-only, both bicycle/transit handoff directions, saved Bike + Transit preferences after relaunch, and Drive-/Transit-only regressions. It asserts the returned route's bicycle timeline, map marker, and green icon. Tests save temporary planning defaults and restore the account's original preferences afterward.
+
+These E2E tests are not run in CI. Frontend CI runs `./gradlew testDebugUnitTest assembleDebug`; it does not have an emulator, signed-in account, or live Maps/Routes credentials. There is currently no dedicated local fixture backend wired into the Android app, so E2E route choices and place results depend on live Google data and can vary. Deterministic mocked API and component coverage remains in the instrumented API/visual tests and backend test suites.
