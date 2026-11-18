@@ -23,6 +23,7 @@ import com.example.cpen321application.ui.planning.sortRoutes
 import com.example.cpen321application.ui.planning.timeRangeText
 import com.example.cpen321application.ui.planning.topBarLines
 import com.example.cpen321application.ui.planning.transfersText
+import com.example.cpen321application.ui.planning.timelineRows
 import com.google.android.gms.maps.model.LatLng
 import java.time.Instant
 import java.time.LocalDate
@@ -115,6 +116,17 @@ class PlanningFormatTest {
             modeStrip(routes.getValue(RouteLabel.BALANCED)),
         )
         assertNull(modeStrip(routes.getValue(RouteLabel.CHEAPEST))[1].colour) // the sample bus has no colour
+    }
+
+    @Test
+    fun bicycleLegsAreDescribedInRouteSummariesAndPreview() {
+        val route = routes.getValue(RouteLabel.FASTEST).copy(
+            legs = routes.getValue(RouteLabel.FASTEST).legs.map { it.copy(mode = TripMode.BICYCLE) },
+        )
+
+        assertEquals(listOf(StripItem("Bike 28", TripMode.BICYCLE)), modeStrip(route))
+        assertEquals(TripLine.Connector("Bike 28 min"), topBarLines("Here", "There", route)[1])
+        assertEquals("Bike to Waterfront", timelineRows(route, arriveBy = null)[1].title)
     }
 
     @Test

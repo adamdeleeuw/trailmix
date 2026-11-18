@@ -22,6 +22,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -69,6 +70,65 @@ class PreviewFormatTest {
         assertEquals("Arrive at UBC", rows[7].title)
         assertEquals("4 min early", rows[7].detail)
         assertEquals("8:56", rows[7].time)
+    }
+
+    @Test
+    fun bicycleTimelineShowsItsDestinationDistanceAndEndpoints() {
+        val bike = route(RouteLabel.BALANCED).legs.first().copy(
+            mode = TripMode.BICYCLE,
+            durationSeconds = 720,
+            distanceMeters = 3400,
+        )
+        val result = timelineRows(route(RouteLabel.BALANCED).copy(legs = listOf(bike)), arriveBy = null, zone = ZONE)
+        val row = result[1]
+
+        assertEquals(RowKind.BICYCLE, row.kind)
+        assertEquals("Bike to North Parkade (sample)", row.title)
+        assertEquals("12 min · 3.4 km", row.detail)
+        assertEquals(bike.from.location, row.at)
+        assertEquals(bike.to.location, row.endAt)
+    }
+
+    @Test
+    fun bikeThenTransitTimelineShowsStationHandoffInOrder() {
+        val balanced = route(RouteLabel.BALANCED)
+        val transit = balanced.legs.first { it.mode == TripMode.TRANSIT }
+        val bike = balanced.legs.first().copy(
+            mode = TripMode.BICYCLE,
+            to = transit.from,
+            durationSeconds = 600,
+        )
+        val rows = timelineRows(balanced.copy(legs = listOf(bike, transit)), arriveBy = null, zone = ZONE)
+
+        assertEquals(
+            listOf(RowKind.LEAVE, RowKind.BICYCLE, RowKind.BICYCLE_TRANSFER, RowKind.BOARD, RowKind.ALIGHT, RowKind.ARRIVE),
+            rows.map { it.kind },
+        )
+        assertEquals("Bike to Sample Station", rows[1].title)
+        assertEquals("Lock bike at Sample Station", rows[2].title)
+        assertTrue(rows[3].detail.orEmpty().contains("Board at Sample Station"))
+    }
+
+    @Test
+    fun transitThenBikeTimelineShowsStationHandoffInOrder() {
+        val balanced = route(RouteLabel.BALANCED)
+        val transit = balanced.legs.first { it.mode == TripMode.TRANSIT }
+        val bike = balanced.legs.last().copy(
+            mode = TripMode.BICYCLE,
+            from = transit.to,
+            to = balanced.legs.last().to,
+            durationSeconds = 600,
+            distanceMeters = 1800,
+        )
+        val rows = timelineRows(balanced.copy(legs = listOf(transit, bike)), arriveBy = null, zone = ZONE)
+
+        assertEquals(
+            listOf(RowKind.LEAVE, RowKind.BOARD, RowKind.ALIGHT, RowKind.BICYCLE_TRANSFER, RowKind.BICYCLE, RowKind.ARRIVE),
+            rows.map { it.kind },
+        )
+        assertEquals("Get off at Waterfront Station", rows[2].title)
+        assertEquals("Pick up bike at Waterfront Station", rows[3].title)
+        assertEquals("Bike to UBC", rows[4].title)
     }
 
     @Test

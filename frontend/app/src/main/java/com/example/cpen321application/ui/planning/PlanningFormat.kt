@@ -59,6 +59,7 @@ fun lateText(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.syste
 fun legName(leg: PlanLeg) = when (leg.mode) {
     TripMode.DRIVE -> "Drive"
     TripMode.WALK -> "Walk"
+    TripMode.BICYCLE -> "Bike"
     TripMode.TRANSIT -> leg.transitLines.firstOrNull()?.badgeName ?: "Transit"
 }
 

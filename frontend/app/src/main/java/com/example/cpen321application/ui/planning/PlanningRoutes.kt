@@ -116,19 +116,14 @@ private fun OptionsRow(planner: PlanningViewModel) {
 }
 
 @Composable
-private fun ModesMenu(planner: PlanningViewModel) {
+internal fun ModesMenu(planner: PlanningViewModel) {
     var open by remember { mutableStateOf(false) }
     Box {
         AssistChip(onClick = { open = true }, label = { Text("Modes ▾") })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             ModeItem(planner, TripMode.DRIVE, "Drive")
             ModeItem(planner, TripMode.TRANSIT, "Transit")
-            DropdownMenuItem(
-                text = { Text("Bike · Coming soon") },
-                onClick = {},
-                enabled = false,
-                leadingIcon = { Checkbox(checked = false, onCheckedChange = null, enabled = false) },
-            )
+            ModeItem(planner, TripMode.BICYCLE, "Bike")
         }
     }
 }

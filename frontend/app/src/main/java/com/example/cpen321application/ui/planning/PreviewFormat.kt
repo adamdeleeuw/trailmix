@@ -15,7 +15,7 @@ import java.time.ZoneId
 private const val METRES_PER_KM = 1000.0
 
 /** What kind of step a timeline row is, which sets its icon. */
-enum class RowKind { LEAVE, DRIVE, PARK, WALK, BOARD, ALIGHT, ARRIVE }
+enum class RowKind { LEAVE, DRIVE, BICYCLE, BICYCLE_TRANSFER, PARK, WALK, BOARD, ALIGHT, ARRIVE }
 
 /**
  * One row of the Trip Preview timeline.
@@ -30,6 +30,7 @@ data class TimelineRow(
     val time: String?,
     val at: LatLng,
     val colour: String? = null,
+    val endAt: LatLng? = null,
 )
 
 /**
@@ -50,6 +51,20 @@ fun timelineRows(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.s
                 val detail = "${minutes(leg.durationSeconds)} min · ${kmText(leg.distanceMeters)} · ${costText(fuel)} fuel"
                 rows += TimelineRow(RowKind.DRIVE, "Drive to ${leg.to.label}", detail, null, leg.from.location)
                 if (i < legs.lastIndex) rows += TimelineRow(RowKind.PARK, "Park at ${leg.to.label}", parkingText(route), clockText(leg.arriveAt, zone), leg.to.location)
+            }
+            TripMode.BICYCLE -> {
+                val detail = "${minutes(leg.durationSeconds)} min · ${kmText(leg.distanceMeters)}"
+                rows += TimelineRow(
+                    RowKind.BICYCLE,
+                    "Bike to ${leg.to.label}",
+                    detail,
+                    null,
+                    leg.from.location,
+                    endAt = leg.to.location,
+                )
+                if (legs.getOrNull(i + 1)?.mode == TripMode.TRANSIT) {
+                    rows += TimelineRow(RowKind.BICYCLE_TRANSFER, "Lock bike at ${leg.to.label}", null, clockText(leg.arriveAt, zone), leg.to.location)
+                }
             }
             TripMode.WALK -> {
                 val destination = leg.to.label.takeIf { it.isNotBlank() && it != "Transit connection" }
@@ -73,6 +88,15 @@ fun timelineRows(route: RouteOption, arriveBy: Instant?, zone: ZoneId = ZoneId.s
                     leg.to.location,
                     line?.colour,
                 )
+                if (legs.getOrNull(i + 1)?.mode == TripMode.BICYCLE) {
+                    rows += TimelineRow(
+                        RowKind.BICYCLE_TRANSFER,
+                        "Pick up bike at ${leg.to.label}",
+                        null,
+                        clockText(leg.arriveAt, zone),
+                        leg.to.location,
+                    )
+                }
             }
         }
     }

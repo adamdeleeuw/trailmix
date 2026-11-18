@@ -165,6 +165,7 @@ fun legTitle(route: RouteOption, index: Int, zone: ZoneId = ZoneId.systemDefault
     val duration = "${minutes(leg.durationSeconds)} min"
     return when (leg.mode) {
         TripMode.DRIVE -> "Drive to ${placeName(route, index)} · $duration"
+        TripMode.BICYCLE -> "Bike to ${placeName(route, index)} · $duration"
         TripMode.WALK -> "Walk to ${placeName(route, index)} · $duration"
         TripMode.TRANSIT -> {
             val line = leg.transitLines.firstOrNull()
