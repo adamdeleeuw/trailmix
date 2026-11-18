@@ -34,6 +34,23 @@ class PlanningBicycleApiTest {
     }
 
     @Test
+    fun bicycleAndTransitModesAreBothSerializedInPlanningRequests() {
+        val request = PlanRequest(
+            BIKE_API_ORIGIN,
+            BIKE_API_DESTINATION,
+            arriveBy = null,
+            modes = setOf(TripMode.BICYCLE, TripMode.TRANSIT),
+        )
+
+        assertEquals(
+            setOf("BICYCLE", "TRANSIT"),
+            request.toJson().getJSONArray("modes").let { modes ->
+                List(modes.length()) { modes.getString(it) }.toSet()
+            },
+        )
+    }
+
+    @Test
     fun savedBicyclePreferencesAreParsed() {
         val preferences = JSONObject()
             .put("costVsTime", 50)
@@ -59,6 +76,60 @@ class PlanningBicycleApiTest {
             .toTripPlan()
 
         assertEquals(TripMode.BICYCLE, response.options.single().legs.single().mode)
+    }
+
+    @Test
+    fun bicycleLegResponsePreservesGeometryDistanceDurationCostAndEndpoints() {
+        val response = JSONObject()
+            .put(
+                "options",
+                JSONArray().put(
+                    JSONObject()
+                        .put("label", "FASTEST")
+                        .put("leaveAt", "2026-11-18T21:00:00Z")
+                        .put("arriveAt", "2026-11-18T21:15:00Z")
+                        .put("lateByMinutes", 0)
+                        .put("totalDurationSeconds", 900)
+                        .put("totalDistanceMeters", 3200)
+                        .put("totalCostCents", 0)
+                        .put("costBreakdown", JSONObject().put("fuelCents", 0).put("parkingCents", 0).put("fareCents", 0))
+                        .put("costEstimated", false)
+                        .put("baselineDriveCostCents", JSONObject.NULL)
+                        .put("transferPoints", JSONArray())
+                        .put("transfers", 0)
+                        .put(
+                            "legs",
+                            JSONArray().put(
+                                JSONObject()
+                                    .put("mode", "BICYCLE")
+                                    .put("from", JSONObject().put("label", "Origin").put("lat", 49.26).put("lng", -123.12).put("placeId", JSONObject.NULL))
+                                    .put("to", JSONObject().put("label", "Destination").put("lat", 49.28).put("lng", -123.11).put("placeId", JSONObject.NULL))
+                                    .put("departAt", "2026-11-18T21:00:00Z")
+                                    .put("arriveAt", "2026-11-18T21:15:00Z")
+                                    .put("durationSeconds", 900)
+                                    .put("distanceMeters", 3200)
+                                    .put("costCents", 0)
+                                    .put("polyline", "_p~iF~ps|U_ulLnnqC_mqNvxq`@")
+                                    .put("transitLines", JSONArray())
+                                    .put("steps", JSONArray()),
+                            ),
+                        ),
+                ),
+            )
+            .put("warnings", JSONArray())
+            .toTripPlan()
+            .options
+            .single()
+            .legs
+            .single()
+
+        assertEquals(TripMode.BICYCLE, response.mode)
+        assertEquals(BIKE_API_ORIGIN, response.from)
+        assertEquals(BIKE_API_DESTINATION, response.to)
+        assertEquals(900, response.durationSeconds)
+        assertEquals(3200, response.distanceMeters)
+        assertEquals(0, response.costCents)
+        assertEquals("_p~iF~ps|U_ulLnnqC_mqNvxq`@", response.polyline)
     }
 
     @Test
