@@ -28,8 +28,20 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function positiveIntegerEnv(name: string, defaultValue: number): number {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === '') return defaultValue;
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`Invalid ${name}: ${rawValue}`);
+  }
+  return value;
+}
+
 export const env = {
   port,
+  bikeStationMaxCyclingDistanceMeters: positiveIntegerEnv('BIKE_STATION_MAX_CYCLING_DISTANCE_METERS', 5000),
+  bikeStationCandidateCount: positiveIntegerEnv('BIKE_STATION_CANDIDATE_COUNT', 3),
   get googleClientId(): string { // must match the server client ID the Android app requests tokens for
     return requireEnv('GOOGLE_BACKEND_CLIENT_ID');
   },
@@ -38,6 +50,10 @@ export const env = {
   },
   get googleRoutesApiKey(): string { // server-only key restricted to the Routes API
     return requireEnv('GOOGLE_ROUTES_API_KEY');
+  },
+  get googlePlacesApiKey(): string | undefined { // optional server-only key restricted to the Places API
+    const value = process.env.GOOGLE_PLACES_API_KEY;
+    return value === undefined || value.trim() === '' ? undefined : value;
   },
 };
 

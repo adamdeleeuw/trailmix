@@ -27,6 +27,7 @@
 | Nov 4, 2026 | 4.6 | Added Timmy's sequence diagram updates (#83): Planning loads the saved preferences before the first plan and leaves `costVsTime` out, and History can start or delete a planned trip. |
 | Nov 15, 2026 | 3.7, 4.3, 4.6, 4.7 | The Planner now prunes parking spots that can't beat driving or transit the whole way before it prices their transit, and picks the shortest of Google's alternative transit routes that fits the user's max walk instead of always the first (#86). Screening now takes two rounds of Route Matrix calls instead of one, so the response time justification, the Google Routes description, the Plan Multimodal Trip sequence diagram and the response time design describe the extra round. |
 | Nov 17, 2026 | 4.3 | The Google Routes description now says how the Planner breaks a tie between alternative transit routes (fewer transit lines) and that it leaves a route out when none of Google's alternatives fits the max walk, to match the code from #86. |
+| Nov 18, 2026 | 4.1, 4.3 | Added an internal bike-transit station candidate service seeded from frequent-service TransLink GTFS parent stations, with a cached Google Places fallback. It discovers station candidates only; bike route computation and plan response integration remain future work. |
 
 
 ---
@@ -328,11 +329,13 @@ Every request except sign-in first passes Auth's `requireSession`, which finds t
        12. `List<ParkingSpot> getParkingSpots(ObjectId userId)` (internal, called by the Planner)
            - **Purpose**: Gives the Planner the user's parking spots, the only places a trip can switch from driving to transit.
 3. **Planner**
-   - **Purpose**: Multimodal trip planning. Choosing the parking spots to try, scheduling, pricing and ranking are our own logic, and Google only supplies travel times and route details.
+   - **Purpose**: Multimodal trip planning. Choosing the parking spots to try, scheduling, pricing and ranking are our own logic, and Google only supplies travel times and route details. An internal bike-station discovery service identifies candidates for Bike → Transit and Transit → Bike journeys; it does not yet add bicycle legs to the planning endpoint.
    - **Rationale**: Neither Google Maps nor Google Routes plans a drive-then-transit trip through the user's own parking spots, so this is the part of Trailmix that has to be ours. It is a separate component because it calls Google and does no database writes.
    - **Interfaces**:
        1. `POST /api/routes/plan { origin, destination, arriveBy, modes, costVsTime?, maxWalkMinutes? }` → `{ options, warnings }`
            - **Purpose**: Returns up to three distinct routes labelled Cheapest, Fastest and Balanced. It considers driving and transit the whole way and Drive → Transit through the user's saved parking spots, uses the user's costs and saved preferences unless the request overrides them, and schedules backward from `arriveBy` when it is given. `warnings` can hold `NO_PARKING_SPOTS`, `GAS_PRICE_MISSING` and `VEHICLE_MISSING`. Returns `503` when Google Routes can't be reached after one retry.
+       2. `findBikeStationCandidates({ origin, destination, bikeLegEndpoint, maxCyclingDistanceMeters?, candidateCount? })` (internal)
+           - **Purpose**: Ranks frequent-service GTFS stations near the bicycle end of the journey, and uses Places Nearby Search only when the seed returns fewer than the requested candidates. The distance defaults are 5,000 m and 3 candidates. See `backend/src/data/README.md` for seed refresh instructions.
 4. **Trips**
    - **Purpose**: Saved trips and their lifecycle (planned, active, completed or cancelled).
    - **Rationale**: Kept apart from Users because a user has many trips, and History lists them on their own.
