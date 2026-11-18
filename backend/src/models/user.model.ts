@@ -20,8 +20,9 @@ export const FARE_TYPES = [
 export const PASS_ZONES = [1, 2, 3] as const;
 
 /** Modes a user can allow by default when planning a trip. */
-export const PLANNING_MODES = ['DRIVE', 'TRANSIT'] as const;
-export const DEFAULT_PLANNING_MODES: readonly (typeof PLANNING_MODES)[number][] = ['DRIVE', 'TRANSIT'];
+export const PLANNING_MODES = ['DRIVE', 'TRANSIT', 'BICYCLE'] as const;
+export type PlanningMode = (typeof PLANNING_MODES)[number];
+export const DEFAULT_PLANNING_MODES: readonly PlanningMode[] = ['DRIVE', 'TRANSIT', 'BICYCLE'];
 export const DEFAULT_COST_VS_TIME = 50;
 
 /** The longest single stretch of walking a route may have, in minutes, when the user hasn't chosen one. */
@@ -112,7 +113,7 @@ export interface Profile {
 /** Saved defaults for the Planner screen. */
 export interface PlanningPreferences {
   costVsTime: number;
-  defaultModes: (typeof PLANNING_MODES)[number][];
+  defaultModes: PlanningMode[];
   maxWalkMinutes?: number; // left unchanged when a save leaves it out
 }
 
@@ -139,7 +140,7 @@ export interface User {
   parkingSpots: ParkingSpot[]; // newest first, at most MAX_PARKING_SPOTS
   // users are read with lean(), which skips schema defaults, so accounts made before the Planner have none of these three
   costVsTime?: number;
-  defaultModes?: (typeof PLANNING_MODES)[number][];
+  defaultModes?: PlanningMode[];
   maxWalkMinutes?: number; // longest single walking stretch a planned route may have
   createdAt: Date;
   updatedAt: Date;
@@ -157,7 +158,7 @@ export interface UserResponse {
   transit: Transit | null;
   lastGasPrice: { centsPerLitre: number; savedAt: string } | null; // savedAt is an ISO 8601 date
   costVsTime: number;
-  defaultModes: (typeof PLANNING_MODES)[number][];
+  defaultModes: PlanningMode[];
   maxWalkMinutes: number;
 }
 

@@ -8,5 +8,8 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">10.0.2.2</domain>
         <domain includeSubdomains="false">localhost</domain>
+<!--        Uncomment the line below and replace the IP with the address
+            of the machine hosting the local backend when running on real device-->
+<!--        <domain includeSubdomains="false">192.168.1.96</domain>-->
     </domain-config>
 </network-security-config>

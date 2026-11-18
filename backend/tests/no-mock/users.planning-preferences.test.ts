@@ -26,6 +26,19 @@ describe('Unmocked: PUT /api/users/me/planning-preferences', () => {
     expect(response.body.user).toMatchObject(PREFERENCES);
   });
 
+  test('Saves and returns the bicycle planning mode', async () => {
+    const { token } = await createSignedInUser();
+    const preferences = { costVsTime: 75, defaultModes: ['DRIVE', 'BICYCLE'] };
+
+    const response = await request(createApp())
+      .put('/api/users/me/planning-preferences')
+      .set('Authorization', bearer(token))
+      .send(preferences);
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject(preferences);
+  });
+
   // Input: valid session and a max walk of 15 minutes, then a save that leaves the max walk out
   // Expected status code: 200 for both
   // Expected behavior: the max walk is saved, and a later save without it keeps it

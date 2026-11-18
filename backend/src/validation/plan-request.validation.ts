@@ -1,6 +1,5 @@
-import { PLANNING_MODES } from '../models/user.model';
+import { PLANNING_MODES, type PlanningMode } from '../models/user.model';
 import type { PlannerPlace } from '../services/planner.core';
-import type { PlannerMode } from '../services/planner.google.service';
 import { isRecord } from './common.validation';
 import { isMaxWalkMinutes } from './planning-preferences.validation';
 
@@ -8,7 +7,7 @@ export interface PlanRequest {
   origin: PlannerPlace;
   destination: PlannerPlace;
   arriveBy: Date | null;
-  modes: PlannerMode[];
+  modes: PlanningMode[];
   costVsTime?: number;
   maxWalkMinutes?: number; // overrides the saved preference for this trip
 }
@@ -37,7 +36,7 @@ export function parsePlanRequest(body: unknown): PlanRequestParseResult {
       return { error: 'arriveBy must be an ISO-8601 date or null' };
     }
   }
-  if (!Array.isArray(body.modes) || body.modes.length === 0) return { error: 'modes must contain DRIVE and/or TRANSIT' };
+  if (!Array.isArray(body.modes) || body.modes.length === 0) return { error: 'modes must contain at least one supported planning mode' };
   if (body.modes.some((mode) => !PLANNING_MODES.includes(mode as (typeof PLANNING_MODES)[number]))) {
     return { error: 'modes contains an unknown mode' };
   }
@@ -56,7 +55,7 @@ export function parsePlanRequest(body: unknown): PlanRequestParseResult {
       origin,
       destination,
       arriveBy: body.arriveBy === null ? null : new Date(body.arriveBy),
-      modes: [...body.modes] as PlannerMode[],
+      modes: [...body.modes] as PlanningMode[],
       ...(body.costVsTime === undefined ? {} : { costVsTime: body.costVsTime }),
       ...(body.maxWalkMinutes === undefined ? {} : { maxWalkMinutes: body.maxWalkMinutes }),
     },

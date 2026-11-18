@@ -100,6 +100,20 @@ async function submitPlan(): Promise<request.Response> {
   return request(createApp()).post('/api/routes/plan').set('Authorization', bearer(token)).send(BODY);
 }
 
+test('Accepts bicycle planning mode without attempting bike routing', async () => {
+  const { token } = await createSignedInUser();
+  const fetch = jest.spyOn(globalThis, 'fetch');
+
+  const response = await request(createApp())
+    .post('/api/routes/plan')
+    .set('Authorization', bearer(token))
+    .send({ ...BODY, modes: ['BICYCLE'] });
+
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({ options: [], warnings: [] });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 const SAVED_AT = new Date('2026-11-02T00:00:00Z');
 const HOUR_SECONDS = 60 * 60;
 const HOUR_MS = HOUR_SECONDS * 1000;
