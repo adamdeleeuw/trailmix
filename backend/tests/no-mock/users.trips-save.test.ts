@@ -271,13 +271,16 @@ describe('Unmocked: POST /api/users/me/trips', () => {
   });
 
   // Input: a valid session and a route where the optional fields are null or left out: no stop count,
-  //        colour or headsign, a null baseline drive cost, a place with no placeId, and a null actualStart
+  //        colour, headsign, stop locations or stop times (as the app sent before #87), a null baseline drive cost, a place with no placeId, and a null actualStart
   // Expected status code: 201
   // Expected behavior: Google may leave these out, so the trip is saved, with null for each, and starts now
   // Expected output: { trip } with those fields null and actualStart set
   test('Optional fields may be null or left out', async () => {
     const { token } = await createSignedInUser();
-    const line = { ...EXPO_LINE, stopCount: undefined, colour: undefined, headsign: null }; // undefined fields aren't sent
+    const line = {
+      ...EXPO_LINE, stopCount: undefined, colour: undefined, headsign: null, // undefined fields aren't sent
+      departureStopLocation: undefined, arrivalStopLocation: null, departAt: undefined, arriveAt: null,
+    };
     const legs = [{ ...DRIVE_LEG, from: { ...BURNABY_HOME, placeId: undefined } }, ...ROUTE_OPTION.legs.slice(1)]
       .map((leg) => (leg === TRANSIT_LEG ? { ...TRANSIT_LEG, transitLines: [line] } : leg));
 
@@ -286,7 +289,10 @@ describe('Unmocked: POST /api/users/me/trips', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.trip.legs[2].transitLines).toStrictEqual([
-      { ...EXPO_LINE, colour: null, headsign: null, stopCount: null },
+      {
+        ...EXPO_LINE, colour: null, headsign: null, stopCount: null,
+        departureStopLocation: null, arrivalStopLocation: null, departAt: null, arriveAt: null,
+      },
     ]);
     expect(response.body.trip.origin.placeId).toBeNull();
     expect(response.body.trip.baselineDriveCostCents).toBeNull();
@@ -343,7 +349,8 @@ describe('Unmocked: POST /api/users/me/trips', () => {
 
   // Input: a valid session, and a transit line that isn't an object, has an empty name or vehicle, a short
   //        name that is a number, or a colour, headsign, departure stop or arrival stop that is too long,
-  //        or a stop count of -1
+  //        or a stop count of -1, a stop location that isn't { lat, lng } or is off the globe, or a stop time
+  //        that isn't ISO 8601
   // Expected status code: 400
   // Expected behavior: optional transit details may be null, but not invalid, and nothing is saved
   // Expected output: { error: "Invalid trip" }
@@ -353,6 +360,8 @@ describe('Unmocked: POST /api/users/me/trips', () => {
     const badFields = [
       { name: '' }, { vehicle: '' }, { shortName: 99 }, { colour: TOO_LONG_TEXT }, { headsign: 7 },
       { departureStop: TOO_LONG_TEXT }, { arrivalStop: TOO_LONG_TEXT }, { stopCount: -1 },
+      { departureStopLocation: 'UBC' }, { departureStopLocation: { lat: 91, lng: -123.2 } },
+      { arrivalStopLocation: { lat: 49.2 } }, { departAt: 'tomorrow' }, { arriveAt: 1762185600000 },
     ];
     for (const fields of badFields) {
       await expectRejected(token, withLine(fields));

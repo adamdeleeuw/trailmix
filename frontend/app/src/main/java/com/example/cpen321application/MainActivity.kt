@@ -26,6 +26,7 @@ import com.example.cpen321application.ui.main.TripHistoryScreen
 import com.example.cpen321application.ui.main.TripHistoryViewModel
 import com.example.cpen321application.ui.main.rememberTripSnackbar
 import com.example.cpen321application.ui.map.MapHomeScreen
+import com.example.cpen321application.ui.navigation.LiveUpdatesViewModel
 import com.example.cpen321application.ui.navigation.NavigationScreen
 import com.example.cpen321application.ui.profile.EditProfileScreen
 import com.example.cpen321application.ui.profile.EditProfileViewModel
@@ -59,6 +60,10 @@ class MainActivity : ComponentActivity() {
         viewModelFactory { initializer { TripHistoryViewModel(BackendApi, DataStoreSessionStore(application)) } }
     }
 
+    private val liveUpdatesViewModel: LiveUpdatesViewModel by viewModels {
+        viewModelFactory { initializer { LiveUpdatesViewModel(BackendApi, DataStoreSessionStore(application)) } }
+    }
+
     private val editProfileViewModel: EditProfileViewModel by viewModels {
         viewModelFactory { initializer { EditProfileViewModel(BackendApi, DataStoreSessionStore(application)) } }
     }
@@ -77,6 +82,7 @@ class MainActivity : ComponentActivity() {
     private fun resetScreens() {
         questionnaireViewModel.reset()
         tripHistoryViewModel.reset()
+        liveUpdatesViewModel.reset()
         profileViewModel.reset()
     }
 
@@ -118,7 +124,7 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(Unit) { trips.load(::signOut) } // at launch, to find an active trip
         EndActiveTripDialog(trips, ::signOut)
         if (trips.activeTrip != null || trips.finishedTrip != null) {
-            NavigationScreen(trips, onUnauthorized = ::signOut)
+            NavigationScreen(trips, liveUpdatesViewModel, onUnauthorized = ::signOut)
             return
         }
         MainScreen(

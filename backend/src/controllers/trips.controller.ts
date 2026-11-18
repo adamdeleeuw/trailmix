@@ -1,14 +1,16 @@
 import type { Request, Response } from 'express';
 import type { AuthLocals } from '../middleware/require-session.middleware';
+import { liveUpdateFor } from '../services/live-updates.service';
 import {
   deletePlannedTrip,
+  findLiveTrip,
   findTripsByUserId,
   saveTrip,
   updateTripStatus,
   type TripResult,
 } from '../services/trip.service';
 import { parseObjectId } from '../validation/common.validation';
-import { parseNewTrip, parseStatusChange } from '../validation/trip.validation';
+import { parseFromLeg, parseNewTrip, parseStatusChange } from '../validation/trip.validation';
 
 const OK = 200;
 const CREATED = 201;
@@ -130,4 +132,42 @@ export async function removeTrip(req: Request, res: Response<unknown, AuthLocals
   }
   const { status, error } = rejectionFor(result);
   res.status(status).json({ error });
+}
+
+/**
+ * Returns TransLink's live times and alerts for the signed-in user's active trip, for Navigation (#87).
+ *
+ * @remarks
+ * `GET /api/users/me/trips/:id/live?fromLeg=N`, requires a session. `fromLeg` is the leg the rider is on (default
+ * 0); legs before it are done, and once no transit leg is left only alerts are polled. The app polls this every
+ * 15 s. The body is a `LiveUpdate` (see `models/live-update.model.ts`); when TransLink can't be used (no key, the
+ * daily cap, a refusal, an error, stale or undecodable data) it's `live: false` with the scheduled times.
+ * - `200 LiveUpdate`
+ * - `400 { error }`: `fromLeg` isn't a leg of the trip.
+ * - `401 { error }`: no valid session, or the account was deleted.
+ * - `404 { error }`: the user has no trip with that ID, including another user's trip.
+ * - `409 { error }`: the trip isn't ACTIVE.
+ * - `500 { error }`: database error.
+ */
+export async function getLiveUpdate(req: Request, res: Response<unknown, AuthLocals>): Promise<void> {
+  const tripId = parseObjectId(req.params.id);
+  if (tripId === undefined) {
+    res.status(NOT_FOUND).json({ error: NOT_FOUND_ERROR });
+    return;
+  }
+  const trip = await findLiveTrip(res.locals.auth.user._id, tripId);
+  if (trip.status === 'NOT_FOUND') {
+    res.status(NOT_FOUND).json({ error: NOT_FOUND_ERROR });
+    return;
+  }
+  if (trip.status === 'NOT_ACTIVE') {
+    res.status(CONFLICT).json({ error: 'Trip is not active' });
+    return;
+  }
+  const fromLeg = parseFromLeg(req.query.fromLeg, trip.legs.length);
+  if (fromLeg === undefined) {
+    res.status(BAD_REQUEST).json({ error: 'Invalid fromLeg' });
+    return;
+  }
+  res.status(OK).json(await liveUpdateFor(tripId.toHexString(), trip.legs, fromLeg));
 }

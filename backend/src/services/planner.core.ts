@@ -1,5 +1,6 @@
 import type { ParkingSpot, Transit, User, Vehicle } from '../models/user.model';
 import { DEFAULT_GAS_CENTS_PER_LITRE, DEFAULT_LITRES_PER_100KM, singleTransitFareCents } from './planner.constants';
+import { localDay } from './bc-time';
 
 export interface PlannerPlace {
   label: string;
@@ -248,12 +249,7 @@ export function chooseRoute<T extends RouteChoice>(routes: readonly T[], maxWalk
 
 /** Drops impossible chains while retaining their spot-specific constraints. */
 export function filterChains<T extends CandidateRoute>(chains: readonly T[], now: Date, timezone = 'UTC'): T[] {
-  const localDate = (date: Date): string => new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+  const localDate = (date: Date): string => localDay(date, timezone);
   return chains.filter((chain) => {
     if (chain.leaveAt < now || chain.walkSeconds > MAX_WALK_SECONDS) return false;
     if (!chain.overnightAllowed && localDate(chain.parkedFromAt) !== localDate(chain.arriveAt)) return false;

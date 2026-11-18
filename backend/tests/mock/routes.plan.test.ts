@@ -1019,6 +1019,41 @@ describe('Mocked: POST /api/routes/plan', () => {
     ]);
   });
 
+  // Mocked behavior: Google's transit step has its stops' locations and times, and a short walk to the stop is merged into
+  //                  the ride; a second step leaves the locations and times out
+  // Input: valid session with the default max walk, transit only
+  // Expected status code: 200
+  // Expected behavior: each line keeps its own stops' locations and scheduled times, which LiveUpdates matches to
+  //                    TransLink, even though the leg starts at the walk; missing ones are null
+  // Expected output: the first line with Google's locations and times, the second with nulls
+  test('Sends each transit line its stop locations and scheduled times', async () => {
+    const bus = step('TRANSIT', 600, { name: 'UBC/Commercial-Broadway', nameShort: '99' }) as {
+      transitDetails: { stopDetails: object };
+    };
+    bus.transitDetails.stopDetails = {
+      ...bus.transitDetails.stopDetails,
+      departureStop: { name: 'UBC Exchange Bay 7', location: { latLng: { latitude: 49.2672, longitude: -123.2475 } } },
+      arrivalStop: { name: 'Commercial-Broadway Station', location: { latLng: { latitude: 49.2626, longitude: -123.0691 } } },
+      departureTime: '2026-11-02T16:01:00Z',
+      arrivalTime: '2026-11-02T16:11:00Z',
+    };
+
+    const response = await planWithMaxWalk(10, [step('WALK', 30), bus, step('WALK', 120), step('TRANSIT', 480, { name: 'Expo Line' })]);
+
+    expect(response.status).toBe(200);
+    const lines = response.body.options[0].legs.flatMap((leg: { transitLines: unknown[] }) => leg.transitLines);
+    expect(lines).toMatchObject([
+      {
+        shortName: '99',
+        departureStopLocation: { lat: 49.2672, lng: -123.2475 },
+        arrivalStopLocation: { lat: 49.2626, lng: -123.0691 },
+        departAt: '2026-11-02T16:01:00.000Z',
+        arriveAt: '2026-11-02T16:11:00.000Z',
+      },
+      { name: 'Expo Line', departureStopLocation: null, arrivalStopLocation: null, departAt: null, arriveAt: null },
+    ]);
+  });
+
   // Mocked behavior: Google fails the first matrix request and succeeds on retry
   // Input: a valid transit-only plan
   // Expected status code: 200

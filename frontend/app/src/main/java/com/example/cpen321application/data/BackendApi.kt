@@ -232,7 +232,7 @@ const val PARKING_LIMIT_ERROR = "Parking spot limit reached"
 const val PARKING_DUPLICATE_ERROR = "Parking spot already saved"
 
 /** [AuthApi], [ProfileApi], [AccountApi], [TripApi], [ParkingSpotApi], [PlannerApi] and [PlanningPreferencesApi] over HTTP. */
-object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, PlannerApi, PlanningPreferencesApi {
+object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, LiveUpdateApi, ParkingSpotApi, PlannerApi, PlanningPreferencesApi {
     private const val PARKING_SPOTS_PATH = "/api/users/me/parking-spots"
     private const val TRIPS_PATH = "/api/users/me/trips"
 
@@ -281,6 +281,9 @@ object BackendApi : AuthApi, ProfileApi, AccountApi, TripApi, ParkingSpotApi, Pl
 
     override suspend fun deleteTrip(sessionToken: String, id: String) =
         request("DELETE", "$TRIPS_PATH/${encodePathSegment(id)}", sessionToken) {}
+
+    override suspend fun getLiveUpdate(sessionToken: String, tripId: String, fromLeg: Int) =
+        request("GET", "$TRIPS_PATH/${encodePathSegment(tripId)}/live?fromLeg=$fromLeg", sessionToken) { it.toLiveUpdate() }
 
     override suspend fun saveGasPrice(sessionToken: String, centsPerLitre: Double) =
         request("PUT", "/api/users/me/gas-price", sessionToken, JSONObject().put("centsPerLitre", centsPerLitre)) {

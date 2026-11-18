@@ -3,3 +3,6 @@
 process.env.GOOGLE_BACKEND_CLIENT_ID ??= 'test-client-id.apps.googleusercontent.com';
 // placeholder Routes API key: the mocked tests fake Google, and the unmocked ones never reach it
 process.env.GOOGLE_ROUTES_API_KEY ??= 'test-routes-api-key';
+// never the real TransLink key from backend/.env (dotenv doesn't override a variable that's set, even to ''), so no
+// test can reach TransLink or spend its daily quota; tests that need a key set a fake one and mock fetch
+process.env.TRANSLINK_API_KEY = '';

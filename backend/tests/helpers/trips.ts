@@ -71,6 +71,8 @@ export const TRANSIT_LEG = {
   transitLines: [{
     name: 'Expo Line', shortName: null, vehicle: 'SkyTrain', colour: '#0060A9', headsign: 'Waterfront',
     departureStop: 'Production Way–University', arrivalStop: 'Waterfront', stopCount: 12,
+    departureStopLocation: { lat: 49.2535, lng: -122.9181 }, arrivalStopLocation: { lat: 49.2859, lng: -123.1117 },
+    departAt: '2026-11-03T15:50:00.000Z', arriveAt: '2026-11-03T16:15:00.000Z',
   }],
   steps: [],
 };
