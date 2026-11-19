@@ -11,6 +11,7 @@
 | 2026-11-04        | 2.1, 2.4 | Fixed the 43 issues that couldn't be justified (#82), and updated the commit Codacy ran on and the line links that moved |
 | 2026-11-18        | 3, 3.1, 3.2 | Filled in the CP3 peer review: the review we performed of ExploreUBC (scores, major fault and screenshots) and the review ExploreUBC gave us (scores and the rate-limiting fault), and removed the note that the section would be filled in later |
 | 2026-11-18        | 2.4, 2.5 | Merged the current Codacy issue comparison and triage from Code_Review_bak.md without replacing the CP3 peer-review results |
+| 2026-11-18        | 2.5 | Replaced a test's non-null assertion with an explicit guard after Codacy flagged non-null assertions as forbidden |
 
 ---
 
@@ -96,42 +97,58 @@ The original Codacy snapshot is shown in 2.2 and 2.3. The locations below also a
      - **Location in Git:** [`backend/src/services/bike-station.service.ts#L174`](../backend/src/services/bike-station.service.ts#L174) (two findings)
      - **Justification:** Both findings flag the same `apiKey === undefined` check. This only tests whether the server's configured Google Places key is present; it does not compare a supplied secret or expose a useful timing oracle to a caller.
 
+- **Code Pattern: Async arrow function has no `await` expression**
+
+  1. **Issues**
+
+     - **Location in Git:** [`backend/tests/helpers/live.ts#L118`](../backend/tests/helpers/live.ts#L118), [`backend/src/services/live-feeds.ts#L122`](../backend/src/services/live-feeds.ts#L122), and [`backend/tests/unit/live-feeds.test.ts#L18`](../backend/tests/unit/live-feeds.test.ts#L18)
+     - **Justification:** These callbacks intentionally implement promise-returning interfaces. The fetch mock returns a `Response` or throws, the timer callback resolves its promise, and the fake feed fetch returns the configured result after recording the call; none needs additional `await` expressions.
+
+- **Code Pattern: Disallow void operator**
+
+  1. **Issue**
+
+     - **Location in Git:** [`backend/src/services/bike-station.service.ts#L215`](../backend/src/services/bike-station.service.ts#L215)
+     - **Justification:** `void` explicitly marks the cache cleanup as fire-and-forget. A rejection handler is attached before the promise is discarded.
+
+- **Code Pattern: Expression with labels increases complexity and affects maintainability**
+
+  1. **Issue**
+
+     - **Location in Git:** [`frontend/app/src/main/java/com/example/cpen321application/ui/planning/TripPreview.kt#L193`](../frontend/app/src/main/java/com/example/cpen321application/ui/planning/TripPreview.kt#L193)
+     - **Justification:** `return@forEachIndexed` skips rendering a marker when its location is unavailable and continues rendering the remaining bicycle legs.
+
+- **Code Pattern: Audit URL open for permitted schemes**
+
+  1. **Issue**
+
+     - **Location in Git:** [`scripts/generate-translink-stations.py#L129`](../scripts/generate-translink-stations.py#L129)
+     - **Justification:** `urlopen` receives a `Request` built from the fixed HTTPS `FEED_URL`; no user-provided URL or scheme reaches it.
+
+- **Code Pattern: Too many functions in file**
+
+  1. **Issue**
+
+     - **Location in Git:** [`frontend/app/src/main/java/com/example/cpen321application/data/TripPlan.kt#L1`](../frontend/app/src/main/java/com/example/cpen321application/data/TripPlan.kt#L1)
+     - **Justification:** The file groups the Planner API models and their JSON serialization/deserialization, a cohesive concern. At 21 functions it is only one over the configured threshold; splitting solely to meet the threshold is not necessary absent a maintainability problem.
+
+- **Code Pattern: Too many functions in object**
+
+  1. **Issue**
+
+     - **Location in Git:** [`frontend/app/src/main/java/com/example/cpen321application/data/BackendApi.kt#L235`](../frontend/app/src/main/java/com/example/cpen321application/data/BackendApi.kt#L235)
+     - **Justification:** `BackendApi` is the app's single HTTP facade implementing several small API interfaces, allowing view models to depend on narrower interfaces while production wiring reuses one implementation.
+
+- **Code Pattern: Unused variable**
+
+  1. **Issue**
+
+     - **Location in Git:** [`backend/src/services/live-match.ts#L119`](../backend/src/services/live-match.ts#L119)
+     - **Justification:** The score is internal ranking data used to choose the best match; destructuring intentionally excludes it from the public `LineMatch` result.
+
 ### 2.5. Triage of Current Codacy Issues
 
-The following 20 findings were visible in the current Codacy list on 2026-11-18. This triage distinguishes mechanical cleanup, findings with a sound code-based justification, and findings that merit an engineering decision or closer review.
-
-#### Easily resolved
-
-These are style-only changes with no intended behavior change. The non-null assertion is safe because `busThenWalkLegs` always returns two legs.
-
-| Finding | Location |
-| --- | --- |
-| Prefer interface over type | [`backend/tests/unit/live-match.test.ts#L192`](../backend/tests/unit/live-match.test.ts#L192) |
-| Prefer non-null assertion | [`backend/tests/unit/live-updates.test.ts#L147`](../backend/tests/unit/live-updates.test.ts#L147) |
-| Ternary newline | [`backend/src/services/live-updates.service.ts#L104`](../backend/src/services/live-updates.service.ts#L104) |
-| Ternary newline | [`backend/tests/mock/routes.plan.test.ts#L542`](../backend/tests/mock/routes.plan.test.ts#L542) |
-| Ternary newline | [`backend/src/services/live-match.ts#L171`](../backend/src/services/live-match.ts#L171) |
-| Ternary newline | [`backend/src/services/live-updates.service.ts#L120`](../backend/src/services/live-updates.service.ts#L120) |
-
-#### Justification exists
-
-These findings arise from deliberate callback/API contracts or cohesive design choices; the warning alone is not a reason to change the code.
-
-| Finding | Location | Justification |
-| --- | --- | --- |
-| Async arrow function has no `await` | [`backend/tests/helpers/live.ts#L118`](../backend/tests/helpers/live.ts#L118) | `fetch` mocks must return `Promise<Response>`; the `async` callback matches that contract while its branches return a `Response` or throw. |
-| Async arrow function has no `await` | [`backend/src/services/live-feeds.ts#L122`](../backend/src/services/live-feeds.ts#L122) | `PollerDeps.setTimer` and the fake clock require an async callback (`() => Promise<void>`); this timeout callback resolves the promise without other asynchronous work. |
-| Async arrow function has no `await` | [`backend/tests/unit/live-feeds.test.ts#L18`](../backend/tests/unit/live-feeds.test.ts#L18) | `PollerDeps.fetchFeed` returns a promise; the async fake preserves that signature while recording the call and returning the configured result. |
-| `undefined` expected instead of `void` | [`backend/src/services/bike-station.service.ts#L215`](../backend/src/services/bike-station.service.ts#L215) | `void` deliberately marks the caught cache-cleanup promise as fire-and-forget; the rejection handler is attached before it is discarded. |
-| Expression with labels increases complexity | [`frontend/app/src/main/java/com/example/cpen321application/ui/planning/TripPreview.kt#L193`](../frontend/app/src/main/java/com/example/cpen321application/ui/planning/TripPreview.kt#L193) | `return@forEachIndexed` skips a marker when its location is unavailable and continues rendering the remaining bicycle legs. |
-| URL open permits unexpected schemes | [`scripts/generate-translink-stations.py#L129`](../scripts/generate-translink-stations.py#L129) | `urlopen` receives a `Request` built from the fixed HTTPS `FEED_URL`; no user-provided URL or scheme reaches it. |
-| Too many functions in file | [`frontend/app/src/main/java/com/example/cpen321application/data/TripPlan.kt#L1`](../frontend/app/src/main/java/com/example/cpen321application/data/TripPlan.kt#L1) | The file groups the Planner API models and their JSON serialization/deserialization, a cohesive concern; 21 functions is only one over the configured threshold. Splitting solely to meet the threshold is not necessary absent a maintainability problem. |
-| Too many functions in object | [`frontend/app/src/main/java/com/example/cpen321application/data/BackendApi.kt#L235`](../frontend/app/src/main/java/com/example/cpen321application/data/BackendApi.kt#L235) | `BackendApi` is the app's single HTTP facade implementing several small API interfaces, which lets view models depend on narrower interfaces while production wiring reuses one implementation. |
-| `_score` is assigned but never used | [`backend/src/services/live-match.ts#L119`](../backend/src/services/live-match.ts#L119) | The score is internal ranking data used to choose the best match; destructuring intentionally excludes it from the public `LineMatch` result. |
-
-#### Requires attention
-
-These findings are not automatically justified by style or API contracts. The async timer callback has a concrete failure-mode concern; the complexity findings should be reviewed for maintainability. The optional-chain quick fix must preserve the existing null/undefined behavior.
+Five findings from the 2026-11-18 Codacy list still need engineering attention. The `legs[0]!` warning was resolved by replacing the assertion with an explicit guard in [`backend/tests/unit/live-updates.test.ts`](../backend/tests/unit/live-updates.test.ts). The remaining findings are:
 
 | Finding | Location | Why it needs attention |
 | --- | --- | --- |
