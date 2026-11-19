@@ -8,10 +8,12 @@ import com.example.cpen321application.ui.navigation.finishedText
 import com.example.cpen321application.ui.navigation.hasArrived
 import com.example.cpen321application.ui.navigation.isFarFromDestination
 import com.example.cpen321application.ui.navigation.legAfterFix
+import com.example.cpen321application.ui.navigation.legTurn
 import com.example.cpen321application.ui.navigation.legTitle
 import com.example.cpen321application.ui.navigation.linePosition
 import com.example.cpen321application.ui.navigation.maneuverAngle
 import com.example.cpen321application.ui.navigation.remainingText
+import com.example.cpen321application.ui.navigation.rideSpan
 import com.example.cpen321application.ui.navigation.turnDistanceText
 import com.example.cpen321application.ui.navigation.turnPositions
 import com.example.cpen321application.ui.navigation.upcomingTurn
@@ -61,9 +63,17 @@ class NavigationFormatTest {
     }
 
     @Test
+    fun theFirstFixOnlyPlacesTheUser() {
+        val parkade = route.legs[0].to.location
+        assertEquals(0, legAfterFix(route, 0, parkade, firstFix = true)) // a short first leg isn't skipped at once
+        assertEquals(2, legAfterFix(route, 0, parkade, firstFix = false))
+    }
+
+    @Test
     fun arrivingIsWithin50MetresOfTheDestination() {
-        assertTrue(hasArrived(route, north(ROUTE_UBC.location, 0.0003))) // 33 m
-        assertFalse(hasArrived(route, north(ROUTE_UBC.location, 0.0006))) // 67 m
+        assertTrue(hasArrived(route, 2, north(ROUTE_UBC.location, 0.0003))) // 33 m
+        assertFalse(hasArrived(route, 2, north(ROUTE_UBC.location, 0.0006))) // 67 m
+        assertFalse(hasArrived(route, 1, ROUTE_UBC.location)) // only on the last leg, not when an earlier one passes by
     }
 
     @Test
@@ -145,6 +155,35 @@ class NavigationFormatTest {
         assertEquals("Board Expo Line toward King George at 8:19 · 6 stops", cardTitle(route, 2, alongMetres = 20.0, UTC))
         assertEquals("Ride Expo Line to Main Street · 6 stops", cardTitle(route, 2, alongMetres = 150.0, UTC))
         assertEquals("Drive to North Parkade · 10 min", cardTitle(route, 0, alongMetres = 150.0, UTC))
+    }
+
+    @Test
+    fun aWalkMergedIntoATransitLegShowsItsTurnsUntilTheStop() {
+        // walks north from START, turns left at 111 m, and boards at CORNER (223 m), then rides east
+        val leftTurn = NavigationStep("Turn left onto Main St", "TURN_LEFT", north(START, 0.001))
+        val transit = route.legs[2].copy(
+            steps = listOf(DEPART, leftTurn),
+            transitLines = listOf(EXPO_LINE.copy(departureStopLocation = CORNER)),
+        )
+        val ride = rideSpan(transit, LINE)!!
+        val positions = turnPositions(transit.steps, LINE)
+        val turnAt = { along: Double -> legTurn(transit.steps, positions, along, ride)?.step }
+
+        assertEquals(222.6, ride.boardAt, TOLERANCE_M)
+        assertEquals(DEPART, turnAt(0.0))
+        assertEquals(leftTurn, turnAt(50.0))
+        assertNull(turnAt(150.0)) // every walking turn behind, still walking to the stop
+        assertNull(turnAt(300.0)) // riding
+        assertNull(rideSpan(route.legs[1], LINE)) // a walk leg isn't a ride
+    }
+
+    @Test
+    fun aMergedWalkIsNotRidingUntilPastTheBoardingStop() {
+        val board = "Board Expo Line toward King George at 8:19 · 6 stops"
+        val title = { along: Double -> cardTitle(route, 2, along, UTC, boardAt = 222.6) }
+        assertEquals(board, title(150.0)) // still walking to the stop
+        assertEquals(board, title(300.0)) // under 100 m past the stop
+        assertEquals("Ride Expo Line to Main Street · 6 stops", title(330.0))
     }
 
     @Test
