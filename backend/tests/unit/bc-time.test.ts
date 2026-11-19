@@ -1,4 +1,4 @@
-import { BC_UTC_OFFSET_HOURS, bcDay, localDay } from '../../src/services/bc-time';
+import { BC_UTC_OFFSET_HOURS, bcDay, bcMonth, localDay, nextBcMidnight, nextBcMonth } from '../../src/services/bc-time';
 
 // B.C.'s days at a fixed UTC-7, independent of the runtime's time zone database
 
@@ -36,5 +36,25 @@ describe('localDay', () => {
   // Expected behavior: a RangeError, as from Intl
   test('rejects an unknown zone', () => {
     expect(() => localDay(new Date('2026-11-18T07:30:00Z'), 'Mars/Olympus')).toThrow(RangeError);
+  });
+});
+
+// issue #89: the daily and monthly plan limits reset at midnight in B.C.
+describe('B.C. midnights', () => {
+  // Input: moments just before and just after 07:00Z, B.C.'s midnight
+  // Expected output: the next midnight is 07:00Z the following day, or later the same UTC day before 07:00Z
+  test('finds the next midnight at 07:00 UTC', () => {
+    expect(nextBcMidnight(new Date('2026-11-18T19:00:00Z'))).toEqual(new Date('2026-11-19T07:00:00Z'));
+    expect(nextBcMidnight(new Date('2026-11-18T06:59:59Z'))).toEqual(new Date('2026-11-18T07:00:00Z'));
+    expect(nextBcMidnight(new Date('2026-11-18T07:00:00Z'))).toEqual(new Date('2026-11-19T07:00:00Z'));
+  });
+
+  // Input: moments in November, on New Year's Eve in B.C., and just after 2027 starts in B.C.
+  // Expected output: the B.C. month, and midnight in B.C. on the 1st of the next month, rolling over the year
+  test('finds the month and the next 1st of the month', () => {
+    expect(bcMonth(new Date('2026-12-01T06:59:59Z'))).toBe('2026-11');
+    expect(nextBcMonth(new Date('2026-11-18T19:00:00Z'))).toEqual(new Date('2026-12-01T07:00:00Z'));
+    expect(nextBcMonth(new Date('2027-01-01T06:59:59Z'))).toEqual(new Date('2027-01-01T07:00:00Z'));
+    expect(nextBcMonth(new Date('2027-01-01T07:00:00Z'))).toEqual(new Date('2027-02-01T07:00:00Z'));
   });
 });

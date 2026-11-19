@@ -22,6 +22,7 @@
 | 2026-11-04        | 2.1.1, 2.1.2, 2.5, 2.6, 3.1, 3.2 | Added API tests for the Planner lines that weren't covered (#82), so every Planner line and function is covered except two the API can't reach, now listed in 2.6 with the Planner branches still not exercised. Updated the coverage, the commit the tests run on, the NFR log, and the line links that moved |
 | 2026-11-15        | 2.1.1, 2.6, 3.1, 3.2 | The Planner now prunes parking spots that can't win before pricing their transit, and picks among Google's alternative transit routes (#86). Added API tests that a pruned spot is never priced, that a transit alternative is chosen when the first route walks too far, and that spots without a route are skipped, plus unit tests for the lower bound, pruning and route choice. The Google stubs now answer each matrix by its origins. Updated the coverage gaps and moved line links, and the NFR test now waits on three Google rounds; added its new log and the measured tradeoff between fewer matrix elements and the extra round trip. The coverage screenshots and the commit in 2.1.2 still show the CP2 run until this is merged |
 | 2026-11-17        | 2.1.2, 2.5, 3.2 | Reran the back-end tests on branch `planner-pruning-86` (#86) on Node 24.11.1: 174 API tests pass with 1 skipped, plus 34 unit tests and the NFR test. Updated the combined coverage and the NFR log and pruning tradeoff from this run, and noted in 2.1.2 that the commit and the coverage screenshots move to the merge commit after #86 merges. The 2.6 gaps and line links were rechecked and haven't changed. Fixed a repeated phrase in the NFR verification |
+| 2026-11-18        | 2.1.1, 3.1, 3.2 | Server robustness (issue #89): API tests for the per-user, per-address and all-users rate limits (including the fault report's burst of 100 concurrent requests), the Google call cap and retry rule, `503` when MongoDB is unreachable, and session expiry. `GET /health` now reports MongoDB, so its unmocked test connects to the test database. Added the planner load test. The NFR 3 test now gives each simulated client its own app, since its fake clock squeezes minutes of polling into seconds of real time, which the per-address limit would count |
 
 ---
 
@@ -51,7 +52,11 @@ Unit tests for the Planner's own logic and for merging a route's walking legs ar
 | **DELETE /api/users/me/parking-spots/:id** | [`backend/tests/no-mock/users.parking-spots.test.ts#L364`](../backend/tests/no-mock/users.parking-spots.test.ts#L364) | [`backend/tests/mock/users.parking-spots.test.ts#L166`](../backend/tests/mock/users.parking-spots.test.ts#L166) | User DB |
 | **GET /api/vehicles/makes** | [`backend/tests/no-mock/vehicles.test.ts#L14`](../backend/tests/no-mock/vehicles.test.ts#L14) | _None: nothing external can fail_ | _None_ |
 | **GET /api/vehicles/makes/:make/models** | [`backend/tests/no-mock/vehicles.test.ts#L43`](../backend/tests/no-mock/vehicles.test.ts#L43) | _None: nothing external can fail_ | _None_ |
-| **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
+| **GET /health** | [`backend/tests/no-mock/health.test.ts#L10`](../backend/tests/no-mock/health.test.ts#L10), [`backend/tests/no-mock/database-down.test.ts#L31`](../backend/tests/no-mock/database-down.test.ts#L31) | _None: the outage is real, see the next rows_ | _None_ |
+| **Rate limits, every `/api` endpoint** (issue #89) | [`backend/tests/no-mock/rate-limits.test.ts#L23`](../backend/tests/no-mock/rate-limits.test.ts#L23) (per user, sign-in, per address) | [`backend/tests/mock/routes.plan-limits.test.ts#L65`](../backend/tests/mock/routes.plan-limits.test.ts#L65) (plan limits and caps) | Google Routes API (`fetch`), the clock (`Date` only) |
+| **Google calls from `POST /api/routes/plan`** (issue #89) | _None: Google must be faked to control its speed and errors_ | [`backend/tests/mock/routes.plan-google.test.ts#L43`](../backend/tests/mock/routes.plan-google.test.ts#L43) | Google Routes API (`fetch`) |
+| **MongoDB unreachable, every signed-in endpoint** (issue #89) | [`backend/tests/no-mock/database-down.test.ts#L31`](../backend/tests/no-mock/database-down.test.ts#L31) (a real disconnect and reconnect) | [`backend/tests/mock/database-down.test.ts#L37`](../backend/tests/mock/database-down.test.ts#L37) | Session DB, User DB (network and server-selection errors) |
+| **Session expiry, every signed-in endpoint** (issue #89) | [`backend/tests/no-mock/sessions.expiry-indexes.test.ts#L10`](../backend/tests/no-mock/sessions.expiry-indexes.test.ts#L10) (expiry indexes) | [`backend/tests/mock/auth.session-expiry.test.ts#L45`](../backend/tests/mock/auth.session-expiry.test.ts#L45) | Google ID token verification (`OAuth2Client.verifyIdToken`), the clock (`Date` only) |
 | **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts#L28`](../backend/tests/no-mock/routes.plan.test.ts#L28) | [`backend/tests/mock/routes.plan.test.ts#L221`](../backend/tests/mock/routes.plan.test.ts#L221) | Google Routes API (`fetch`), User DB for saved parking spots |
 | **PUT /api/users/me/planning-preferences** | [`backend/tests/no-mock/users.planning-preferences.test.ts#L12`](../backend/tests/no-mock/users.planning-preferences.test.ts#L12) | [`backend/tests/mock/users.planning-preferences.test.ts#L19`](../backend/tests/mock/users.planning-preferences.test.ts#L19) | User DB |
 
@@ -144,6 +149,7 @@ The API tests run every line and function of the Planner's files except the two 
 | **Non-Functional Requirement** | **Location in Git** |
 | ------------------------------ | ------------------- |
 | **Planning Response Time** (95% of plans within 4 s) | [`backend/tests/nfr/planner.response-time.test.ts#L95`](../backend/tests/nfr/planner.response-time.test.ts#L95) |
+| **Planner under load** (issue #89: no `500`s with the limits on) | [`backend/tests/nfr/planner.load.test.ts#L36`](../backend/tests/nfr/planner.load.test.ts#L36) |
 
 Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS / Linux) or `.\scripts\run-backend-nfr-tests.ps1` (Windows), with Docker running for the test MongoDB as in 2.1.3. The Security requirement doesn't have an automated test yet, so the second NFR test is planned for CP3.
 
@@ -160,6 +166,14 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
     Tests:       1 passed, 1 total
     ```
   - **Pruning tradeoff (issue #86):** The Planner logs one `Planner screening` line per plan, with the Route Matrix elements it priced, the spots it pruned and how long each round took. Before #86 a plan priced every candidate spot's transit, so with `n` spots it priced `2(n + 1)` elements in one round; now it prices `n + 2` in the first round and one more per surviving spot in the second, so it saves exactly one element per pruned spot. In the run above, pruning saved 1 of 8 elements per plan (12.5%). The cost is a second round trip: on the same stub, the code before #86 had a p95 of 135.9 ms, so pruning added about 79 ms in this run (57 ms in the 2026-11-15 run), roughly one extra transit matrix call plus run-to-run variation. With real Google latencies the extra round trip costs more, and the saving is only as large as the number of spots pruned, which is zero when every spot could still win. For a user with few saved spots the latency cost outweighs the saving in elements; the saving grows with the number of saved spots near the route, and planning stays well within the 4 s target either way. Asking for alternative transit routes adds no request and stays in the Essentials SKU, so it costs nothing extra.
+
+- **Planner under load (issue #89)**
+
+  - **Verification:** One app instance serves 200 `POST /api/routes/plan` requests from 50 signed-in users on 50 client addresses, 4 each, with 20 in flight at a time. Google is stubbed at the fixture latencies above, and the all-users caps are raised in the environment, as an operator would for a load test, so the test measures the limits and the Google call cap under load rather than the caps. It logs requests per second, the median and 95th-percentile latency and the count of each status, and passes only if no request gets a `500`.
+  - **Log Output** (2026-11-18, branch `server-db-robust`)
+    ```
+    Planner load: 200 plans in 2.8 s (70.9 per second); median 263.5 ms, p95 430.7 ms; statuses {"200":200}
+    ```
 
 ---
 
