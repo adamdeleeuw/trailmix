@@ -9,6 +9,7 @@
 | 2026-10-20        | 2.1, 2.2, 2.3, 2.4, 3 | Added the commit Codacy ran on and the Codacy screenshots for CP1, noted that the remaining issues are carried forward to CP2, and noted that the manual review is filled in after the class peer review |
 | 2026-11-04        | 2.1, 2.2, 2.3, 2.4 | Updated the commit Codacy ran on and the Codacy screenshots for CP2, after the Planner (#72), Planning and Trip Preview (#73) and trip lifecycle (#74) merged. Grouped the justifications by code pattern, added the new false positives with citations, and removed the `routes.chained` justifications, since that endpoint and its tests were deleted |
 | 2026-11-04        | 2.1, 2.4 | Fixed the 43 issues that couldn't be justified (#82), and updated the commit Codacy ran on and the line links that moved |
+| 2026-11-18        | 3, 3.1, 3.2 | Filled in the CP3 peer review: the review we performed of ExploreUBC (scores, major fault and screenshots) and the review ExploreUBC gave us (scores and the rate-limiting fault), and removed the note that the section would be filled in later |
 
 ---
 
@@ -84,56 +85,73 @@ Every issue left open in 2.2 and 2.3 is listed below, grouped by code pattern. E
 
 ## 3. Manual Code Review Results
 
-_This section will be filled in after our class does the peer code review, so the placeholders below are left until then._
-
 ### 3.1. Review You Performed
 
-- **Peer group reviewed:** [WRITE_HERE]
-- **Commit SHA reviewed:** `[Insert Commit SHA here]`
-- **Date the artifacts were exchanged:** [WRITE_HERE]
-- **Review report submitted:** [`<CP#>_<YourPeerGroupName>_Review.pdf`](#)
+- **Peer group reviewed:** ExploreUBC ([`islamhampriv/ExploreUBC`](https://github.com/islamhampriv/ExploreUBC))
+- **Commit SHA reviewed:** `c8fa76d72ecaa6c403e29545cf280c3547885ad0`
+- **Date the artifacts were exchanged:** November 7, 2026
+- **Review report submitted:** `CP3_ExploreUBC_Review.pdf`
 
 | **Section**          | **Item**                                                                                                                                             | **Score** |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| Manual code review   | Code is maintainable (well-documented, uses self-explanatory variable names, does not have complicated and long methods, magic numbers, etc.), efficient, handles error cases well | x/10      |
-| Manual test review   | Tests are complete (all APIs exposed to the front-end are tested, three main features are tested), errors and edge cases are thoroughly tested, correct assertions are used | x/10      |
-| Manual test review   | Test code is maintainable and well-structured                                                                                                          | x/10      |
-| Manual test review   | Test implementation matches the requirements and design                                                                                                | x/10      |
-| Manual test review   | Non-functional requirements are tested well                                                                                                            | x/10      |
-| Manual test review   | Tests achieve high coverage and cases of < 100% coverage are well-justified                                                                            | x/10      |
-| Manual test review   | All back-end tests can be run automatically                                                                                                            | x/10      |
-| Automated code review| Codacy runs with the required setup                                                                                                                    | x/10      |
-| Automated code review| All remaining Codacy issues are well-justified                                                                                                          | x/10      |
+| Manual code review   | Code is maintainable (well-documented, uses self-explanatory variable names, does not have complicated and long methods, magic numbers, etc.), efficient, handles error cases well | 3/10      |
+| Manual test review   | Tests are complete (all APIs exposed to the front-end are tested, three main features are tested), errors and edge cases are thoroughly tested, correct assertions are used | 7/10      |
+| Manual test review   | Test code is maintainable and well-structured                                                                                                          | 8/10      |
+| Manual test review   | Test implementation matches the requirements and design                                                                                                | 6/10      |
+| Manual test review   | Non-functional requirements are tested well                                                                                                            | 5/10      |
+| Manual test review   | Tests achieve high coverage and cases of < 100% coverage are well-justified                                                                            | 8/10      |
+| Manual test review   | All back-end tests can be run automatically                                                                                                            | 9/10      |
+| Automated code review| Codacy runs with the required setup                                                                                                                    | 6/10      |
+| Automated code review| All remaining Codacy issues are well-justified                                                                                                          | 3/10      |
+|                      | **Total**                                                                                                                                              | **55/90** |
 
 **Major fault reported**
 
-- **Description:** ...
-- **Steps to reproduce:** ...
-- **Screenshots:** _(Placeholder for screenshots of the reported fault)_
-- **Severity:** ...
+- **Description:** The backend has no authentication or authorization, although ExploreUBC's NFR1 requires it to verify the Google ID token (signature, issuer, audience and expiry) and issue a session credential. At the reviewed commit:
+  - No middleware checks a token. Every route takes `userId` from the URL path, and the DAO's `ownerId` filter compares against that same value, so the ownership check protects nothing. `JWT_SECRET` and `GOOGLE_CLIENT_ID` are listed in `.env.example` and the README, but no code in `backend/src` reads them.
+  - Sign-in never reaches the backend. `MainActivity.kt` reads only the display name from the Google credential, shows it in a toast, and opens `MainActivity2`. The ID token is never sent to the backend.
+  - Every user shares one account. `MainActivity2.kt` line 100 hard-codes `userId = "6acd519c76376cefc61e97f1"`, and line 99, which read the ID from the intent, is commented out.
+- **Steps to reproduce:**
+  1. Start the local database and backend: `docker compose up -d mongo`, then in `backend/` run `npm install`, `npm run db:init` and `npm run dev`.
+  2. With no headers or tokens, run `curl http://localhost:3000/api/v1/users/6acd519c76376cefc61e97f1`. The seeded user's profile is returned.
+  3. Run `curl -X PATCH -H 'Content-Type: application/json' -d '{"displayName":"changed"}' http://localhost:3000/api/v1/users/6acd519c76376cefc61e97f1`. The profile is modified.
+  4. Run `curl -X DELETE http://localhost:3000/api/v1/users/6acd519c76376cefc61e97f1/itineraries/6705f1000000000000000001`. The seeded itinerary is deleted.
+  5. In the app, sign in with any Google account and open the Trips tab. The data shown belongs to the hard-coded user, not the signed-in account.
+- **Screenshots:** Steps 1 to 4 were run at the reviewed commit with no credentials of any kind. The GET returned `200` with the full profile, including the user's email; the PATCH returned `200` with `displayName` now `"changed"`; and the DELETE returned `204`, after which a GET of the itinerary returned `404 ITINERARY_NOT_FOUND`.
+
+  A new account ("Matthew Lam") signs in, and its Trips tab shows the hard-coded user's itinerary:
+
+  <img src="images/peer-review-exploreubc-sign-in.png" alt="Sign-in toast for a new account, Matthew Lam" width="240"> <img src="images/peer-review-exploreubc-shared-itinerary.png" alt="The new account's Trips tab showing the hard-coded user's UBC Afternoon itinerary" width="240">
+
+  Deleting another user's itinerary without credentials (`204`), then getting it (`404`):
+
+  ![curl DELETE of an itinerary returning 204, then a GET returning 404 ITINERARY_NOT_FOUND](images/peer-review-exploreubc-delete-itinerary.png)
+
+- **Severity:** Critical. Anyone who knows or guesses a user ID can read or change that user's profile, and read, create, edit or delete their itineraries, activities and transportation segments, without any credentials. Because the app uses one hard-coded identity, all real users also see and overwrite each other's data. Automated tools wouldn't flag it: each file is well-formed and passes linting, and the fault only shows when the implementation is compared with NFR1. Recommended fix: a sign-in endpoint that verifies the Google ID token with Google's library and creates or finds the user by `googleSubject`; a short-lived signed session token (using the existing `JWT_SECRET`); middleware on all `/api/v1` routes that rejects a request whose token subject doesn't match `:userId`; removing the hard-coded ID from the app; and the NFR1 tests (valid, invalid, expired and wrong-audience tokens, plus cross-user access).
 
 ### 3.2. Review You Received
 
-- **Reviewing group:** [WRITE_HERE]
-- **Commit SHA that was reviewed:** `[Insert Commit SHA here]`
-- **Review report received:** [`<CP#>_<YourGroupName>_Review.pdf`](#)
+- **Reviewing group:** ExploreUBC
+- **Commit SHA that was reviewed:** `6d12cd1496c569073a144350f8fe535b93f53d54`
+- **Review report received:** `CP3_TrailMix_Review.pdf`
 
 | **Section**          | **Item**                                                                                                                                             | **Score** |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| Manual code review   | Code is maintainable, efficient, handles error cases well                                                                                               | x/10      |
-| Manual test review   | Tests are complete, errors and edge cases are thoroughly tested, correct assertions are used                                                            | x/10      |
-| Manual test review   | Test code is maintainable and well-structured                                                                                                          | x/10      |
-| Manual test review   | Test implementation matches the requirements and design                                                                                                | x/10      |
-| Manual test review   | Non-functional requirements are tested well                                                                                                            | x/10      |
-| Manual test review   | Tests achieve high coverage and cases of < 100% coverage are well-justified                                                                            | x/10      |
-| Manual test review   | All back-end tests can be run automatically                                                                                                            | x/10      |
-| Automated code review| Codacy runs with the required setup                                                                                                                    | x/10      |
-| Automated code review| All remaining Codacy issues are well-justified                                                                                                          | x/10      |
+| Manual code review   | Code is maintainable, efficient, handles error cases well                                                                                               | 8/10      |
+| Manual test review   | Tests are complete, errors and edge cases are thoroughly tested, correct assertions are used                                                            | 8/10      |
+| Manual test review   | Test code is maintainable and well-structured                                                                                                          | 8/10      |
+| Manual test review   | Test implementation matches the requirements and design                                                                                                | 7/10      |
+| Manual test review   | Non-functional requirements are tested well                                                                                                            | 3/10      |
+| Manual test review   | Tests achieve high coverage and cases of < 100% coverage are well-justified                                                                            | 9/10      |
+| Manual test review   | All back-end tests can be run automatically                                                                                                            | 8/10      |
+| Automated code review| Codacy runs with the required setup                                                                                                                    | 10/10     |
+| Automated code review| All remaining Codacy issues are well-justified                                                                                                          | 9/10      |
+|                      | **Total**                                                                                                                                              | **70/90** |
 
 **Major fault reported against your project**
 
-- **Description:** ...
-- **Severity:** ...
+- **Description:** The backend has no request rate limiting or throttling, in Express or in Caddy. A signed-in user can send an unbounded number of authenticated requests, and each `POST /api/routes/plan` can fan out into several Google Route Matrix and route details calls, including retries. An attacker could use up the project's Google API quota, run up API charges, and stop route planning for everyone else. The same applies to Google sign-in and every user-data endpoint: `backend/src/app.ts`, `backend/package.json` and `deploy/Caddyfile` configure no rate limiter. The reviewers sent 100 concurrent authenticated `GET /api/users/me` requests through `createApp()`, and all 100 returned `200`, with no `429 Too Many Requests`.
+- **Severity:** High. It only takes a normal Google account, can be repeated remotely with no request ceiling, can affect every user by exhausting the shared Google Routes quota or the backend, and can cost money through billable API calls. The reviewers recommend per-IP and per-session throttling, strict limits on `/api/auth/google` and `/api/routes/plan`, `429` responses with `Retry-After`, Google Cloud quota and budget alerts, and automated tests that a burst is rejected.
 
 ### 3.3. Actions Taken in Response to the Review
 
