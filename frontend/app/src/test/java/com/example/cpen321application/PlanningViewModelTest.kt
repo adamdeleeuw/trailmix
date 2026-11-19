@@ -386,6 +386,50 @@ class PlanningViewModelTest {
         assertEquals(PlanStatus.READY, viewModel.status)
     }
 
+    // issue #89, decision 14: what the Planning screen says when the backend is busy, unavailable or out of plans
+    @Test
+    fun tooManyRequestsSaysToWaitAMinute() = runTest(dispatcher) {
+        api.failure = HttpException(429, "Too many requests")
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(PlanStatus.FAILED, viewModel.status)
+        assertEquals("Too many requests, try again in a minute.", viewModel.failureMessage)
+    }
+
+    @Test
+    fun anUnavailableBackendSaysToTryAgainShortly() = runTest(dispatcher) {
+        api.failure = HttpException(503, "Service temporarily unavailable")
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(PlanStatus.FAILED, viewModel.status)
+        assertEquals("Trailmix is temporarily unavailable, try again shortly.", viewModel.failureMessage)
+    }
+
+    @Test
+    fun theSharedPlanLimitSaysToTryAgainTomorrow() = runTest(dispatcher) {
+        api.failure = HttpException(503, "Trip planning has reached its limit", "PLAN_LIMIT_REACHED")
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        assertEquals(PlanStatus.FAILED, viewModel.status)
+        assertEquals("Trip planning has reached its limit for today, try again tomorrow.", viewModel.failureMessage)
+    }
+
+    @Test
+    fun aRetryAfterABusyBackendClearsTheMessage() = runTest(dispatcher) {
+        api.failure = HttpException(429, "Too many requests")
+        viewModel.start(WATERFRONT, from = HOME)
+        advanceUntilIdle()
+
+        api.failure = null
+        viewModel.retry()
+        advanceUntilIdle()
+        assertEquals(PlanStatus.READY, viewModel.status)
+        assertNull(viewModel.failureMessage)
+    }
+
     @Test
     fun anExpiredSessionIsReported() = runTest(dispatcher) {
         api.failure = UnauthorizedException()

@@ -1,7 +1,8 @@
 import request from 'supertest';
 
 import { createApp } from '../../src/app';
-import { UserModel, type User } from '../../src/models/user.model';
+import type { User } from '../../src/models/user.model';
+import { findUserById } from '../../src/services/user.service';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
 
@@ -22,9 +23,9 @@ function putProfile(token: string, body: unknown): request.Test {
     .send(body as object);
 }
 
-/** Reads the stored user straight from the database. */
+/** Reads the stored user back through the user service, which opens its sealed fields. */
 async function storedUser(user: User): Promise<User | null> {
-  return UserModel.findById(user._id).lean();
+  return findUserById(user._id);
 }
 
 // Interface PUT /api/users/me/profile

@@ -1,6 +1,11 @@
-import { connect, disconnect } from 'mongoose';
+import mongoose, { connect, disconnect } from 'mongoose';
 import { SessionModel } from '../models/session.model';
+import { UsageModel } from '../models/usage.model';
 import { UserModel } from '../models/user.model';
+
+// a query fails within about 5 s when MongoDB is down, instead of hanging for Mongoose's and the driver's 10 to 30 s
+// defaults, so the app gets a quick 503
+const OUTAGE_TIMEOUT_MS = 5000;
 
 /**
  * Connects to MongoDB and waits until every model's indexes exist.
@@ -13,8 +18,9 @@ import { UserModel } from '../models/user.model';
  * @throws If the server can't be reached or an index can't be built.
  */
 export async function connectDatabase(uri: string): Promise<void> {
-  await connect(uri);
-  await Promise.all([UserModel.init(), SessionModel.init()]);
+  mongoose.set('bufferTimeoutMS', OUTAGE_TIMEOUT_MS);
+  await connect(uri, { serverSelectionTimeoutMS: OUTAGE_TIMEOUT_MS });
+  await Promise.all([UserModel.init(), SessionModel.init(), UsageModel.init()]);
 }
 
 /** Closes the MongoDB connection. */

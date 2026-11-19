@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response } from 'express';
 import { handleError } from './middleware/error-handler.middleware';
+import { createLimiters, limitPerAddress } from './middleware/rate-limit.middleware';
 import authRoute from './routes/auth.route';
 import healthRoute from './routes/health.route';
 import usersRoute from './routes/users.route';
@@ -21,10 +22,17 @@ export function createApp(): Express {
   // public in production, so only Caddy can set that header.
   app.set('trust proxy', ['loopback', 'uniquelocal']);
 
+  app.locals.limiters = createLimiters(); // per app, so a restart (or a test's fresh app) starts with empty counts
+
+  app.use('/health', healthRoute); // before the limits, so the deploy health check is never refused
+  // per-address limits come before body parsing and session lookups, so a flood costs no parsing or database work
+  app.use('/api', limitPerAddress('api'));
+  app.post('/api/auth/google', limitPerAddress('signIn'));
+  app.post('/api/routes/plan', limitPerAddress('plansPerAddress'));
+
   // middleware: allows for defined req.body access
   app.use(express.json());
 
-  app.use('/health', healthRoute);
   app.use('/api/auth', authRoute);
   app.use('/api/users', usersRoute);
   app.use('/api/vehicles', vehiclesRoute);

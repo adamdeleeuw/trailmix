@@ -224,7 +224,7 @@ private fun RouteList(planner: PlanningViewModel, onFirstHeight: (Int) -> Unit) 
             first.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(ROUTE_SERVICE_DOWN, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+            Text(planner.failureMessage ?: ROUTE_SERVICE_DOWN, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
             Button(onClick = planner::retry) { Text("Retry") }
         }
         loading && planner.options.isEmpty() -> Column { repeat(SKELETON_ROWS) { SkeletonRow(if (it == 0) first else Modifier) } }

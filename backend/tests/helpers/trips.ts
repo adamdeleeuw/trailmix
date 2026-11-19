@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 import { TripModel, type Place, type Trip } from '../../src/models/trip.model';
+import { sealTrip, storedTrips } from '../../src/services/trip.service';
 
 const HOME: Place = { label: 'Home', lat: 49.2, lng: -123.1, placeId: null };
 const WORK: Place = { label: 'Work', lat: 49.28, lng: -123.12, placeId: null };
@@ -8,7 +9,7 @@ const DRIVE_METRES = 5000;
 const DRIVE_CENTS = 125;
 
 /**
- * Adds a one-leg driving trip straight to the test database.
+ * Adds a one-leg driving trip straight to the test database, sealed the way the trip service stores it.
  *
  * @param userId - The user who owns the trip.
  * @param overrides - Fields to set on the trip instead of the defaults.
@@ -19,7 +20,7 @@ export async function createTrip(
   overrides: Partial<Omit<Trip, '_id' | 'userId'>> = {},
 ): Promise<Trip> {
   const origin = overrides.origin ?? HOME;
-  const doc = await TripModel.create({
+  const doc = new TripModel({
     userId,
     origin,
     midpoint: null,
@@ -41,7 +42,11 @@ export async function createTrip(
     tripDate: new Date('2026-01-01T08:00:00.000Z'),
     ...overrides,
   });
-  return doc.toObject();
+  await doc.validate();
+  const now = new Date();
+  const trip: Trip = { ...doc.toObject(), createdAt: now, updatedAt: now };
+  await storedTrips().insertOne(sealTrip(trip));
+  return trip;
 }
 
 /** Where `ROUTE_OPTION` starts. */

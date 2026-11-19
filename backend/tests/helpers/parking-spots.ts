@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
-import { UserModel, type ParkingSpot } from '../../src/models/user.model';
+import type { ParkingSpot } from '../../src/models/user.model';
+import { sealSpot, storedUsers } from '../../src/services/user.service';
 
 /** UBC North Parkade, a real spot a user would save from search. */
 const NORTH_PARKADE = {
@@ -22,7 +23,7 @@ export function parkingSpotBody(overrides: Record<string, unknown> = {}): Record
 }
 
 /**
- * Adds parking spots straight to a user in the test database, newest first,
+ * Adds parking spots straight to a user in the test database, sealed, newest first,
  * so tests can fill a user up to the limit without many requests.
  *
  * @param userId - The user who owns the spots.
@@ -41,6 +42,7 @@ export async function addParkingSpots(userId: Types.ObjectId, count: number): Pr
     createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
   }));
   const newestFirst = spots.reverse();
-  await UserModel.updateOne({ _id: userId }, { $push: { parkingSpots: { $each: newestFirst, $position: 0 } } });
+  const sealed = newestFirst.map((spot) => sealSpot(userId, spot));
+  await storedUsers().updateOne({ _id: userId }, { $push: { parkingSpots: { $each: sealed, $position: 0 } } });
   return newestFirst;
 }

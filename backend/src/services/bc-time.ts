@@ -11,6 +11,7 @@
 /** B.C.'s offset from UTC, all year, since its permanent daylight time in 2026. */
 export const BC_UTC_OFFSET_HOURS = -7;
 const MS_PER_HOUR = 3_600_000;
+const DAY_MS = 24 * MS_PER_HOUR;
 
 // IANA names for B.C.'s time, as Intl resolves them ("Canada/Pacific" resolves to "America/Vancouver")
 const BC_TIME_ZONES = new Set(['America/Vancouver']);
@@ -34,4 +35,22 @@ export function localDay(at: Date, timezone: string): string {
   if (BC_TIME_ZONES.has(resolved)) return bcDay(at);
   // en-CA formats dates as YYYY-MM-DD
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+}
+
+/** The month a moment falls in, in B.C., as YYYY-MM. */
+export function bcMonth(at: Date): string {
+  return bcDay(at).slice(0, 7);
+}
+
+/** The first midnight in B.C. after a moment, when B.C.'s daily limits reset. */
+export function nextBcMidnight(at: Date): Date {
+  // Date.parse reads YYYY-MM-DD as midnight UTC, and B.C.'s midnight is that many hours later
+  return new Date(Date.parse(bcDay(at)) + DAY_MS - BC_UTC_OFFSET_HOURS * MS_PER_HOUR);
+}
+
+/** Midnight in B.C. on the 1st of the month after a moment, when B.C.'s monthly limits reset. */
+export function nextBcMonth(at: Date): Date {
+  const month = bcMonth(at);
+  // the month is 1-based, so as Date.UTC's 0-based month it's already the next one, and 12 rolls over to January
+  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1) - BC_UTC_OFFSET_HOURS * MS_PER_HOUR);
 }
