@@ -151,7 +151,7 @@ In practice you don't run this by hand. The GitHub Actions workflow `.github/wor
 
 ### Database login and backups
 
-Production MongoDB requires a login, and the database is backed up every night, gpg-encrypted, to `gs://cpen321-m1-508304-trailmix-backups` (Toronto, kept 14 days). Only the backup key holders can decrypt a backup, and the VM can only add files to the bucket, not read or delete them.
+Production MongoDB requires a login, and the database is backed up every night, gpg-encrypted, to `gs://cpen321-m1-508304-trailmix-backups` (Toronto, kept 14 days). Only the backup key holders can decrypt a backup. The VM can add backups to the bucket and read them, but not delete them, and it has no key to decrypt them.
 
 **MongoDB users.** `docker-compose.prod.yml` starts MongoDB with `--auth`. Create the users before that change first deploys, while MongoDB still accepts connections without a login. `passwordPrompt()` keeps the passwords out of the shell history:
 
@@ -175,9 +175,11 @@ Use passwords from `openssl rand -hex 32`, so they need no escaping in the URI. 
 
 **Backups.** [`scripts/backup-mongo.sh`](scripts/backup-mongo.sh) streams `mongodump` through `gpg --encrypt` into the bucket, so no plaintext copy is written to the VM's disk. To set it up on the VM, as root:
 
-1. Import each key holder's public key: `gpg --import holder-1.asc`. Each holder makes their own key pair, and private keys never go on the VM.
-2. Create `/etc/trailmix/backup.env`, readable by root only (`chmod 600`), with `MONGO_BACKUP_PASSWORD=<trailmix_backup password>` and `BACKUP_GPG_RECIPIENTS="<fingerprint 1> <fingerprint 2>"` (one fingerprint per holder, separated by spaces).
-3. Add the cron entry from the top of the script, then run it once by hand.
+1. Install gpg and cron, which the VM's Ubuntu image doesn't include: `apt-get install -y gnupg cron`.
+2. Give the VM's service account (`trailmix-vm`) Storage Object Creator and Storage Object Viewer on the bucket. `gcloud storage cp` also needs `storage.objects.get`, so it fails with Creator alone.
+3. Import each key holder's public key: `gpg --import holder-1.asc`. Each holder makes their own key pair, and private keys never go on the VM.
+4. Create `/etc/trailmix/backup.env`, readable by root only (`chmod 600`), with `MONGO_BACKUP_PASSWORD=<trailmix_backup password>` and `BACKUP_GPG_RECIPIENTS="<fingerprint 1> <fingerprint 2>"` (one fingerprint per holder, separated by spaces).
+5. Add the cron entry from the top of the script, then run it once by hand.
 
 Check that last night's backup exists with `gcloud storage ls -l gs://cpen321-m1-508304-trailmix-backups/mongo/`, and check the VM's log with `journalctl -t trailmix-backup`.
 
