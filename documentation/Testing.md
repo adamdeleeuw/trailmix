@@ -24,6 +24,7 @@
 | 2026-11-17        | 2.1.2, 2.5, 3.2 | Reran the back-end tests on branch `planner-pruning-86` (#86) on Node 24.11.1: 174 API tests pass with 1 skipped, plus 34 unit tests and the NFR test. Updated the combined coverage and the NFR log and pruning tradeoff from this run, and noted in 2.1.2 that the commit and the coverage screenshots move to the merge commit after #86 merges. The 2.6 gaps and line links were rechecked and haven't changed. Fixed a repeated phrase in the NFR verification |
 | 2026-11-18        | 2.1.1, 3.1, 3.2 | Server robustness (issue #89): API tests for the per-user, per-address and all-users rate limits (including the fault report's burst of 100 concurrent requests), the Google call cap and retry rule, `503` when MongoDB is unreachable, and session expiry. `GET /health` now reports MongoDB, so its unmocked test connects to the test database. Added the planner load test. The NFR 3 test now gives each simulated client its own app, since its fake clock squeezes minutes of polling into seconds of real time, which the per-address limit would count |
 | 2026-11-18        | 3.2 | Added the local restore drill for the encrypted nightly database backups (issue #89) |
+| 2026-11-19        | 3.2 | Recorded the production backup restore drill (issue #89): the VM's first backup restored with matching counts in every collection |
 
 ---
 
@@ -176,10 +177,12 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
     Planner load: 200 plans in 2.8 s (70.9 per second); median 263.5 ms, p95 430.7 ms; statuses {"200":200}
     ```
 
-- **Backup restore drill (issue #89, local)**
+- **Backup restore drill (issue #89)**
 
-  - **Verification:** `scripts/backup-mongo.sh` dumped the local `trailmix` database, encrypted it to a throwaway gpg key and wrote it to a file instead of the bucket. The encrypted file didn't contain the stored user's email. `scripts/restore-mongo.sh` decrypted it into `trailmix_restore_drill`, and the document counts matched the source per collection. The drill database and the throwaway key were then deleted. The production drill (restore last night's bucket backup into a local database) is still to run after the backups start.
+  - **Verification:** `scripts/backup-mongo.sh` dumped the local `trailmix` database, encrypted it to a throwaway gpg key and wrote it to a file instead of the bucket. The encrypted file didn't contain the stored user's email. `scripts/restore-mongo.sh` decrypted it into `trailmix_restore_drill`, and the document counts matched the source per collection. The drill database and the throwaway key were then deleted.
   - **Result** (2026-11-18): `sessions` 6 and 6, `trips` 4 and 4, `users` 1 and 1 (source and restored).
+  - **Production drill:** The VM's first backup (`trailmix-2026-11-19T0408Z.archive.gz.gpg`, 14 KB) was restored from the bucket into `trailmix_restore_drill` on a key holder's laptop, then compared with production's counts taken right after, with the read-only backup user. The drill database was then deleted.
+  - **Result** (2026-11-19, production and restored): `sessions` 6 and 6, `translink_quota` 0 and 0, `trips` 18 and 18, `usages` 0 and 0, `users` 5 and 5.
 
 ---
 
