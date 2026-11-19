@@ -149,6 +149,53 @@ npm run build && npm run start     # serves plain HTTP on http://localhost:3000
 
 In practice you don't run this by hand. The GitHub Actions workflow `.github/workflows/backend.yml` runs on every push to `main`: it typechecks, tests and builds the backend, then SSHes into the VM and runs `deploy-backend.sh`. This is the intended way to deploy the HTTPS server.
 
+### Database login and backups
+
+Production MongoDB requires a login, and the database is backed up every night, gpg-encrypted, to `gs://cpen321-m1-508304-trailmix-backups` (Toronto, kept 14 days). Only the backup key holders can decrypt a backup, and the VM can only add files to the bucket, not read or delete them.
+
+**MongoDB users.** `docker-compose.prod.yml` starts MongoDB with `--auth`. Create the users before that change first deploys, while MongoDB still accepts connections without a login. `passwordPrompt()` keeps the passwords out of the shell history:
+
+```bash
+docker exec -it cpen321-project-mongo-1 mongosh admin
+```
+
+```js
+db.createUser({ user: 'admin', pwd: passwordPrompt(), roles: ['root'] }) // password only in the password manager, never on the VM
+db.createUser({ user: 'trailmix_app', pwd: passwordPrompt(), roles: [{ role: 'readWrite', db: 'trailmix' }] })
+db.createUser({ user: 'trailmix_backup', pwd: passwordPrompt(), roles: ['backup'] })
+```
+
+Then set the backend's connection in `backend/.env` on the VM. The production stack takes `MONGODB_URI` from this file:
+
+```dotenv
+MONGODB_URI=mongodb://trailmix_app:<app password>@mongo:27017/trailmix?authSource=admin
+```
+
+Use passwords from `openssl rand -hex 32`, so they need no escaping in the URI. Local development and the tests keep MongoDB without a login. It listens only on `127.0.0.1` and holds no real user data.
+
+**Backups.** [`scripts/backup-mongo.sh`](scripts/backup-mongo.sh) streams `mongodump` through `gpg --encrypt` into the bucket, so no plaintext copy is written to the VM's disk. To set it up on the VM, as root:
+
+1. Import each key holder's public key: `gpg --import holder-1.asc`. Each holder makes their own key pair, and private keys never go on the VM.
+2. Create `/etc/trailmix/backup.env`, readable by root only (`chmod 600`), with `MONGO_BACKUP_PASSWORD=<trailmix_backup password>` and `BACKUP_GPG_RECIPIENTS="<fingerprint 1> <fingerprint 2>"` (one fingerprint per holder, separated by spaces).
+3. Add the cron entry from the top of the script, then run it once by hand.
+
+Check that last night's backup exists with `gcloud storage ls -l gs://cpen321-m1-508304-trailmix-backups/mongo/`, and check the VM's log with `journalctl -t trailmix-backup`.
+
+**Restoring** (a key holder's laptop, with Docker running):
+
+```bash
+./scripts/restore-mongo.sh gs://cpen321-m1-508304-trailmix-backups/mongo/<file> # into trailmix_restore_drill
+```
+
+The script restores into a separate database on the local compose MongoDB and refuses to write to `trailmix`. Use it for the restore drill and to inspect a backup. To restore production, first check the backup locally that way. Then stream it into the VM's MongoDB as the admin user:
+
+```bash
+gcloud storage cat gs://cpen321-m1-508304-trailmix-backups/mongo/<file> | gpg --decrypt |
+  gcloud compute ssh cpen321-backend-vm-adam --zone us-west1-a --   "docker exec -i cpen321-project-mongo-1 mongorestore --archive --gzip --drop --nsInclude 'trailmix.*' --username admin --authenticationDatabase admin --password '<admin password>'"
+```
+
+This replaces every collection in `trailmix`, so take a fresh backup first.
+
 ### Frontend
 
 ```bash
