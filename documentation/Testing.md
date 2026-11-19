@@ -174,7 +174,7 @@ The end-to-end test is [`PlanTripTest.kt`](../frontend/app/src/androidTest/java/
 **How to run it:**
 
 1. Start the Pixel 9 API 36 emulator, and install and open the debug app (`./scripts/run-frontend.sh` or `.\scripts\run-frontend.ps1`).
-2. Sign in with a Google account that has finished the questionnaire, has no saved parking spots and no active trip, and keeps the default modes (Drive and Transit).
+2. Sign in with a Google account that has finished the questionnaire, has no saved parking spots and no active trip, has a car, and keeps the default modes (Drive and Transit).
 3. From the repository root, run `./scripts/run-frontend-e2e-tests.sh` (macOS / Linux) or `.\scripts\run-frontend-e2e-tests.ps1` (Windows), and press Enter when it asks whether you're signed in.
 
 The test grants location permission itself, saves its own parking spot through the app, and deletes that spot afterwards, so it leaves the account as it found it.
@@ -195,9 +195,9 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
     | 4. The app sends the trip to the Planner. | Wait up to 30 s until the loading indicator is gone and either routes or "Couldn't reach the route service." show. |
     | 5. The Planner considers driving, transit, and Drive → Transit through nearby saved spots, then schedules, prices and ranks them. | `plansUpToThreeRoutesAndPreviewsOne` first saves "Metropolis at Metrotown" as a parking spot through its place sheet, so the Planner has a spot to switch at, and checks the no-spots banner doesn't show. |
     | 6. The app shows up to three routes labelled Cheapest, Fastest and Balanced. | Check there are 1 to 3 route rows labelled Cheapest, Fastest or Balanced, and that "Couldn't reach the route service." isn't shown. |
-    | 2a. Location is off or unknown. | Not automated yet: the system's permission prompt is outside the app, so the test grants location before starting. |
+    | 2a. Location is off or unknown. | `locationOffShowsChooseStartPoint`: turn device location off with `cmd location set-location-enabled false` (keeping the permission, since revoking it would kill the test's process), relaunch the app, open Planning to Waterfront Station, check the start shows "Choose start point" and not "Your location", and turn location back on afterwards. |
     | 5a. Drive is on, but the user has no saved parking spots. The app shows the banner with **Back to map**. | `driveWithNoParkingSpotsShowsTheBanner`: check the account has no saved spots, plan UBC to Waterfront Station, check "Save a parking spot to plan driving trips" shows, tap **Back to map**, and check **Directions** (the destination's place sheet) shows again. |
-    | 5b. Drive is on, but the gas price or car isn't set. | Not automated yet: it depends on the signed-in account's profile, which the test doesn't change. |
+    | 5b. Drive is on, but the gas price or car isn't set. | `noCarShowsTheProfileBanner`: on the Profile tab, tap the Vehicle section's **Edit**, answer **No** to "Do you drive?" and **Save**, then plan UBC to Waterfront Station and check "Add your car in Profile for accurate fuel costs" shows. The account's car is put back afterwards. A missing gas price isn't automated: the app can't clear one once it's set. |
     | 5c. No route exists for any allowed mode. | Not automated yet: Google finds a route between any two places the search offers in Metro Vancouver. |
     | 5d. Google Routes can't be reached, even after one retry. | Not automated yet: causing it needs a mocked backend, and these tests use the real one. Any run where it happens fails in the wait in step 4. The mocked backend tests of `POST /api/routes/plan` check the `503` itself. |
 

@@ -1,5 +1,6 @@
 package com.example.cpen321application.e2e
 
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -24,9 +26,12 @@ import com.example.cpen321application.MainActivity
 import com.example.cpen321application.data.BackendApi
 import com.example.cpen321application.data.DataStoreSessionStore
 import com.example.cpen321application.data.LOCATION_PERMISSIONS
+import com.example.cpen321application.data.Profile
 import com.example.cpen321application.ui.planning.ROUTE_SERVICE_DOWN
+import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -42,8 +47,10 @@ private const val DESTINATION = "Waterfront Station"
 private const val SPOT_PLACE = "Metropolis at Metrotown"
 private const val TEST_SPOT = "Trailmix e2e spot" // the label of the spot these tests save, so cleanup removes only it
 private const val NO_SPOTS_BANNER = "Save a parking spot to plan driving trips"
+private const val NO_CAR_BANNER = "Add your car in Profile for accurate fuel costs"
 
 private val MAP_TAB = hasText("Map") and hasClickAction()
+private val PROFILE_TAB = hasText("Profile") and hasClickAction()
 private val ROUTE_ROW = hasClickAction() and (hasText("Cheapest") or hasText("Fastest") or hasText("Balanced"))
 private val LOADING = hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)
 private val ARRIVE_BY_TOMORROW = hasText("Arrive by", substring = true) and hasText("tomorrow", substring = true)
@@ -54,8 +61,9 @@ private val ARRIVE_BY_TOMORROW = hasText("Arrive by", substring = true) and hasT
  *
  * Before running, sign in inside the app on the emulator (`scripts/run-frontend-e2e-tests` waits
  * for this). The account must have finished the questionnaire, have no saved parking spots and
- * no active trip, and keep the default modes (Drive and Transit). The tests save their own
- * parking spot through the app and remove it afterwards.
+ * no active trip, have a car, and keep the default modes (Drive and Transit). The tests save their own
+ * parking spot through the app and remove it afterwards, put back the car one of them removes, and
+ * turn device location back on after the one that turns it off.
  */
 @SdkSuppress(minSdkVersion = 28) // for UiAutomation.grantRuntimePermission
 @RunWith(AndroidJUnit4::class)
@@ -67,6 +75,7 @@ class PlanTripTest {
     private val context = instrumentation.targetContext
     private lateinit var token: String
     private var scenario: ActivityScenario<MainActivity>? = null
+    private var savedProfile: Profile? = null // the account's profile before a test changed it, to put back
 
     @Before
     fun setUp() {
@@ -75,14 +84,46 @@ class PlanTripTest {
         removeTestSpots() // left behind by a run that stopped early
         // allowed up front, since the system prompt is outside the app and Compose can't tap it
         LOCATION_PERMISSIONS.forEach { instrumentation.uiAutomation.grantRuntimePermission(context.packageName, it) }
-        scenario = ActivityScenario.launch(MainActivity::class.java)
-        rule.waitUntil(LOAD_TIMEOUT_MS) { exists(MAP_TAB) }
+        launchApp()
     }
 
     @After
     fun tearDown() {
         scenario?.close()
+        setLocationEnabled(true) // in case locationOffShowsChooseStartPoint stopped early
+        savedProfile?.let { profile -> runBlocking { BackendApi.saveProfile(token, profile) } }
         if (::token.isInitialized) removeTestSpots()
+    }
+
+    /**
+     * Plan multimodal trip, failure 2a: device location is off, so the start is "Choose start point".
+     * Turning location off keeps the permission: revoking it would kill the app's process, which runs this test.
+     */
+    @Test
+    @SdkSuppress(minSdkVersion = 30) // for `cmd location set-location-enabled`
+    fun locationOffShowsChooseStartPoint() {
+        scenario?.close()
+        setLocationEnabled(false)
+        launchApp() // the Map tab reads the location when it opens
+        openPlanningTo(DESTINATION)
+
+        rule.waitUntil(LOAD_TIMEOUT_MS) { exists(hasText("Choose start point") and hasClickAction()) }
+        rule.onNodeWithText("Your location").assertDoesNotExist()
+    }
+
+    /** Plan multimodal trip, failure 5b: Drive is on but the user has no car, so a banner says to add it in Profile. */
+    @Test
+    fun noCarShowsTheProfileBanner() {
+        val user = runBlocking { BackendApi.getMe(token) }
+        assertNotNull("The test account must have a car", user.vehicle)
+        savedProfile = Profile(user.timezone ?: ZoneId.systemDefault().id, user.vehicle, user.transit)
+        removeCarInProfile()
+        rule.onNode(MAP_TAB).performClick()
+        openPlanningTo(DESTINATION)
+        chooseStart(START)
+        waitForPlan()
+
+        rule.onNodeWithText(NO_CAR_BANNER).assertIsDisplayed()
     }
 
     /** Plan multimodal trip, failure: Drive is on but the user has no parking spots, so a banner says to save one. */
@@ -127,6 +168,29 @@ class PlanTripTest {
         rule.onAllNodes(ROUTE_ROW).assertCountEquals(routes)
         rule.onNode(ARRIVE_BY_TOMORROW).assertIsDisplayed()
         rule.onNode(LOADING).assertDoesNotExist() // the same routes, not a new plan
+    }
+
+    // launches the app and waits for the Map tab
+    private fun launchApp() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.waitUntil(LOAD_TIMEOUT_MS) { exists(MAP_TAB) }
+    }
+
+    // turns the device's location on or off, without touching the app's permission
+    private fun setLocationEnabled(enabled: Boolean) {
+        val output = instrumentation.uiAutomation.executeShellCommand("cmd location set-location-enabled $enabled")
+        ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes() } // waits for the command to finish
+    }
+
+    // answers "No" to "Do you drive?" on Profile's Edit vehicle screen, and saves
+    private fun removeCarInProfile() {
+        rule.onNode(PROFILE_TAB).performClick()
+        rule.waitUntil(LOAD_TIMEOUT_MS) { exists(hasText("Vehicle")) }
+        rule.onAllNodesWithText("Edit").onFirst().performClick() // Vehicle's, the first section
+        rule.waitUntil(LOAD_TIMEOUT_MS) { exists(hasText("Do you drive?")) }
+        rule.onNodeWithText("No").performClick()
+        rule.onNodeWithText("Save").performClick()
+        rule.waitUntil(LOAD_TIMEOUT_MS) { exists(hasText("You don't drive")) }
     }
 
     // searches the Map tab for a place and taps Directions on its sheet
