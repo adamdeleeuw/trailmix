@@ -28,6 +28,7 @@
 | Nov 15, 2026 | 3.7, 4.3, 4.6, 4.7 | The Planner now prunes parking spots that can't beat driving or transit the whole way before it prices their transit, and picks the shortest of Google's alternative transit routes that fits the user's max walk instead of always the first (#86). Screening now takes two rounds of Route Matrix calls instead of one, so the response time justification, the Google Routes description, the Plan Multimodal Trip sequence diagram and the response time design describe the extra round. |
 | Nov 17, 2026 | 4.3 | The Google Routes description now says how the Planner breaks a tie between alternative transit routes (fewer transit lines) and that it leaves a route out when none of Google's alternatives fits the max walk, to match the code from #86. |
 | Nov 18, 2026 | 4.1, 4.3 | Added bicycle-only, Bike → Transit and Transit → Bike planning through frequent-service TransLink GTFS stations, with a cached Google Places fallback and configured cycling limits and transfer buffers. |
+| Nov 18, 2026 | 4.5, 4.6 | Simplified the dependency diagram to show the Frontend and each domain component as single boxes. Updated the five sequence diagrams to include the formal use cases' failure and fallback scenarios without expanding their main flows. |
 
 
 ---
@@ -539,6 +540,9 @@ sequenceDiagram
         opt warnings has NO_PARKING_SPOTS
             App-->>User: banner "Save a parking spot to plan driving trips"
         end
+        opt warnings has GAS_PRICE_MISSING or VEHICLE_MISSING
+            App-->>User: banner to set them in Profile, with costs using defaults
+        end
     end
 ```
 
@@ -553,6 +557,12 @@ sequenceDiagram
     User->>App: tap a route, or its grey line
     App->>Maps: draw each leg in its colour, with markers at the start, the spot, each stop and the destination
     App-->>User: show the timeline, the cost split, Start and Save for later
+    opt Google provides no colour for a transit line
+        App->>Maps: draw that line in fallback grey-blue
+    end
+    opt parking cost is unknown
+        App-->>User: show "Parking cost unknown" and mark route cost as an estimate
+    end
     User->>App: tap a timeline row
     App->>Maps: pan to that point
     User->>App: tap Back
@@ -577,34 +587,60 @@ sequenceDiagram
         DB-->>Trips: duplicate key on the active-trip index
         Trips-->>App: 409 { error }
         App-->>User: "End your current trip?"
-        User->>App: tap "End and start"
-        App->>Trips: PATCH /api/users/me/trips/:activeId { status: CANCELLED }
-        Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
-        Trips-->>App: 200 { trip }
-        App->>Trips: POST /api/users/me/trips { option, status: ACTIVE }
-        Trips->>DB: trips.create(trip)
-    end
-    DB-->>Trips: trip
-    Trips-->>App: 201 { trip }
-    App-->>User: open Navigation
-    loop each location update
-        App->>Maps: follow the user, heading-up
-        App-->>User: next turn, or what to board and where to get off
-        opt reached the end of the leg
-            App->>App: move to the next leg
+        alt tap "End and start"
+            App->>Trips: PATCH /api/users/me/trips/:activeId { status: CANCELLED }
+            Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
+            Trips-->>App: 200 { trip }
+            App->>Trips: POST /api/users/me/trips { option, status: ACTIVE }
+            Trips->>DB: trips.create(trip)
+        else tap "Keep current trip"
+            App-->>User: keep the current trip and do not start the new one
         end
     end
-    alt reached the destination
-        App->>Trips: PATCH /api/users/me/trips/:id { status: COMPLETED, actualEnd }
-        Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
-        Trips-->>App: 200 { trip }
-        App-->>User: "You've arrived" with the time and cost
-    else taps End away from the destination
-        App-->>User: "End trip early?"
-        User->>App: tap "End trip"
-        App->>Trips: PATCH /api/users/me/trips/:id { status: CANCELLED, actualEnd }
-        Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
-        Trips-->>App: 200 { trip }
+    opt user chose to start a new trip
+        alt trip saved
+            DB-->>Trips: trip
+            Trips-->>App: 201 { trip }
+            App-->>User: open Navigation
+            opt app is closed during an active trip
+                App->>Trips: reload active trip on reopen
+                Trips-->>App: active trip
+                App-->>User: reopen Navigation
+            end
+            alt location permission is off
+                App-->>User: show each leg without turns and offer "Next leg"
+                User->>App: tap "Next leg" to continue
+            else location permission is on
+                loop each location update
+                    App->>Maps: follow the user, heading-up
+                    App-->>User: next turn, or what to board and where to get off
+                    opt GPS puts the user in the wrong place
+                        User->>App: tap "Next leg" to continue by hand
+                    end
+                    opt reached the end of the leg
+                        App->>App: move to the next leg
+                    end
+                end
+            end
+            alt reached the destination
+                App->>Trips: PATCH /api/users/me/trips/:id { status: COMPLETED, actualEnd }
+                Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
+                Trips-->>App: 200 { trip }
+                App-->>User: "You've arrived" with the time and cost
+            else taps End away from the destination
+                App-->>User: "End trip early?"
+                alt tap "End trip"
+                    App->>Trips: PATCH /api/users/me/trips/:id { status: CANCELLED, actualEnd }
+                    Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
+                    Trips-->>App: 200 { trip }
+                else tap "Keep going"
+                    App-->>User: return to Navigation
+                end
+            end
+        else no connection while saving
+            Trips-->>App: request failed
+            App-->>User: "Couldn't update the trip. Check your connection and try again." Stay where it was
+        end
     end
     Note over App,Trips: In CP3, LiveUpdates will push delays and alerts for the trip's lines to Navigation
 ```
@@ -633,15 +669,22 @@ sequenceDiagram
     end
     App-->>User: show the place sheet
     User->>App: tap "Save as parking spot", enter the name, cost and overnight rule, tap Save
-    App->>Users: POST /api/users/me/parking-spots { label, location, placeId, rateCents, ratePer, overnightAllowed }
-    Users->>DB: users.findOneAndUpdate({ _id, fewer than 20 spots, placeId not saved }, $push spot)
-    alt 20 spots already, or the place is already saved
-        Users-->>App: 409 { error }
-        App-->>User: "You can save up to 20 parking spots." or "already one of your parking spots"
-    else saved
-        DB-->>Users: updated user
-        Users-->>App: 201 { parkingSpot }
-        App-->>User: "Parking spot saved", and a P marker
+    alt name is blank or cost is invalid
+        App-->>User: mark the field and keep Save disabled
+    else valid input
+        App->>Users: POST /api/users/me/parking-spots { label, location, placeId, rateCents, ratePer, overnightAllowed }
+        Users->>DB: users.findOneAndUpdate({ _id, fewer than 20 spots, placeId not saved }, $push spot)
+        alt 20 spots already, or the place is already saved
+            Users-->>App: 409 { error }
+            App-->>User: "You can save up to 20 parking spots." or "already one of your parking spots"
+        else saved
+            DB-->>Users: updated user
+            Users-->>App: 201 { parkingSpot }
+            App-->>User: "Parking spot saved", and a P marker
+        else no connection
+            Users-->>App: request failed
+            App-->>User: "Couldn't save. Check your connection and try again." Keep the dialog open
+        end
     end
 ```
 
@@ -669,12 +712,19 @@ sequenceDiagram
             App-->>User: "No trips yet." or "No trips in this period."
         else has trips
             App-->>User: totals, and the list newest first
+            opt no trips in the period are completed
+                App-->>User: totals show "No completed trips in this period."
+            end
         end
         User->>App: change the date range or sort
         App->>App: filter, sort and add up again
         App-->>User: updated list and totals
         User->>App: tap a trip
-        App-->>User: Trip Preview, read-only, with Plan again
+        alt trip has the details needed for Trip Preview
+            App-->>User: Trip Preview, read-only, with Plan again
+        else trip was saved before CP2 without those details
+            App-->>User: can't open the trip and keep it in the list
+        end
         opt tap Start on a planned trip
             App->>Trips: PATCH /api/users/me/trips/:id { status: ACTIVE, actualStart }
             Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: PLANNED })
