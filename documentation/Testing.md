@@ -25,6 +25,7 @@
 | 2026-11-18        | 2.1.1, 3.1, 3.2 | Server robustness (issue #89): API tests for the per-user, per-address and all-users rate limits (including the fault report's burst of 100 concurrent requests), the Google call cap and retry rule, `503` when MongoDB is unreachable, and session expiry. `GET /health` now reports MongoDB, so its unmocked test connects to the test database. Added the planner load test. The NFR 3 test now gives each simulated client its own app, since its fake clock squeezes minutes of polling into seconds of real time, which the per-address limit would count |
 | 2026-11-18        | 3.2 | Added the local restore drill for the encrypted nightly database backups (issue #89) |
 | 2026-11-19        | 3.2 | Recorded the production backup restore drill (issue #89): the VM's first backup restored with matching counts in every collection |
+| 2026-11-19        | 2.1.1 | Encryption of user data at rest (issue #89): API tests that no personal data appears in the stored documents, that the app reads its data back unchanged, that the hashed Google ID and place ID still find the account and refuse a duplicate spot, and that a value copied to another account won't open; tests of the one-time migration (dry run, sealing, a second run, and data saved before encryption); and unit tests of the encryption helpers. The test helpers now store sealed users, spots and trips, and the mocked database failures fake the collection writes the services now use |
 
 ---
 
@@ -34,7 +35,7 @@
 
 #### 2.1.1. Tests
 
-Unit tests for the Planner's own logic and for merging a route's walking legs are in `backend/tests/unit/` (`planner.core.test.ts`, `transit-zones.test.ts` and `route-legs.test.ts`). Run them with `cd backend; npm test -- tests/unit/`.
+Unit tests for the Planner's own logic and for merging a route's walking legs are in `backend/tests/unit/` (`planner.core.test.ts`, `transit-zones.test.ts` and `route-legs.test.ts`), with the encryption helpers' tests in `field-crypto.test.ts` (issue #89). Run them with `cd backend; npm test -- tests/unit/`.
 
 | **Interface** | **Describe Group Location, No Mocks** | **Describe Group Location, With Mocks** | **Mocked Components** |
 | ------------- | ------------------------------------- | --------------------------------------- | --------------------- |
@@ -59,6 +60,7 @@ Unit tests for the Planner's own logic and for merging a route's walking legs ar
 | **Google calls from `POST /api/routes/plan`** (issue #89) | _None: Google must be faked to control its speed and errors_ | [`backend/tests/mock/routes.plan-google.test.ts#L43`](../backend/tests/mock/routes.plan-google.test.ts#L43) | Google Routes API (`fetch`) |
 | **MongoDB unreachable, every signed-in endpoint** (issue #89) | [`backend/tests/no-mock/database-down.test.ts#L31`](../backend/tests/no-mock/database-down.test.ts#L31) (a real disconnect and reconnect) | [`backend/tests/mock/database-down.test.ts#L37`](../backend/tests/mock/database-down.test.ts#L37) | Session DB, User DB (network and server-selection errors) |
 | **Session expiry, every signed-in endpoint** (issue #89) | [`backend/tests/no-mock/sessions.expiry-indexes.test.ts#L10`](../backend/tests/no-mock/sessions.expiry-indexes.test.ts#L10) (expiry indexes) | [`backend/tests/mock/auth.session-expiry.test.ts#L45`](../backend/tests/mock/auth.session-expiry.test.ts#L45) | Google ID token verification (`OAuth2Client.verifyIdToken`), the clock (`Date` only) |
+| **User data at rest, every endpoint that saves user data** (issue #89) | [`backend/tests/no-mock/encryption-migration.test.ts#L75`](../backend/tests/no-mock/encryption-migration.test.ts#L75) (data saved before encryption, and the migration) | [`backend/tests/mock/encryption-at-rest.test.ts#L64`](../backend/tests/mock/encryption-at-rest.test.ts#L64) | Google ID token verification (`OAuth2Client.verifyIdToken`) |
 | **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts#L28`](../backend/tests/no-mock/routes.plan.test.ts#L28) | [`backend/tests/mock/routes.plan.test.ts#L221`](../backend/tests/mock/routes.plan.test.ts#L221) | Google Routes API (`fetch`), User DB for saved parking spots |
 | **PUT /api/users/me/planning-preferences** | [`backend/tests/no-mock/users.planning-preferences.test.ts#L12`](../backend/tests/no-mock/users.planning-preferences.test.ts#L12) | [`backend/tests/mock/users.planning-preferences.test.ts#L19`](../backend/tests/mock/users.planning-preferences.test.ts#L19) | User DB |
 

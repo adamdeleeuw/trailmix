@@ -131,7 +131,10 @@ Fill in `backend/.env`:
 GOOGLE_BACKEND_CLIENT_ID=<your Google Web client ID>.apps.googleusercontent.com
 GOOGLE_ROUTES_API_KEY=<a Google Cloud API key with the Routes API enabled>
 MONGODB_URI=mongodb://localhost:27017/trailmix
+DATA_KEY=<output of: openssl rand -base64 32>
 ```
+
+`DATA_KEY` encrypts user data before it reaches MongoDB (see "Encryption of user data" below). Any random key works locally, but keep it: data saved with one key can't be read with another. The tests use their own key.
 
 **Local:**
 
@@ -182,6 +185,17 @@ Use passwords from `openssl rand -hex 32`, so they need no escaping in the URI. 
 5. Add the cron entry from the top of the script, then run it once by hand.
 
 Check that last night's backup exists with `gcloud storage ls -l gs://cpen321-m1-508304-trailmix-backups/mongo/`, and check the VM's log with `journalctl -t trailmix-backup`.
+
+**Encryption of user data.** Every user and trip field that describes a person, a place or a trip is encrypted with AES-256-GCM before it reaches MongoDB, so a copy of the database or a backup reveals no names, emails, places or routes. Only ids, ownership, status, the times queries sort and filter on, and keyed hashes of the Google account ID and saved place IDs stay readable. In production the data key exists only wrapped by the Cloud KMS key `trailmix/user-data` (in `us-west1`): `backend/.env` on the VM holds `DATA_KEY_WRAPPED`, and the backend asks KMS to unwrap it at startup, as the VM's service account. The backend refuses to start in production without it. A break-glass copy of the key, encrypted to the backup gpg key, is kept with the gpg private key, so the data survives losing the KMS key.
+
+Data saved before encryption was sealed once with [`backend/src/scripts/encrypt-existing.ts`](backend/src/scripts/encrypt-existing.ts), which is a dry run unless given `--apply`:
+
+```bash
+docker exec cpen321-project-backend-1 node dist/scripts/encrypt-existing.js           # counts only
+docker exec cpen321-project-backend-1 node dist/scripts/encrypt-existing.js --apply   # seals, then counts again
+```
+
+`scripts/seed-trips.js` writes plaintext trips, which the backend still reads, so only use it locally.
 
 **Restoring** (a key holder's laptop, with Docker running):
 

@@ -25,7 +25,7 @@ describe('Mocked: POST /api/users/me/trips', () => {
   // Expected output: { error: "Internal Server Error" }
   test('Database error while saving', async () => {
     const { token } = await createSignedInUser();
-    const create = jest.spyOn(TripModel, 'create').mockRejectedValueOnce(new Error('Simulated database error'));
+    const create = jest.spyOn(TripModel.collection, 'insertOne').mockRejectedValueOnce(new Error('Simulated database error'));
 
     const response = await request(createApp()).post('/api/users/me/trips')
       .set('Authorization', bearer(token)).send(tripBody());

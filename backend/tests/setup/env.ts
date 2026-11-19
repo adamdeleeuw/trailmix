@@ -6,3 +6,5 @@ process.env.GOOGLE_ROUTES_API_KEY ??= 'test-routes-api-key';
 // never the real TransLink key from backend/.env (dotenv doesn't override a variable that's set, even to ''), so no
 // test can reach TransLink or spend its daily quota; tests that need a key set a fake one and mock fetch
 process.env.TRANSLINK_API_KEY = '';
+// a fixed test-only data key, so tests seal and open user data the way production does, without KMS (#89)
+process.env.DATA_KEY ??= Buffer.alloc(32, 7).toString('base64');

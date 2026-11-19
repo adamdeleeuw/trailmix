@@ -3,7 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { UserModel } from '../../src/models/user.model';
 import { bearer, createSignedInUser } from '../helpers/auth';
-import { failingQuery, useTestDatabase } from '../helpers/db';
+import { useTestDatabase } from '../helpers/db';
 
 useTestDatabase();
 
@@ -26,7 +26,7 @@ describe('Mocked: PUT /api/users/me/profile', () => {
   // Expected output: { error: "Internal Server Error" }
   test('Database error while saving', async () => {
     const { token } = await createSignedInUser();
-    jest.spyOn(UserModel, 'findByIdAndUpdate').mockReturnValueOnce(failingQuery());
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockRejectedValueOnce(new Error('Simulated database error'));
 
     const response = await request(createApp())
       .put('/api/users/me/profile')
@@ -44,7 +44,7 @@ describe('Mocked: PUT /api/users/me/profile', () => {
   // Expected output: { error: "Unauthorized" }
   test('Account deleted while saving', async () => {
     const { token } = await createSignedInUser();
-    jest.spyOn(UserModel, 'findByIdAndUpdate').mockReturnValueOnce({ lean: () => Promise.resolve(null) } as never);
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockResolvedValueOnce(null as never);
 
     const response = await request(createApp())
       .put('/api/users/me/profile')

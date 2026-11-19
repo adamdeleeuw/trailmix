@@ -5,7 +5,8 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { SessionModel } from '../../src/models/session.model';
 import { UserModel } from '../../src/models/user.model';
-import { failingQuery, useTestDatabase } from '../helpers/db';
+import { lookupHash } from '../../src/services/field-crypto';
+import { useTestDatabase } from '../helpers/db';
 
 useTestDatabase();
 
@@ -58,7 +59,7 @@ describe('Mocked: POST /api/auth/google', () => {
     const response = await request(createApp()).post('/api/auth/google').send({ idToken: 'valid' });
 
     expect(response.status).toBe(200);
-    const user = await UserModel.findOne({ googleId: GOOGLE_ID }).orFail().lean();
+    const user = await UserModel.findOne({ googleId: lookupHash(GOOGLE_ID) }).orFail().lean();
     expect(response.body).toEqual({
       sessionToken: expect.any(String),
       user: {
@@ -167,7 +168,7 @@ describe('Mocked: POST /api/auth/google', () => {
   // Expected output: { error: "Internal Server Error" }
   test('Database error while saving the user', async () => {
     mockGoogleVerify(googlePayload());
-    jest.spyOn(UserModel, 'findOneAndUpdate').mockReturnValueOnce(failingQuery());
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockRejectedValueOnce(new Error('Simulated database error'));
 
     const response = await request(createApp()).post('/api/auth/google').send({ idToken: 'valid' });
 

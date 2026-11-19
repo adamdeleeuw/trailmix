@@ -5,6 +5,7 @@ import { createApp } from '../../src/app';
 import { SessionModel } from '../../src/models/session.model';
 import { TripModel } from '../../src/models/trip.model';
 import { UserModel } from '../../src/models/user.model';
+import { lookupHash } from '../../src/services/field-crypto';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
 import { createTrip } from '../helpers/trips';
@@ -49,7 +50,7 @@ describe('Mocked: DELETE /api/users/me', () => {
     expect(signIn.status).toBe(200);
     expect(signIn.body.user.id).not.toBe(user._id.toString());
     expect(signIn.body.user.profileComplete).toBe(false);
-    expect(await UserModel.countDocuments({ googleId: 'google-sub-deleted' })).toBe(1);
+    expect(await UserModel.countDocuments({ googleId: lookupHash('google-sub-deleted') })).toBe(1);
   });
 
   // Mocked behavior: deleting the user fails
