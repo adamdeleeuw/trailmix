@@ -23,6 +23,7 @@
 | 2026-11-15        | 2.1.1, 2.6, 3.1, 3.2 | The Planner now prunes parking spots that can't win before pricing their transit, and picks among Google's alternative transit routes (#86). Added API tests that a pruned spot is never priced, that a transit alternative is chosen when the first route walks too far, and that spots without a route are skipped, plus unit tests for the lower bound, pruning and route choice. The Google stubs now answer each matrix by its origins. Updated the coverage gaps and moved line links, and the NFR test now waits on three Google rounds; added its new log and the measured tradeoff between fewer matrix elements and the extra round trip. The coverage screenshots and the commit in 2.1.2 still show the CP2 run until this is merged |
 | 2026-11-17        | 2.1.2, 2.5, 3.2 | Reran the back-end tests on branch `planner-pruning-86` (#86) on Node 24.11.1: 174 API tests pass with 1 skipped, plus 34 unit tests and the NFR test. Updated the combined coverage and the NFR log and pruning tradeoff from this run, and noted in 2.1.2 that the commit and the coverage screenshots move to the merge commit after #86 merges. The 2.6 gaps and line links were rechecked and haven't changed. Fixed a repeated phrase in the NFR verification |
 | 2026-11-18        | 2.1.1, 3.1, 3.2 | Server robustness (issue #89): API tests for the per-user, per-address and all-users rate limits (including the fault report's burst of 100 concurrent requests), the Google call cap and retry rule, `503` when MongoDB is unreachable, and session expiry. `GET /health` now reports MongoDB, so its unmocked test connects to the test database. Added the planner load test. The NFR 3 test now gives each simulated client its own app, since its fake clock squeezes minutes of polling into seconds of real time, which the per-address limit would count |
+| 2026-11-18        | 3.2 | Added the local restore drill for the encrypted nightly database backups (issue #89) |
 
 ---
 
@@ -174,6 +175,11 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
     ```
     Planner load: 200 plans in 2.8 s (70.9 per second); median 263.5 ms, p95 430.7 ms; statuses {"200":200}
     ```
+
+- **Backup restore drill (issue #89, local)**
+
+  - **Verification:** `scripts/backup-mongo.sh` dumped the local `trailmix` database, encrypted it to a throwaway gpg key and wrote it to a file instead of the bucket. The encrypted file didn't contain the stored user's email. `scripts/restore-mongo.sh` decrypted it into `trailmix_restore_drill`, and the document counts matched the source per collection. The drill database and the throwaway key were then deleted. The production drill (restore last night's bucket backup into a local database) is still to run after the backups start.
+  - **Result** (2026-11-18): `sessions` 6 and 6, `trips` 4 and 4, `users` 1 and 1 (source and restored).
 
 ---
 

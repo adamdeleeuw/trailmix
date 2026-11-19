@@ -11,11 +11,17 @@ services:
     ports: !reset []
     expose:
       - "3000"
+    # drops the base file's passwordless MONGODB_URI, so the one in backend/.env
+    # on the VM (the trailmix_app user and its password) is used
+    environment: !reset {}
 
   mongo:
     # no host port: only the backend, on the compose network, can reach the
-    # database (it has no password, so it must never be exposed)
+    # database. it must never be exposed, password or not
     ports: !reset []
+    # every connection must log in (issue #89). the users are created by hand
+    # before this first deploys, see "Database login and backups" in the README
+    command: ["--auth"]
 
   caddy:
     image: caddy:2-alpine
