@@ -59,6 +59,9 @@ export class RouteServiceUnavailableError extends Error {}
 const MATRIX_URL = 'https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix';
 const DETAILS_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 const TIMEOUT_MS = 10_000;
+const MAX_CALLS_IN_FLIGHT = 20; // bounds what a burst of plans can send Google at once
+const SLOT_WAIT_MS = 2_000;
+const FIRST_SERVER_ERROR = 500;
 const MATRIX_FIELD_MASK = 'originIndex,destinationIndex,duration,distanceMeters,condition,status';
 const DETAILS_FIELD_MASK = [
   'routes.duration',
@@ -95,7 +98,46 @@ function isoTimestamp(value: string | undefined): string | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
+let callsInFlight = 0;
+const waitingForSlot: (() => void)[] = [];
+
+// waits up to SLOT_WAIT_MS for one of the MAX_CALLS_IN_FLIGHT slots, then gives up with the usual 503
+function takeSlot(): Promise<void> {
+  if (callsInFlight < MAX_CALLS_IN_FLIGHT) {
+    callsInFlight += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const handOver = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      waitingForSlot.splice(waitingForSlot.indexOf(handOver), 1);
+      reject(new RouteServiceUnavailableError('No free slot for a Google Routes API call'));
+    }, SLOT_WAIT_MS);
+    waitingForSlot.push(handOver);
+  });
+}
+
+// gives the slot to the longest waiting call, or frees it
+function releaseSlot(): void {
+  const next = waitingForSlot.shift();
+  if (next === undefined) callsInFlight -= 1;
+  else next();
+}
+
 async function postGoogle<T>(url: string, fieldMask: string, body: object): Promise<T> {
+  await takeSlot();
+  try {
+    return await postWithRetry<T>(url, fieldMask, body);
+  } finally {
+    releaseSlot();
+  }
+}
+
+// retries once after a timeout, a network error or a 5xx; a 4xx (bad request, key or quota) would fail again
+async function postWithRetry<T>(url: string, fieldMask: string, body: object): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -109,8 +151,9 @@ async function postGoogle<T>(url: string, fieldMask: string, body: object): Prom
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      if (!response.ok) throw new Error(`Routes API responded ${response.status}`);
-      return (await response.json()) as T;
+      if (response.ok) return (await response.json()) as T;
+      lastError = new Error(`Routes API responded ${response.status}`);
+      if (response.status < FIRST_SERVER_ERROR) break;
     } catch (error) {
       lastError = error;
     }

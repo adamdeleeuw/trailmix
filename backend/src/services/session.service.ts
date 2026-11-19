@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Types } from 'mongoose';
-import { SessionModel, type Session } from '../models/session.model';
+import { SESSION_IDLE_DAYS, SESSION_MAX_DAYS, SessionModel, type Session } from '../models/session.model';
 
 // 256 bits: far too many to guess, so a fast unsalted hash is safe to store
 const TOKEN_BYTES = 32;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -24,14 +25,39 @@ export async function createSession(userId: Types.ObjectId): Promise<string> {
 }
 
 /**
- * Looks up the session a token belongs to.
+ * Looks up the unexpired session a token belongs to.
+ *
+ * @remarks
+ * Checks both expiry rules itself, so an expired session is refused at once rather
+ * than whenever MongoDB's TTL monitor next deletes it.
  *
  * @param token - The session token sent by the app.
- * @returns The session, or `null` if the token doesn't match one.
+ * @returns The session, or `null` if the token matches none, or only an expired one.
  * @throws If the database operation fails.
  */
 export async function findSessionByToken(token: string): Promise<Session | null> {
-  return SessionModel.findOne({ tokenHash: hashToken(token) }).lean();
+  const now = Date.now();
+  return SessionModel.findOne({
+    tokenHash: hashToken(token),
+    createdAt: { $gt: new Date(now - SESSION_MAX_DAYS * DAY_MS) },
+    // $not also matches a session from before lastUsedAt existed, which then gets one at its first use
+    lastUsedAt: { $not: { $lte: new Date(now - SESSION_IDLE_DAYS * DAY_MS) } },
+  }).lean();
+}
+
+/**
+ * Records that a session was just used, which restarts its 30 days of idle time.
+ *
+ * @remarks
+ * Writes at most once a day per session, so active users don't cause a write on every request.
+ *
+ * @param session - A session {@link findSessionByToken} returned.
+ * @throws If the database operation fails.
+ */
+export async function recordSessionUse(session: Session): Promise<void> {
+  const now = Date.now();
+  if (session.lastUsedAt !== undefined && now - session.lastUsedAt.getTime() < DAY_MS) return;
+  await SessionModel.updateOne({ _id: session._id }, { $set: { lastUsedAt: new Date(now) } });
 }
 
 /**

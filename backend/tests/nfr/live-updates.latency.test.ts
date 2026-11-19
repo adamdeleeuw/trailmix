@@ -18,7 +18,6 @@ import { bus99Feed, busThenWalkLegs, createLiveTrip, detourFeed, fakeTranslink, 
 // 30 + 15 s) is measured, not one lucky phase.
 useTestDatabase();
 
-const app = createApp();
 const CLIENT_POLL_MS = 15_000;
 const TARGET_MS = 60_000;
 const NEW_DELAY = 300;
@@ -62,6 +61,9 @@ async function latency(change: Change, changeAfterMs: number, clientPhaseMs: num
     return change === 'alert' && published() ? detourFeed(seconds(), seconds() + 3600) : feedBytes(seconds(), []);
   });
 
+  // a fresh app per run: the fake clock squeezes minutes of polling into real seconds, which the real-time
+  // per-address rate limit (#89) would otherwise count as one client flooding the API
+  const app = createApp();
   const getLive = () => request(app).get(`/api/users/me/trips/${trip._id.toHexString()}/live`).set('Authorization', bearer(token));
   expect((await getLive()).status).toBe(200);
   await clock.advance(clientPhaseMs);

@@ -1,10 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Types } from 'mongoose';
 import type { User } from '../models/user.model';
-import { findSessionByToken } from '../services/session.service';
+import { limitPerUser } from './rate-limit.middleware';
+import { findSessionByToken, recordSessionUse } from '../services/session.service';
 import { findUserById } from '../services/user.service';
 
 const UNAUTHORIZED = 401;
+const limitSignedInUser = limitPerUser('signedInUser'); // every signed-in endpoint shares one per-user limit
 
 /** What {@link requireSession} puts in `res.locals` for the handlers after it. */
 export interface AuthLocals {
@@ -19,8 +21,9 @@ export interface AuthLocals {
  *
  * @remarks
  * Expects `Authorization: Bearer <session token>`. Responds `401 { error }` if
- * the header is missing or malformed, the token matches no session, or the
- * session's account no longer exists. Otherwise it sets `res.locals.auth` and
+ * the header is missing or malformed, the token matches no unexpired session, or the
+ * session's account no longer exists, and `429 { error }` once the user has made
+ * 60 signed-in requests in a minute. Otherwise it sets `res.locals.auth` and
  * calls the next handler. Database errors go to the error handler.
  */
 export async function requireSession(
@@ -37,6 +40,7 @@ export async function requireSession(
     return;
   }
 
+  await recordSessionUse(session);
   res.locals.auth = { user, sessionId: session._id };
-  next();
+  limitSignedInUser(req, res, next);
 }
