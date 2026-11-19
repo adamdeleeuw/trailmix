@@ -29,6 +29,7 @@
 | Nov 17, 2026 | 4.3 | The Google Routes description now says how the Planner breaks a tie between alternative transit routes (fewer transit lines) and that it leaves a route out when none of Google's alternatives fits the max walk, to match the code from #86. |
 | Nov 18, 2026 | 4.1, 4.3 | Added bicycle-only, Bike → Transit and Transit → Bike planning through frequent-service TransLink GTFS stations, with a cached Google Places fallback and configured cycling limits and transfer buffers. |
 | Nov 18, 2026 | 4.5, 4.6 | Simplified the dependency diagram to show the Frontend and each domain component as single boxes. Updated the five sequence diagrams to include the formal use cases' failure and fallback scenarios without expanding their main flows. |
+| Nov 18, 2026 | 3.1, 3.3, 3.4, 3.5, 3.7, 4.1, 4.3, 4.5, 4.6, 4.7 | CP2 TA feedback: split the use cases named with "or" into one verb each, renamed Start and Navigate Trip to Navigate Trip, and added TransLink GTFS-Realtime as an actor and external module. Defined a valid session in NFR 2. Live updates (#87) are built, so LiveUpdates now has its endpoint, the dependency diagram its arrows, the Navigate Trip sequence diagram its polling, and NFR 3 its design and measured latency. |
 
 
 ---
@@ -53,7 +54,7 @@ The Planner schedules each route backward from an optional arrive-by time, price
 1. **Authentication**: Sign in with Google, sign out, and delete the account.
 2. **Commute Profile**: A first-time questionnaire about the user's car (make, model, fuel use) and transit fare type, which can be edited later from the Profile tab along with the last gas price paid. The Planner uses them to price trips.
 3. **Parking Spots and Place Search**: Search for places on the Map tab, and save up to 20 parking spots (a name, an optional cost per hour or per day, and whether overnight parking is allowed) from search, by tapping a place on the map, or by long-pressing the map. Each place opens in a sheet like Google Maps', with Directions and Save as parking spot. Saved spots show as P markers, and are the only places the Planner switches from driving to transit.
-4. **Multimodal Trip Planning**: From a place's Directions, choose the start, the allowed modes, the longest single walk, and Leave now or an arrive-by time, and get up to three routes (Cheapest, Fastest, Balanced) that the Planner schedules and prices. Each route opens in Trip Preview, with every leg on the map and a timeline, and can be saved for later or started. Starting a trip opens Navigation, which follows the user's location through each leg, showing the next turn on a drive or walk and what to board and where to get off on transit, and completes the trip at the destination. In CP3, live TransLink delays and alerts will update the active trip.
+4. **Multimodal Trip Planning**: From a place's Directions, choose the start, the allowed modes, the longest single walk, and Leave now or an arrive-by time, and get up to three routes (Cheapest, Fastest, Balanced) that the Planner schedules and prices. Each route opens in Trip Preview, with every leg on the map and a timeline, and can be saved for later or started. Starting a trip opens Navigation, which follows the user's location through each leg, showing the next turn on a drive or walk and what to board and where to get off on transit, and completes the trip at the destination. Live TransLink delays and alerts update the active trip.
 5. **Trip History and Insights**: View saved trips by date range and sort, start or delete planned ones, reopen a trip in Trip Preview to plan it again, and see the totals of completed trips (time, distance, cost, time by mode, and saved vs driving) and the commute insights for a period.
 
 
@@ -68,6 +69,7 @@ The Planner schedules each route backward from an optional arrive-by time, price
 3. **Google Routes API**: Provides driving and transit routes.
 4. **Google Places API**: Suggests places as the user types, and gets the name, address and location of a picked or tapped place.
 5. **Google Maps SDK**: Shows the map, route previews and turn-by-turn navigation, and reports taps and long-presses on the map.
+6. **TransLink GTFS-Realtime**: Provides live departure times, delays, cancellations and service alerts for the active trip's lines.
 
 
 ### **3.4. Use Case Description**
@@ -78,23 +80,26 @@ The Planner schedules each route backward from an optional arrive-by time, price
 - Use cases for feature 2: **Commute Profile**
 4. **Complete Questionnaire**: The user saves their car and transit details.
 5. **View Profile**: Shows the user's vehicle, transit fare type and last gas price.
-6. **Edit Vehicle or Transit**: The user changes their car or how they pay for transit.
-7. **Update Gas Price**: The user sets the gas price (¢/L) used to estimate driving costs.
+6. **Edit Vehicle**: The user changes their car.
+7. **Edit Transit**: The user changes how they pay for transit.
+8. **Update Gas Price**: The user sets the gas price (¢/L) used to estimate driving costs.
 - Use cases for feature 3: **Planner**
-8. **Plan Multimodal Trip**: The user picks a start, a destination, allowed modes, a max walk and an optional arrive-by time, and the Planner returns up to three priced and ranked route options.
-9. **Set Planning Preferences**: Saves the user's default modes and max walk, so Planning starts from them.
-10. **Preview Route**: Shows a route option on the map with its legs, times and cost.
-11. **Save Trip for Later**: Saves the previewed route as a planned trip in History.
-12. **Start and Navigate Trip**: Starts the route as the active trip and steps through it leg by leg. Arriving completes the trip, and ending early cancels it. Starting a new trip while one is active cancels the old one.
+9. **Plan Multimodal Trip**: The user picks a start, a destination, allowed modes, a max walk and an optional arrive-by time, and the Planner returns up to three priced and ranked route options.
+10. **Set Planning Preferences**: Saves the user's default modes and max walk, so Planning starts from them.
+11. **Preview Route**: Shows a route option on the map with its legs, times and cost.
+12. **Save Trip for Later**: Saves the previewed route as a planned trip in History.
+13. **Navigate Trip**: Starts the route as the active trip and steps through it leg by leg. Arriving completes the trip, and ending early cancels it. Starting a new trip while one is active cancels the old one.
 - Use cases for feature 4: **Parking Spots and Place Search**
-13. **Search Places**: Suggests places as the user types on the Map tab, and opens the picked or tapped place in a sheet.
-14. **Save Parking Spot**: Saves a place as a parking spot (up to 20) with a name, an optional cost per hour or per day, and whether overnight parking is allowed.
-15. **Edit or Remove Parking Spot**: Changes a saved spot's details, or removes it.
+14. **Search Places**: Suggests places as the user types on the Map tab, and opens the picked or tapped place in a sheet.
+15. **Save Parking Spot**: Saves a place as a parking spot (up to 20) with a name, an optional cost per hour or per day, and whether overnight parking is allowed.
+16. **Edit Parking Spot**: Changes a saved spot's details.
+17. **Remove Parking Spot**: Removes a saved spot.
 - Use cases for feature 5: **Trip History and Insights**
-16. **View Trip History**: Lists trips, filtered by date range and sorted by date or cost, with totals for completed trips.
-17. **View Commute Insights**: Shows the average time, average cost and time by transportation for a chosen period.
-18. **Start or Delete Saved Trip**: Starts a planned trip from History, or deletes it.
-19. **Plan Again**: Opens a past trip's route in Planning with its places and modes.
+18. **View Trip History**: Lists trips, filtered by date range and sorted by date or cost, with totals for completed trips.
+19. **View Commute Insights**: Shows the average time, average cost and time by transportation for a chosen period.
+20. **Start Saved Trip**: Starts a planned trip from History.
+21. **Delete Saved Trip**: Deletes a planned trip from History.
+22. **Plan Again**: Opens a past trip's route in Planning with its places and modes.
 
 
 ### **3.5. Formal Use Case Specifications (5 Most Major Use Cases)**
@@ -159,13 +164,13 @@ The Planner schedules each route backward from an optional arrive-by time, price
 <a name="uc3"></a>
 
 
-#### Use Case 3: Start and Navigate Trip
+#### Use Case 3: Navigate Trip
 
 
 **Description**: The user starts a route or a planned trip, and the app guides them through each leg until they arrive or end the trip.
 
 
-**Primary actor(s)**: User
+**Primary actor(s)**: User, TransLink GTFS-Realtime
 
 **Main success scenario**:
 1. The user taps **Start** in Trip Preview, or on a planned trip in History.
@@ -173,7 +178,7 @@ The Planner schedules each route backward from an optional arrive-by time, price
 3. On a drive or walk leg, the top card shows the next turn and how far away it is. On a transit leg, it shows what to board, and once the user is riding, where to get off.
 4. When the user reaches the end of a leg, the app moves to the next one.
 5. When the user reaches the destination, the app completes the trip and shows "You've arrived" with its time and cost, until the user taps **Done**.
-6. (CP3) When TransLink reports a delay or alert on one of the trip's lines, the app updates the trip's times and shows the alert.
+6. When TransLink reports a delay or alert on one of the trip's lines, the app updates the trip's times and shows the alert.
 
 
 **Failure scenario(s)**:
@@ -187,6 +192,8 @@ The Planner schedules each route backward from an optional arrive-by time, price
     - 4a1. The user taps **Next leg** to move on by hand.
 - 5a. The user taps **End** away from the destination.
     - 5a1. The app asks "End trip early?". **End trip** cancels the trip, so it isn't counted in the totals, and **Keep going** returns to Navigation.
+- 6a. TransLink's live data isn't available.
+    - 6a1. The app shows the scheduled times and "Scheduled times, not live".
 
 
 <a name="uc4"></a>
@@ -273,10 +280,10 @@ These are the rough hand-drawn sketches from CP1. The built screens follow Googl
    - **Justification**: Users plan right before they leave, often comparing a few arrive-by times, so planning must feel quick. One plan makes three rounds of Google Routes calls (screening the direct routes and the drives to the parking spots, then transit from the spots that could still win, then the details of the picked routes), so 4 s leaves room for all three while staying well under the 10 s after which users lose focus on a task ([Nielsen, "Response Times: The 3 Important Limits"](https://www.nngroup.com/articles/response-times-3-important-limits/)).
 <a name="nfr2"></a>
 2. **Security**
-   - **Description**: In production, all traffic uses HTTPS, and every request for user data requires a valid session for that user.
+   - **Description**: In production, all traffic uses HTTPS, and every request for user data requires a valid session for that user. A valid session is a token that Google sign-in gave that device, whose SHA-256 hash is in `sessions`, whose user still exists, and that hasn't been ended by signing out or deleting the account. A missing or invalid session gets `401`, and a request for another user's data gets `404`.
    - **Justification**: Saved parking spots and trips reveal where users live and work, and when they are away from home.
 <a name="nfr3"></a>
-3. **Live Update Latency (CP3)**
+3. **Live Update Latency**
    - **Description**: A TransLink delay or alert on one of the active trip's lines reaches the app within 60 seconds of TransLink publishing it.
    - **Justification**: A rider deciding whether to wait for a delayed bus or walk needs to hear about the delay while the choice still matters. On TransLink's Frequent Transit Network a bus comes at least every 15 minutes, so a delay that arrives within a minute still leaves time to choose.
 
@@ -351,8 +358,11 @@ Every request except sign-in first passes Auth's `requireSession`, which finds t
            - **Purpose**: Deletes a planned trip. Started and finished trips can't be deleted, so they stay in the totals.
        5. `void deleteUserTrips(ObjectId userId)` (internal, called by Users)
            - **Purpose**: Deletes every trip of an account that is being deleted.
-5. **LiveUpdates (CP3, not built yet)**
-   - **Purpose**: Will read TransLink's GTFS-Realtime feed and push delays and alerts for the active trip's lines to the app. Its interfaces will be added when it is built in CP3.
+5. **LiveUpdates**
+   - **Purpose**: TransLink's live departure times, cancellations and service alerts for the active trip (#87). While a trip asks, it polls TransLink's GTFS-Realtime trip updates and alerts every 30 s, within about 950 requests a day, and matches them to the trip's transit legs.
+   - **Interfaces**:
+       1. `GET /api/users/me/trips/:id/live?fromLeg=N` → `{ live, updatedAt, legs, alerts }`
+           - **Purpose**: Navigation polls it every 15 s for the live times and alerts of the active trip's legs from leg N on. Returns `live: false` with the scheduled times when TransLink can't be used, `404` for another user's or an unknown trip, and `409` if the trip isn't active.
 
 
 ### **4.2. Databases**
@@ -391,6 +401,8 @@ Every request except sign-in first passes Auth's `requireSession`, which finds t
 - **Purpose**: Displays the map and routes, and reports taps on its place labels (with their Google place IDs) and long-presses.
 4. **Google Places API (New)**
 - **Purpose**: Suggests places as the user types on the Map tab, biased to Metro Vancouver, and gets the name, address and location of the one they pick, or the address of a place label tapped on the map. The backend also uses Nearby Search as a cached fallback when the GTFS station seed cannot supply enough bicycle-transfer candidates. Called from the app with a key restricted to the app's package and signing certificate; the optional backend key should be restricted to the Places API.
+5. **TransLink GTFS-Realtime**
+- **Purpose**: LiveUpdates reads its trip updates (live departure times, delays and cancellations) and service alerts feeds for the active trip's lines, with the backend's API key, capped at about 950 requests a day (TransLink allows 1,000).
 
 
 ### **4.4. Frameworks and Libraries**
@@ -435,7 +447,7 @@ flowchart LR
         Users[Users]
         Planner[Planner]
         Trips[Trips]
-        LiveUpdates["LiveUpdates (CP3, not built yet)"]
+        LiveUpdates[LiveUpdates]
     end
 
     subgraph Platform[Shared infrastructure]
@@ -451,8 +463,9 @@ flowchart LR
         Routes[Google Routes API]
     end
 
+    TransLink[TransLink GTFS-Realtime]
+
     Frontend -->|HTTPS API requests| Proxy
-    Frontend -->|local development| BackendAPI
     Proxy --> BackendAPI
     BackendAPI --> Auth
     BackendAPI --> Users
@@ -472,6 +485,9 @@ flowchart LR
     Trips --> Database
     Planner -->|route matrix and route details| Routes
     Planner -->|station candidate fallback| PlacesAPI
+    Trips --> LiveUpdates
+    LiveUpdates -->|daily request count| Database
+    LiveUpdates -->|trip updates and alerts| TransLink
 ```
 
 
@@ -570,13 +586,14 @@ sequenceDiagram
     Note over App: Trip Preview uses the routes Planning already has, so it makes no request
 ```
 
-3. [**Start and Navigate Trip**](#uc3)
+3. [**Navigate Trip**](#uc3)
 
 ```mermaid
 sequenceDiagram
     actor User
     participant App as :Front-end
     participant Trips as :Trips
+    participant Live as :LiveUpdates
     participant DB as :MongoDB
     participant Maps as :Google Maps SDK
 
@@ -622,6 +639,17 @@ sequenceDiagram
                     end
                 end
             end
+            loop every 15 s while Navigation is open
+                App->>Trips: GET /api/users/me/trips/:id/live?fromLeg=N
+                Trips->>Live: liveUpdateFor(trip legs, fromLeg)
+                Live-->>Trips: live times and alerts, from TransLink's feeds polled every 30 s
+                Trips-->>App: 200 { live, updatedAt, legs, alerts }
+                alt live: false
+                    App-->>User: the scheduled times, and "Scheduled times, not live"
+                else live
+                    App-->>User: the live departure and delay, and alerts on the legs ahead
+                end
+            end
             alt reached the destination
                 App->>Trips: PATCH /api/users/me/trips/:id { status: COMPLETED, actualEnd }
                 Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: ACTIVE })
@@ -642,7 +670,6 @@ sequenceDiagram
             App-->>User: "Couldn't update the trip. Check your connection and try again." Stay where it was
         end
     end
-    Note over App,Trips: In CP3, LiveUpdates will push delays and alerts for the trip's lines to Navigation
 ```
 
 4. [**Save Parking Spot**](#uc4)
@@ -729,7 +756,7 @@ sequenceDiagram
             App->>Trips: PATCH /api/users/me/trips/:id { status: ACTIVE, actualStart }
             Trips->>DB: trips.findOneAndUpdate({ _id, userId, status: PLANNED })
             Trips-->>App: 200 { trip }
-            App-->>User: open Navigation (see Start and Navigate Trip)
+            App-->>User: open Navigation (see Navigate Trip)
         end
         opt tap Delete on a planned trip
             App->>Trips: DELETE /api/users/me/trips/:id
@@ -745,5 +772,5 @@ sequenceDiagram
    - **Implementation**: The Planner only tries the 8 saved parking spots closest to the straight line from start to destination (and only those that add at most 40% to the distance), and screens them with Route Matrix calls instead of one route request per spot. The drives to every spot and the direct routes are screened in one parallel round. Spots whose chain couldn't beat a direct route even with a transit ride at 120 km/h in a straight line are then dropped, and one more Route Matrix call screens transit from the rest. Pruning prices fewer Route Matrix elements, which Google bills one by one, at the cost of one more round trip, which the response time test includes. The Planner then gets the details of only the up to three routes it picks, in parallel. Each Google call times out after 10 s and is retried once.
 2. [**Security**](#nfr2)
    - **Implementation**: Caddy is the only public entry point and serves HTTPS. Session tokens are 256-bit random values stored only as SHA-256 hashes, every user-data endpoint goes through `requireSession`, and every query is filtered by the signed-in user's ID, so one user can't read or change another's spots or trips.
-3. [**Live Update Latency (CP3)**](#nfr3)
-   - **Implementation**: To be designed with LiveUpdates in CP3.
+3. [**Live Update Latency**](#nfr3)
+   - **Implementation**: LiveUpdates polls TransLink's feeds every 30 s while a trip asks, and Navigation polls the backend every 15 s, so a change reaches the app within 30 + 15 s plus network time, about 50 s, under the 60 s target. `live-updates.latency.test.ts` measured a worst case of 44 s.
