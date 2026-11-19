@@ -10,6 +10,8 @@
 | 2026-11-04        | 2.1, 2.2, 2.3, 2.4 | Updated the commit Codacy ran on and the Codacy screenshots for CP2, after the Planner (#72), Planning and Trip Preview (#73) and trip lifecycle (#74) merged. Grouped the justifications by code pattern, added the new false positives with citations, and removed the `routes.chained` justifications, since that endpoint and its tests were deleted |
 | 2026-11-04        | 2.1, 2.4 | Fixed the 43 issues that couldn't be justified (#82), and updated the commit Codacy ran on and the line links that moved |
 | 2026-11-18        | 3, 3.1, 3.2 | Filled in the CP3 peer review: the review we performed of ExploreUBC (scores, major fault and screenshots) and the review ExploreUBC gave us (scores and the rate-limiting fault), and removed the note that the section would be filled in later |
+| 2026-11-18        | 2.4, 2.5 | Merged the current Codacy issue comparison and triage from Code_Review_bak.md without replacing the CP3 peer-review results |
+| 2026-11-18        | 2.5 | Replaced a test's non-null assertion with an explicit guard after Codacy flagged non-null assertions as forbidden |
 
 ---
 
@@ -37,49 +39,124 @@ The issues under the "Others" category are:
 
 ### 2.4. Justifications for Unfixed Issues
 
-Every issue left open in 2.2 and 2.3 is listed below, grouped by code pattern. Each one is a false positive, and the justification says why, with a source.
+The original Codacy snapshot is shown in 2.2 and 2.3. The locations below also account for the current Codacy issue list viewed on 2026-11-18. Current issues not supported by these justifications are listed in 2.5.
 
 - **Code Pattern: Promise returned in function argument where a void return was expected** (`@typescript-eslint/no-misused-promises`)
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/routes/auth.route.ts#L7`](../backend/src/routes/auth.route.ts#L7), [`#L8`](../backend/src/routes/auth.route.ts#L8), [`backend/src/routes/users.route.ts#L15`](../backend/src/routes/users.route.ts#L15), [`#L17`](../backend/src/routes/users.route.ts#L17) to [`#L27`](../backend/src/routes/users.route.ts#L27) (12 issues, one per route), [`backend/src/routes/planner.route.ts#L7`](../backend/src/routes/planner.route.ts#L7), and the 3 issues ignored in Codacy in CP1 on [`backend/src/routes/vehicles.route.ts#L7`](../backend/src/routes/vehicles.route.ts#L7) and [`#L8`](../backend/src/routes/vehicles.route.ts#L8)
+     - **Location in Git:** [`backend/src/routes/auth.route.ts#L7`](../backend/src/routes/auth.route.ts#L7), [`#L8`](../backend/src/routes/auth.route.ts#L8), [`backend/src/routes/users.route.ts#L15`](../backend/src/routes/users.route.ts#L15), [`#L17`](../backend/src/routes/users.route.ts#L17) to [`#L28`](../backend/src/routes/users.route.ts#L28) (13 issues, one per route), [`backend/src/routes/planner.route.ts#L7`](../backend/src/routes/planner.route.ts#L7), and the 3 issues ignored in Codacy in CP1 on [`backend/src/routes/vehicles.route.ts#L7`](../backend/src/routes/vehicles.route.ts#L7) and [`#L8`](../backend/src/routes/vehicles.route.ts#L8)
      - **Justification:** The rule's `checksVoidReturn` option reports a promise-returning function passed where a function returning `void` is expected, because a plain callback that returns a promise can lose its rejection ([typescript-eslint: no-misused-promises](https://typescript-eslint.io/rules/no-misused-promises/#checksvoidreturn)). Express 5 route handlers don't have that problem. Express documents that "starting with Express 5, route handlers and middleware that return a Promise will call `next(value)` automatically when they reject or throw an error" ([Express: Error Handling](https://expressjs.com/en/guide/error-handling.html#catching-errors)), so every rejection from `requireSession` or a controller reaches our error handler. Express 5's own types (`@types/express-serve-static-core` 5) declare a handler's return type as `unknown`, not `void`, so with the installed types the rule has nothing to report. Codacy reports it because its analysis doesn't load the project's installed type definitions. The mocked API tests show it in practice: a failing database call returns a 500 instead of crashing the server. Wrapping every handler to silence the rule would add code that does nothing Express 5 doesn't already do.
 
 - **Code Pattern: Unsafe return of an error typed value, unsafe argument, and redundant type constituents** (`@typescript-eslint/no-unsafe-return`, `@typescript-eslint/no-unsafe-argument`, `@typescript-eslint/no-redundant-type-constituents`)
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/services/google.service.ts#L13`](../backend/src/services/google.service.ts#L13), [`backend/tests/mock/auth.google.test.ts#L30`](../backend/tests/mock/auth.google.test.ts#L30), [`#L34`](../backend/tests/mock/auth.google.test.ts#L34), [`#L35`](../backend/tests/mock/auth.google.test.ts#L35), [`#L115`](../backend/tests/mock/auth.google.test.ts#L115), [`backend/tests/mock/routes.plan.test.ts#L95`](../backend/tests/mock/routes.plan.test.ts#L95), [`#L100`](../backend/tests/mock/routes.plan.test.ts#L100), [`backend/tests/no-mock/users.planning-preferences.test.ts#L35`](../backend/tests/no-mock/users.planning-preferences.test.ts#L35)
-     - **Justification:** Each line uses a type from an installed package: `OAuth2Client` and `TokenPayload` from `google-auth-library`, and the request built by `supertest` (`@types/supertest`). "Error typed" is what typescript-eslint calls a type TypeScript couldn't resolve, and type-aware rules can only work when the linter has the project's full type information, including its dependencies ([typescript-eslint: Linting with Type Information](https://typescript-eslint.io/getting-started/typed-linting/)). Codacy lints without the installed packages, so these types become the error type, which the rules then treat like `any`. With the real types these are an `OAuth2Client`, a `TokenPayload` and a `supertest` `Test`, and `npm run typecheck` (strict mode, run in CI on every push) passes with no errors.
+     - **Location in Git:** [`backend/src/services/google.service.ts#L13`](../backend/src/services/google.service.ts#L13), [`backend/tests/mock/auth.google.test.ts#L30`](../backend/tests/mock/auth.google.test.ts#L30), [`#L34`](../backend/tests/mock/auth.google.test.ts#L34), [`#L35`](../backend/tests/mock/auth.google.test.ts#L35), [`#L115`](../backend/tests/mock/auth.google.test.ts#L115), [`backend/tests/mock/routes.plan.test.ts#L95`](../backend/tests/mock/routes.plan.test.ts#L95), [`#L100`](../backend/tests/mock/routes.plan.test.ts#L100), [`backend/tests/no-mock/users.planning-preferences.test.ts#L35`](../backend/tests/no-mock/users.planning-preferences.test.ts#L35), [`backend/tests/mock/users.trips-live.test.ts#L57`](../backend/tests/mock/users.trips-live.test.ts#L57), [`backend/tests/no-mock/users.planning-preferences.test.ts#L53`](../backend/tests/no-mock/users.planning-preferences.test.ts#L53), [`backend/tests/no-mock/users.trips-live.test.ts#L22`](../backend/tests/no-mock/users.trips-live.test.ts#L22), [`backend/tests/nfr/live-updates.latency.test.ts#L65`](../backend/tests/nfr/live-updates.latency.test.ts#L65), [`backend/tests/mock/routes.plan.test.ts#L97`](../backend/tests/mock/routes.plan.test.ts#L97), and [`#L102`](../backend/tests/mock/routes.plan.test.ts#L102)
+     - **Justification:** Each line uses a type from an installed package: `OAuth2Client` and `TokenPayload` from `google-auth-library`, and the request built by `supertest` (`@types/supertest`). "Error typed" is what typescript-eslint calls a type TypeScript couldn't resolve, and type-aware rules can only work when the linter has the project's full type information, including its dependencies ([typescript-eslint: Linting with Type Information](https://typescript-eslint.io/getting-started/typed-linting/)). Codacy lints without the installed packages, so these types become the error type, which the rules then treat like `any`. With the real types these are an `OAuth2Client`, a `TokenPayload` and a `supertest` `Test`. The `Map.delete` argument at [`backend/src/services/bike-station.service.ts#L213`](../backend/src/services/bike-station.service.ts#L213) is also a string key from a `Map<string, ...>` after an undefined check. The `NodeJS` global at [`backend/src/services/live-feeds.ts#L53`](../backend/src/services/live-feeds.ts#L53) is provided by the installed `@types/node`. `npm --prefix backend run typecheck` passes with no errors.
 
 - **Code Pattern: Generic Object Injection Sink** (`security/detect-object-injection`)
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/config/env.ts#L24`](../backend/src/config/env.ts#L24), [`backend/src/services/planner.constants.ts#L23`](../backend/src/services/planner.constants.ts#L23), [`#L25`](../backend/src/services/planner.constants.ts#L25), [`#L27`](../backend/src/services/planner.constants.ts#L27), [`backend/src/services/planner.service.ts#L481`](../backend/src/services/planner.service.ts#L481), [`backend/src/services/route-legs.ts#L150`](../backend/src/services/route-legs.ts#L150), [`#L159`](../backend/src/services/route-legs.ts#L159), [`#L166`](../backend/src/services/route-legs.ts#L166), [`backend/tests/no-mock/routes.plan.test.ts#L96`](../backend/tests/no-mock/routes.plan.test.ts#L96)
-     - **Justification:** The rule flags every `object[variable]`, whatever the variable is ([eslint-plugin-security: detect-object-injection](https://github.com/eslint-community/eslint-plugin-security/blob/main/docs/rules/detect-object-injection.md)). The risk is a key the user controls, such as `__proto__`, reaching a property lookup or assignment ([OWASP: Prototype Pollution Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html)). None of these keys come from a user. In `planner.service.ts`, `route-legs.ts` and the test, the key is a loop's number index into an array. In `planner.constants.ts` it is `tier`, typed `0 | 1 | 2` and computed from a zone count. In `env.ts` it is the name of a required environment variable, which only the code passes in.
+     - **Location in Git:** [`backend/src/config/env.ts#L24`](../backend/src/config/env.ts#L24), [`#L32`](../backend/src/config/env.ts#L32), [`backend/src/services/planner.constants.ts#L23`](../backend/src/services/planner.constants.ts#L23), [`#L25`](../backend/src/services/planner.constants.ts#L25), [`#L27`](../backend/src/services/planner.constants.ts#L27), [`backend/src/services/planner.service.ts#L481`](../backend/src/services/planner.service.ts#L481), [`#L891`](../backend/src/services/planner.service.ts#L891), [`backend/src/services/route-legs.ts#L150`](../backend/src/services/route-legs.ts#L150), [`#L159`](../backend/src/services/route-legs.ts#L159), [`#L166`](../backend/src/services/route-legs.ts#L166), [`backend/tests/no-mock/routes.plan.test.ts#L96`](../backend/tests/no-mock/routes.plan.test.ts#L96), [`#L97`](../backend/tests/no-mock/routes.plan.test.ts#L97), [`backend/src/services/live-match.ts#L99`](../backend/src/services/live-match.ts#L99), [`backend/src/services/live-feeds.ts#L92`](../backend/src/services/live-feeds.ts#L92), [`#L144`](../backend/src/services/live-feeds.ts#L144), [`#L147`](../backend/src/services/live-feeds.ts#L147), [`#L148`](../backend/src/services/live-feeds.ts#L148), [`#L152`](../backend/src/services/live-feeds.ts#L152), [`#L166`](../backend/src/services/live-feeds.ts#L166), [`backend/src/services/translink-api.ts#L79`](../backend/src/services/translink-api.ts#L79), [`backend/src/services/live-updates.service.ts#L130`](../backend/src/services/live-updates.service.ts#L130), [`backend/tests/mock/users.trips-live.test.ts#L50`](../backend/tests/mock/users.trips-live.test.ts#L50), [`backend/src/services/translink-static.ts#L74`](../backend/src/services/translink-static.ts#L74), and [`backend/tests/mock/routes.plan.test.ts#L311`](../backend/tests/mock/routes.plan.test.ts#L311)
+     - **Justification:** The rule flags every `object[variable]`, whatever the variable is ([eslint-plugin-security: detect-object-injection](https://github.com/eslint-community/eslint-plugin-security/blob/main/docs/rules/detect-object-injection.md)). The risk is a key the user controls, such as `__proto__`, reaching a property lookup or assignment ([OWASP: Prototype Pollution Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html)). None of these keys come from a user. In `planner.service.ts`, `route-legs.ts`, the tests, and `live-updates.service.ts`, the key is a numeric index into an array. In `planner.constants.ts` it is `tier`, typed `0 | 1 | 2` and computed from a zone count. In `env.ts` it is the name of a required environment variable, which only the code passes in. The feed keys and directions in `live-feeds.ts`, `live-match.ts`, and `translink-api.ts` are closed unions/constants; `translink-static.ts` uses a numeric binary-search index.
 
 - **Code Pattern: Detect console.log() with non Literal argument** (`security-node/detect-crlf`)
 
   1. **Issues**
 
-     - **Location in Git:** [`backend/src/index.ts#L12`](../backend/src/index.ts#L12), [`backend/tests/nfr/planner.response-time.test.ts#L127`](../backend/tests/nfr/planner.response-time.test.ts#L127), [`#L128`](../backend/tests/nfr/planner.response-time.test.ts#L128)
+     - **Location in Git:** [`backend/src/index.ts#L12`](../backend/src/index.ts#L12), [`backend/src/services/translink-quota.ts#L54`](../backend/src/services/translink-quota.ts#L54), [`backend/tests/nfr/planner.response-time.test.ts#L127`](../backend/tests/nfr/planner.response-time.test.ts#L127), [`#L128`](../backend/tests/nfr/planner.response-time.test.ts#L128), [`#L145`](../backend/tests/nfr/planner.response-time.test.ts#L145), and [`#L146`](../backend/tests/nfr/planner.response-time.test.ts#L146)
      - **Justification:** The rule guards against log injection, where a user-supplied string with line breaks forges extra log lines ([OWASP: Log Injection](https://owasp.org/www-community/attacks/Log_Injection)). These lines only log numbers: `index.ts` logs `env.port`, which `env.ts` parses as an integer at startup, and the NFR test logs response times formatted with `toFixed`. Neither can contain a line break, and neither comes from a request.
 
 - **Code Pattern: Unsafe Regular Expression** (`security/detect-unsafe-regex`)
 
   1. **Issue**
 
-     - **Location in Git:** [`backend/src/services/planner.google.service.ts#L82`](../backend/src/services/planner.google.service.ts#L82)
+     - **Location in Git:** [`backend/src/services/planner.google.service.ts#L82`](../backend/src/services/planner.google.service.ts#L82) and [`#L88`](../backend/src/services/planner.google.service.ts#L88)
      - **Justification:** The pattern is `/^\d+(\.\d+)?s$/`, which reads Google's durations like `"900s"`. A regular expression is only open to ReDoS when it can match the same text in many ways, as with nested or overlapping quantifiers like `(a+)+` ([OWASP: ReDoS](https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS)). Here the optional group must start with a literal `.`, which `\d` can't match, so each input has at most one way to match and the check runs in linear time. The rule only counts quantifiers and can't see that. The input is also a field of Google's response, not user input.
 
 - **Code Pattern: Unhandled errors detected in asynchronous function** (`security-node/detect-unhandled-async-errors`)
 
   1. **Issue**
 
-     - **Location in Git:** [`backend/src/services/planner.google.service.ts#L112`](../backend/src/services/planner.google.service.ts#L112)
+     - **Location in Git:** [`backend/src/services/planner.google.service.ts#L112`](../backend/src/services/planner.google.service.ts#L112) and [`#L118`](../backend/src/services/planner.google.service.ts#L118)
      - **Justification:** The flagged line is the deliberate `throw` of `RouteServiceUnavailableError` after both attempts fail, inside the `try`/`catch` loop that retries Google once. The error is handled: `planRoute` catches it and returns `503`, and anything else reaches the error handler through `.catch(next)` in `planner.route.ts`. The mocked `POST /api/routes/plan` tests check this, since a failing Google call returns `503` instead of crashing. The rule's documentation asks for an async function's errors to be handled with `try`/`catch`, `.catch`, or a separate error handler ([eslint-plugin-security-node: detect-unhandled-async-errors](https://github.com/gkouziik/eslint-plugin-security-node/blob/master/docs/rules/detect-unhandled-async-errors.md)), and this code does the first two.
+
+- **Code Pattern: Non-literal file access in test fixtures** (`security/detect-non-literal-fs-filename`)
+
+  1. **Issues**
+
+     - **Location in Git:** [`backend/tests/unit/gtfs-rt-decoder.test.ts#L175`](../backend/tests/unit/gtfs-rt-decoder.test.ts#L175) and [`backend/tests/unit/live-updates.test.ts#L12`](../backend/tests/unit/live-updates.test.ts#L12)
+     - **Justification:** Both helpers resolve fixture paths under the committed `tests/fixtures/translink` directory. Their callers pass fixed fixture filenames from the test source, not user input, so the variable filename cannot be used to read arbitrary files.
+
+- **Code Pattern: Potential timing attack** (Codacy security pattern)
+
+  1. **Issue**
+
+     - **Location in Git:** [`backend/src/services/bike-station.service.ts#L174`](../backend/src/services/bike-station.service.ts#L174) (two findings)
+     - **Justification:** Both findings flag the same `apiKey === undefined` check. This only tests whether the server's configured Google Places key is present; it does not compare a supplied secret or expose a useful timing oracle to a caller.
+
+- **Code Pattern: Async arrow function has no `await` expression**
+
+  1. **Issues**
+
+     - **Location in Git:** [`backend/tests/helpers/live.ts#L118`](../backend/tests/helpers/live.ts#L118), [`backend/src/services/live-feeds.ts#L122`](../backend/src/services/live-feeds.ts#L122), and [`backend/tests/unit/live-feeds.test.ts#L18`](../backend/tests/unit/live-feeds.test.ts#L18)
+     - **Justification:** These callbacks intentionally implement promise-returning interfaces. The fetch mock returns a `Response` or throws, the timer callback resolves its promise, and the fake feed fetch returns the configured result after recording the call; none needs additional `await` expressions.
+
+- **Code Pattern: Disallow void operator**
+
+  1. **Issue**
+
+     - **Location in Git:** [`backend/src/services/bike-station.service.ts#L215`](../backend/src/services/bike-station.service.ts#L215)
+     - **Justification:** `void` explicitly marks the cache cleanup as fire-and-forget. A rejection handler is attached before the promise is discarded.
+
+- **Code Pattern: Expression with labels increases complexity and affects maintainability**
+
+  1. **Issue**
+
+     - **Location in Git:** [`frontend/app/src/main/java/com/example/cpen321application/ui/planning/TripPreview.kt#L193`](../frontend/app/src/main/java/com/example/cpen321application/ui/planning/TripPreview.kt#L193)
+     - **Justification:** `return@forEachIndexed` skips rendering a marker when its location is unavailable and continues rendering the remaining bicycle legs.
+
+- **Code Pattern: Audit URL open for permitted schemes**
+
+  1. **Issue**
+
+     - **Location in Git:** [`scripts/generate-translink-stations.py#L129`](../scripts/generate-translink-stations.py#L129)
+     - **Justification:** `urlopen` receives a `Request` built from the fixed HTTPS `FEED_URL`; no user-provided URL or scheme reaches it.
+
+- **Code Pattern: Too many functions in file**
+
+  1. **Issue**
+
+     - **Location in Git:** [`frontend/app/src/main/java/com/example/cpen321application/data/TripPlan.kt#L1`](../frontend/app/src/main/java/com/example/cpen321application/data/TripPlan.kt#L1)
+     - **Justification:** The file groups the Planner API models and their JSON serialization/deserialization, a cohesive concern. At 21 functions it is only one over the configured threshold; splitting solely to meet the threshold is not necessary absent a maintainability problem.
+
+- **Code Pattern: Too many functions in object**
+
+  1. **Issue**
+
+     - **Location in Git:** [`frontend/app/src/main/java/com/example/cpen321application/data/BackendApi.kt#L235`](../frontend/app/src/main/java/com/example/cpen321application/data/BackendApi.kt#L235)
+     - **Justification:** `BackendApi` is the app's single HTTP facade implementing several small API interfaces, allowing view models to depend on narrower interfaces while production wiring reuses one implementation.
+
+- **Code Pattern: Unused variable**
+
+  1. **Issue**
+
+     - **Location in Git:** [`backend/src/services/live-match.ts#L119`](../backend/src/services/live-match.ts#L119)
+     - **Justification:** The score is internal ranking data used to choose the best match; destructuring intentionally excludes it from the public `LineMatch` result.
+
+### 2.5. Triage of Current Codacy Issues
+
+Five findings from the 2026-11-18 Codacy list still need engineering attention. The `legs[0]!` warning was resolved by replacing the assertion with an explicit guard in [`backend/tests/unit/live-updates.test.ts`](../backend/tests/unit/live-updates.test.ts). The remaining findings are:
+
+| Finding | Location | Why it needs attention |
+| --- | --- | --- |
+| `void`-discarded timer callback | [`backend/src/services/live-feeds.ts#L49`](../backend/src/services/live-feeds.ts#L49) | This is more than a style warning: `setTimeout` does not await or catch the promise returned by `callback()`. If a scheduled poll rejects, it can become an unhandled rejection and skip the subsequent reschedule. Review the error-handling and rescheduling policy. |
+| Function too long (63; limit 60) | [`frontend/app/src/androidTest/java/com/example/cpen321application/ui/planning/BicyclePlanningIntegrationTest.kt#L64`](../frontend/app/src/androidTest/java/com/example/cpen321application/ui/planning/BicyclePlanningIntegrationTest.kt#L64) | Consider extracting leg selection, totals, or JSON construction if that improves the test fixture's readability. |
+| Function too complex (17) | [`scripts/generate-translink-stations.py#L34`](../scripts/generate-translink-stations.py#L34) | `generate` handles feed-date selection, filtering, counts and output construction; consider extracting stages if the function is difficult to maintain. |
+| Function too long (66; limit 60) | [`frontend/app/src/main/java/com/example/cpen321application/ui/planning/PreviewFormat.kt#L40`](../frontend/app/src/main/java/com/example/cpen321application/ui/planning/PreviewFormat.kt#L40) | `timelineRows` handles presentation for each travel mode and transfer; consider extracting per-mode row builders if that improves clarity. |
+| Prefer optional chaining | [`backend/src/services/live-match.ts#L191`](../backend/src/services/live-match.ts#L191) | Codacy's suggested `event?.time === null` rewrite would not preserve behavior when `event` is `undefined` (it would then access `event.time`). Only change this after using a guard that retains the current null-and-undefined handling. |
 
 ---
 

@@ -189,7 +189,7 @@ describe('alertsForLines', () => {
 });
 
 describe('predictLine', () => {
-  type RunExtra = { directionId?: number; cancelled?: boolean; delay?: number; routeId?: string; tripId?: string };
+  interface RunExtra { directionId?: number; cancelled?: boolean; delay?: number; routeId?: string; tripId?: string }
   const run = (id: string, stops: StopSpec[], extra: RunExtra = {}) =>
     tripUpdateEntity(extra.tripId === undefined ? { id, routeId: '6641', ...extra, stops } : { id, ...extra, stops });
   const trips = (entities: number[][]) => decodeFeed(feedBytes(NOW, entities));
