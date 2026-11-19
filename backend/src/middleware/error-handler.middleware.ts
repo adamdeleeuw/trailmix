@@ -39,7 +39,9 @@ export function handleError(err: unknown, _req: Request, res: Response, next: Ne
     return;
   }
 
-  console.error(err);
+  // the name and code only, since a Mongoose validation message can quote the user data that failed (#89)
+  const { name, code } = err instanceof Error ? (err as Error & { code?: unknown }) : { name: typeof err, code: undefined };
+  console.error('Request failed:', name, code ?? '');
   if (isDatabaseUnavailable(err)) {
     res.status(SERVICE_UNAVAILABLE).json({ error: 'Service temporarily unavailable' });
     return;

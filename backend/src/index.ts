@@ -1,11 +1,13 @@
 import { createApp } from './app';
 import { connectDatabase, disconnectDatabase } from './config/db';
 import { assertEnv, env } from './config/env';
+import { loadDataKey } from './services/field-crypto';
 
 const FAILURE_CODE = 1;
 
 async function main(): Promise<void> {
   assertEnv(); // fail fast if config is missing
+  await loadDataKey(); // before any request, so user data is never read or written without it
   await connectDatabase(env.mongodbUri);
 
   const server = createApp().listen(env.port, () => {

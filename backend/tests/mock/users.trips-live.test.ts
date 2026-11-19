@@ -5,7 +5,7 @@ import { TripModel } from '../../src/models/trip.model';
 import { liveFeeds } from '../../src/services/live-feeds';
 import { DAILY_REQUEST_CAP, pacificDay } from '../../src/services/translink-quota';
 import { bearer, createSignedInUser } from '../helpers/auth';
-import { useTestDatabase } from '../helpers/db';
+import { useTestDatabase, failingQuery } from '../helpers/db';
 import { feedBytes } from '../helpers/gtfs-rt';
 import {
   bus99Feed, busThenWalkLegs, createLiveTrip, detourFeed, fakeTranslink, FAKE_TRANSLINK_KEY, type FakeAnswer,
@@ -270,7 +270,7 @@ describe('Mocked: GET /api/users/me/trips/:id/live', () => {
   // Expected output: { error: 'Internal Server Error' }
   test('returns 500 when the trip cannot be loaded', async () => {
     const { token, tripId } = await activeBusTrip();
-    jest.spyOn(TripModel, 'findOne').mockReturnValueOnce(Promise.reject(new Error('Simulated database error')) as never);
+    jest.spyOn(TripModel, 'findOne').mockReturnValueOnce(failingQuery());
 
     const res = await getLive(tripId, token);
 

@@ -6,6 +6,8 @@ import {
   type ParkingSpot,
   type ParkingSpotDetails,
 } from '../models/user.model';
+import { lookupHash, sealFields } from './field-crypto';
+import { openSpot, sealSpot, spotContext, storedUsers, type StoredUser } from './user.service';
 
 /** Why saving or editing a parking spot didn't happen, or the spot it saved. */
 export type ParkingSpotResult =
@@ -42,9 +44,9 @@ async function explainRejectedSave(userId: Types.ObjectId): Promise<ParkingSpotR
 /** Returns a user's spots, or `null` if the account doesn't exist. */
 async function getUserSpotsOrNull(userId: Types.ObjectId): Promise<ParkingSpot[] | null> {
   // parkingSpots is missing on accounts made before parking spots existed, which counts as none
-  const user = await UserModel.findById(userId, { parkingSpots: 1 }).lean<{ parkingSpots?: ParkingSpot[] }>();
+  const user = await UserModel.findById(userId, { parkingSpots: 1 }).lean<StoredUser>();
   if (user === null) return null;
-  return user.parkingSpots ?? [];
+  return (user.parkingSpots ?? []).map((spot) => openSpot(userId, spot));
 }
 
 /**
@@ -53,7 +55,8 @@ async function getUserSpotsOrNull(userId: Types.ObjectId): Promise<ParkingSpot[]
  * @remarks
  * The limit and the duplicate check are part of the update's filter, so two
  * saves racing can't push a user past 20 spots or save the same place twice.
- * Dropped pins have no place ID, so any number of them can share a street.
+ * The duplicate check matches the place ID's lookup hash, since the ID itself
+ * is sealed. Dropped pins have no place ID, so any number of them can share a street.
  *
  * @param userId - The user's ID.
  * @param newSpot - A spot already checked by `parseNewParkingSpot`.
@@ -62,17 +65,22 @@ async function getUserSpotsOrNull(userId: Types.ObjectId): Promise<ParkingSpot[]
  */
 export async function saveParkingSpot(userId: Types.ObjectId, newSpot: NewParkingSpot): Promise<ParkingSpotResult> {
   const spot: ParkingSpot = { _id: new Types.ObjectId(), ...newSpot, createdAt: new Date() };
+  await UserModel.validate({ parkingSpots: [spot] }, ['parkingSpots']); // the schema still checks the plaintext
   const filter = {
     _id: userId,
     // accounts made before parking spots existed have no array yet, which counts as empty
     $expr: { $lt: [{ $size: { $ifNull: ['$parkingSpots', []] } }, MAX_PARKING_SPOTS] },
-    ...(newSpot.placeId === null ? {} : { 'parkingSpots.placeId': { $ne: newSpot.placeId } }),
+    // spots saved before encryption hold the plain place ID until the migration seals them
+    ...(newSpot.placeId === null ? {} : {
+      'parkingSpots.placeIdHash': { $ne: lookupHash(newSpot.placeId) },
+      'parkingSpots.placeId': { $ne: newSpot.placeId },
+    }),
   };
-  const user = await UserModel.findOneAndUpdate(
+  const user = await storedUsers().findOneAndUpdate(
     filter,
-    { $push: { parkingSpots: { $each: [spot], $position: 0 } } },
-    { returnDocument: 'after', runValidators: true },
-  ).lean();
+    { $push: { parkingSpots: { $each: [sealSpot(userId, spot)], $position: 0 } }, $set: { updatedAt: new Date() } },
+    { returnDocument: 'after' },
+  );
   return user === null ? explainRejectedSave(userId) : { status: 'SAVED', spot };
 }
 
@@ -90,25 +98,26 @@ export async function updateParkingSpot(
   spotId: Types.ObjectId,
   details: ParkingSpotDetails,
 ): Promise<ParkingSpotResult> {
-  const user = await UserModel.findOneAndUpdate(
+  const { label, rateCents, ratePer, overnightAllowed } = details;
+  const changes = { label, rateCents, ratePer, overnightAllowed };
+  const sealed = sealFields(changes, spotContext(userId, spotId), new Set());
+  const user = await storedUsers().findOneAndUpdate(
     { _id: userId, 'parkingSpots._id': spotId },
     {
       $set: {
-        'parkingSpots.$.label': details.label,
-        'parkingSpots.$.rateCents': details.rateCents,
-        'parkingSpots.$.ratePer': details.ratePer,
-        'parkingSpots.$.overnightAllowed': details.overnightAllowed,
+        ...Object.fromEntries(Object.entries(sealed).map(([name, value]) => [`parkingSpots.$.${name}`, value])),
+        updatedAt: new Date(),
       },
     },
-    { returnDocument: 'after', runValidators: true },
-  ).lean();
+    { returnDocument: 'after', projection: { parkingSpots: { $elemMatch: { _id: spotId } } } },
+  );
   if (user === null) {
     return (await getUserSpotsOrNull(userId)) === null ? { status: 'NO_USER' } : { status: 'NOT_FOUND' };
   }
 
   // the filter matched this spot, so it's only missing if another request deleted it in between
-  const updated = user.parkingSpots.find((spot) => spot._id.equals(spotId));
-  return updated === undefined ? { status: 'NOT_FOUND' } : { status: 'SAVED', spot: updated };
+  const [updated] = user.parkingSpots ?? [];
+  return updated === undefined ? { status: 'NOT_FOUND' } : { status: 'SAVED', spot: openSpot(userId, updated) };
 }
 
 /**

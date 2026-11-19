@@ -17,6 +17,7 @@ module.exports = {
   coveragePathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
-    '/coverage/'
+    '/coverage/',
+    '/src/scripts/', // one-off scripts run by hand on the VM; the services they call are tested
   ],
 };

@@ -1,7 +1,7 @@
 import request from 'supertest';
 
 import { createApp } from '../../src/app';
-import { UserModel } from '../../src/models/user.model';
+import { findUserById } from '../../src/services/user.service';
 import { bearer, createSignedInUser } from '../helpers/auth';
 import { useTestDatabase } from '../helpers/db';
 
@@ -28,7 +28,7 @@ describe('Unmocked: PUT /api/users/me/gas-price', () => {
     const savedAt = Date.parse(String(response.body.user.lastGasPrice.savedAt));
     expect(savedAt).toBeGreaterThanOrEqual(before);
     expect(savedAt).toBeLessThanOrEqual(after);
-    const stored = await UserModel.findById(user._id).lean();
+    const stored = await findUserById(user._id);
     expect(stored?.lastGasPrice).toStrictEqual({ centsPerLitre: 189.9, savedAt: new Date(savedAt) });
   });
 
@@ -76,7 +76,7 @@ describe('Unmocked: PUT /api/users/me/gas-price', () => {
       expect(response.status).toBe(400);
       expect(response.body).toStrictEqual({ error: 'Invalid gas price' });
     }
-    const stored = await UserModel.findById(user._id).lean();
+    const stored = await findUserById(user._id);
     expect(stored?.lastGasPrice).toBeNull();
   });
 

@@ -79,7 +79,7 @@ describe('Mocked: POST /api/users/me/parking-spots', () => {
   // Expected output: { error: "Internal Server Error" }
   test('Database error while saving', async () => {
     const { user, token } = await createSignedInUser();
-    const save = jest.spyOn(UserModel, 'findOneAndUpdate').mockReturnValueOnce(failingQuery());
+    const save = jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockRejectedValueOnce(new Error('Simulated database error'));
 
     const response = await request(createApp()).post(PATH).set('Authorization', bearer(token)).send(parkingSpotBody());
 
@@ -96,7 +96,7 @@ describe('Mocked: POST /api/users/me/parking-spots', () => {
   // Expected output: { error: "Unauthorized" }
   test('Account deleted while saving', async () => {
     const { token } = await createSignedInUser();
-    jest.spyOn(UserModel, 'findOneAndUpdate').mockReturnValueOnce(resolvingQuery(null));
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockResolvedValueOnce(null as never);
     failNextUserLookupAfterSessionCheck(resolvingQuery(null));
 
     const response = await request(createApp()).post(PATH).set('Authorization', bearer(token)).send(parkingSpotBody());
@@ -116,7 +116,7 @@ describe('Mocked: PUT /api/users/me/parking-spots/:id', () => {
   test('Database error while editing', async () => {
     const { user, token } = await createSignedInUser();
     const spots = await addParkingSpots(user._id, 1);
-    jest.spyOn(UserModel, 'findOneAndUpdate').mockReturnValueOnce(failingQuery());
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockRejectedValueOnce(new Error('Simulated database error'));
 
     const response = await request(createApp()).put(`${PATH}/${String(spots[0]?._id)}`)
       .set('Authorization', bearer(token)).send({ label: 'Renamed' });
@@ -134,7 +134,7 @@ describe('Mocked: PUT /api/users/me/parking-spots/:id', () => {
   test('Account deleted while editing', async () => {
     const { user, token } = await createSignedInUser();
     const [spot] = await addParkingSpots(user._id, 1);
-    jest.spyOn(UserModel, 'findOneAndUpdate').mockReturnValueOnce(resolvingQuery(null));
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockResolvedValueOnce(null as never);
     failNextUserLookupAfterSessionCheck(resolvingQuery(null));
 
     const response = await request(createApp()).put(`${PATH}/${String(spot?._id)}`)
@@ -152,7 +152,7 @@ describe('Mocked: PUT /api/users/me/parking-spots/:id', () => {
   test('Spot deleted while editing', async () => {
     const { user, token } = await createSignedInUser();
     const [spot] = await addParkingSpots(user._id, 1);
-    jest.spyOn(UserModel, 'findOneAndUpdate').mockReturnValueOnce(resolvingQuery({ ...user, parkingSpots: [] }));
+    jest.spyOn(UserModel.collection, 'findOneAndUpdate').mockResolvedValueOnce({ ...user, parkingSpots: [] } as never);
 
     const response = await request(createApp()).put(`${PATH}/${String(spot?._id)}`)
       .set('Authorization', bearer(token)).send({ label: 'Renamed' });
