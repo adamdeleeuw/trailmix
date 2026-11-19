@@ -539,13 +539,17 @@ describe('Mocked: POST /api/routes/plan', () => {
             distanceMeters: 10000,
             condition: 'ROUTE_EXISTS',
           }))
-          : latitudes(body.origins).flatMap((latitude, originIndex) => (latitude === BODY.origin.lat ? [] : [{
-            originIndex,
-            destinationIndex: 0,
-            duration: '1800s',
-            distanceMeters: 15000,
-            condition: 'ROUTE_EXISTS',
-          }]))));
+          : latitudes(body.origins).flatMap((latitude, originIndex) => (
+            latitude === BODY.origin.lat
+              ? []
+              : [{
+                originIndex,
+                destinationIndex: 0,
+                duration: '1800s',
+                distanceMeters: 15000,
+                condition: 'ROUTE_EXISTS',
+              }]
+          ))));
       }
       const spotLatitude = body.travelMode === 'DRIVE'
         ? body.destination?.location?.latLng?.latitude

@@ -101,8 +101,11 @@ export function buildLiveUpdate(
 
     // a leg with a transfer arrives on its last line, whose run is predicted the same way
     const lastPlanned = last?.line.departAt ?? null;
-    const arrival = last === first ? departure
-      : last?.match == null || lastPlanned === null ? null : predictLine(runs, last.match, lastPlanned, network);
+    const arrival = last === first
+      ? departure
+      : last?.match == null || lastPlanned === null
+        ? null
+        : predictLine(runs, last.match, lastPlanned, network);
     // the run boarded, or the one transferred to, isn't coming: TransLink knows the run, but there's no time to show
     if (departure.cancelled || arrival?.cancelled === true) return { ...scheduled(leg, legIndex), matched: true, cancelled: true };
     const shiftedArrival = leg.arriveAt === null ? null : new Date(leg.arriveAt.getTime() + departure.delaySeconds * 1000);
@@ -117,19 +120,21 @@ export function buildLiveUpdate(
   });
 
   const nowSeconds = Math.floor(now / 1000);
-  const alerts: LiveAlert[] = alertsFeed?.feed == null ? [] : alertsForLines(
-    alertsFeed.feed,
-    lines.map((entry) => entry.match),
-    network,
-    nowSeconds,
-  ).map(({ id, alert, lineIndexes }) => ({
-    id,
-    header: tidy(alert.header) ?? FALLBACK_HEADER,
-    description: tidy(alert.description),
-    effect: alert.effect,
-    legIndexes: [...new Set(lineIndexes.map((index) => lines[index]?.legIndex ?? -1))].filter((index) => index >= 0),
-    activeUntil: activeUntil(alert, nowSeconds),
-  }));
+  const alerts: LiveAlert[] = alertsFeed?.feed == null
+    ? []
+    : alertsForLines(
+      alertsFeed.feed,
+      lines.map((entry) => entry.match),
+      network,
+      nowSeconds,
+    ).map(({ id, alert, lineIndexes }) => ({
+      id,
+      header: tidy(alert.header) ?? FALLBACK_HEADER,
+      description: tidy(alert.description),
+      effect: alert.effect,
+      legIndexes: [...new Set(lineIndexes.map((index) => lines[index]?.legIndex ?? -1))].filter((index) => index >= 0),
+      activeUntil: activeUntil(alert, nowSeconds),
+    }));
 
   const madeAt = [alertsFeed?.madeAt, tripUpdates?.madeAt].filter((time): time is number => time !== undefined);
   return {

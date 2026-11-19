@@ -144,7 +144,7 @@ describe('buildLiveUpdate', () => {
   // Expected output: the leg is cancelled, since the transfer isn't coming
   test('marks a leg whose transfer run is cancelled', () => {
     const transferAt = new Date(departAt.getTime() + 20 * 60_000);
-    const firstLeg = legs[0] as Leg;
+    const firstLeg = legs[0]!;
     const withTransfer: Leg = { ...firstLeg, transitLines: [bus99Line(departAt), bus99Line(transferAt)] };
     const feed = decodeFeed(bus99Feed(nowSeconds, departAt, 0));
     const transferRun = decodeFeed(bus99Feed(nowSeconds, transferAt, 0)).entities[0];

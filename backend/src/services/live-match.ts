@@ -168,11 +168,13 @@ export function alertsForLines(
   network: TranslinkStatic,
   now: number,
 ): LineAlert[] {
-  const lines = matches.map((match) => match === null ? null : {
-    match,
-    routeType: network.routes.find((route) => route.id === match.routeId)?.type ?? -1,
-    stopIds: lineStopIds(match, network),
-  });
+  const lines = matches.map((match) => match === null
+    ? null
+    : {
+      match,
+      routeType: network.routes.find((route) => route.id === match.routeId)?.type ?? -1,
+      stopIds: lineStopIds(match, network),
+    });
   return feed.entities.flatMap((entity) => {
     const { alert } = entity;
     if (entity.deleted || alert === null || !isActive(alert, now)) return [];
