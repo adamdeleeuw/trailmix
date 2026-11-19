@@ -141,6 +141,7 @@ private class LegLine(leg: PlanLeg) {
     val points = legPoints(leg)
     val length = lineLength(points)
     val turns = turnPositions(leg.steps, points)
+    val ride = rideSpan(leg, points) // null unless transit
 }
 
 // the map, the current leg on top and the arrival with End below, following the user's location
@@ -152,7 +153,8 @@ private fun ActiveTrip(trips: TripHistoryViewModel, live: LiveUpdatesViewModel, 
     }
     var here by remember { mutableStateOf<LatLng?>(null) }
     var confirmingEarly by remember { mutableStateOf(false) }
-    var arrived by remember { mutableStateOf(false) } // so arriving ends the trip once, and a failed end is left to End
+    // so arriving ends the trip once, even across rotation, and a failed end is left to End
+    var arrived by rememberSaveable(trip.id) { mutableStateOf(false) }
     val end = { completed: Boolean -> trips.end(trip, completed, onUnauthorized) }
     val leg = route?.legs?.get(legIndex)
     val line = remember(leg) { leg?.let(::LegLine) }
@@ -162,9 +164,9 @@ private fun ActiveTrip(trips: TripHistoryViewModel, live: LiveUpdatesViewModel, 
 
     if (route != null && line != null) {
         FollowLocation { fix ->
+            legIndex = legAfterFix(route, legIndex, fix, firstFix = here == null)
             here = fix
-            legIndex = legAfterFix(route, legIndex, fix)
-            if (!arrived && hasArrived(route, fix)) {
+            if (!arrived && hasArrived(route, legIndex, fix)) {
                 arrived = true
                 end(true)
             }
@@ -300,7 +302,7 @@ private fun NavigationLegLine(leg: PlanLeg, done: Boolean, current: Boolean) {
 @Composable
 private fun LegCard(route: RouteOption, legIndex: Int, line: LegLine, along: Double?, update: LiveUpdate?, onNext: () -> Unit) {
     val leg = route.legs[legIndex]
-    val turn = along?.takeIf { leg.mode != TripMode.TRANSIT }?.let { upcomingTurn(leg.steps, line.turns, it) }
+    val turn = legTurn(leg.steps, line.turns, along, line.ride)
     val status = liveStatus(route, legIndex, update)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -313,7 +315,11 @@ private fun LegCard(route: RouteOption, legIndex: Int, line: LegLine, along: Dou
                 TurnRow(turn)
             } else {
                 Text(
-                    cardTitle(route, legIndex, along, liveDepartAt = liveDeparture(update, legIndex)),
+                    cardTitle(
+                        route, legIndex, along,
+                        liveDepartAt = liveDeparture(update, legIndex),
+                        boardAt = line.ride?.boardAt ?: 0.0,
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )

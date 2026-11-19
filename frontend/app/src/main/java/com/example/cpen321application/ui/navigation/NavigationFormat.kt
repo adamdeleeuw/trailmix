@@ -95,6 +95,41 @@ fun upcomingTurn(steps: List<NavigationStep>, positions: List<Double>, alongMetr
     return if (index < 0) null else UpcomingTurn(steps[index], (positions[index] - alongMetres).coerceAtLeast(0.0))
 }
 
+/**
+ * Where a transit leg's vehicle is boarded and left, in metres along the leg's line. The backend can merge a short
+ * walk into a transit leg (`route-legs.ts`), so the line, and its steps, can start before the boarding stop or end
+ * after the stop where the user gets off.
+ */
+data class RideSpan(val boardAt: Double, val alightAt: Double)
+
+/** The ride on [leg] along its line [points], or `null` for a leg that isn't transit. Unknown stops are the ends. */
+fun rideSpan(leg: PlanLeg, points: List<LatLng>): RideSpan? {
+    if (leg.mode != TripMode.TRANSIT) return null
+    val line = leg.transitLines.firstOrNull()
+    val board = line?.departureStopLocation?.let { linePosition(points, it)?.alongMetres } ?: 0.0
+    val alight = line?.arrivalStopLocation?.let { linePosition(points, it)?.alongMetres } ?: lineLength(points)
+    return RideSpan(board, maxOf(board, alight))
+}
+
+/**
+ * The turn to show [alongMetres] along a leg, or `null`. On a transit leg ([ride] isn't null) only the turns of a
+ * walk merged into it show: before the boarding stop, the ones up to it, and none while riding.
+ */
+fun legTurn(
+    steps: List<NavigationStep>,
+    positions: List<Double>,
+    alongMetres: Double?,
+    ride: RideSpan?,
+): UpcomingTurn? {
+    if (alongMetres == null) return null
+    val turn = upcomingTurn(steps, positions, alongMetres) ?: return null
+    return when {
+        ride == null || alongMetres > ride.alightAt -> turn
+        alongMetres < ride.boardAt && alongMetres + turn.metres <= ride.boardAt -> turn // a turn on the way to the stop
+        else -> null // waiting at the stop or riding
+    }
+}
+
 /** How far to turn the card's arrow from straight ahead for one of Google's maneuvers, like -90 for "TURN_LEFT". */
 fun maneuverAngle(maneuver: String): Float = MANEUVER_ANGLES[maneuver] ?: 0f
 
@@ -107,7 +142,8 @@ fun turnDistanceText(metres: Double): String = when {
 
 /**
  * The top card's title when there's no turn to show: [legTitle], or once the user is riding a
- * transit leg, where to get off, like "Ride Expo Line to Main Street · 6 stops".
+ * transit leg, where to get off, like "Ride Expo Line to Main Street · 6 stops". The user is riding once they're
+ * [BOARDED_M] past [boardAt], the boarding stop's place along the line (see [RideSpan]).
  */
 fun cardTitle(
     route: RouteOption,
@@ -115,9 +151,10 @@ fun cardTitle(
     alongMetres: Double?,
     zone: ZoneId = ZoneId.systemDefault(),
     liveDepartAt: Instant? = null,
+    boardAt: Double = 0.0,
 ): String {
     val leg = route.legs[index]
-    val riding = leg.mode == TripMode.TRANSIT && alongMetres != null && alongMetres >= BOARDED_M
+    val riding = leg.mode == TripMode.TRANSIT && alongMetres != null && alongMetres >= boardAt + BOARDED_M
     return if (riding) rideTitle(leg) else legTitle(route, index, zone, liveDepartAt)
 }
 
@@ -147,16 +184,20 @@ fun currentLegAt(route: RouteOption, actualStart: Instant?, now: Instant): Int {
     return if (index < 0) route.legs.lastIndex else index
 }
 
-/** The leg to show after a location fix at [here]: the next one for each leg whose end the user has reached. */
-fun legAfterFix(route: RouteOption, index: Int, here: LatLng): Int {
+/**
+ * The leg to show after a location fix at [here]: the next one for each leg whose end the user has reached. The
+ * screen's [firstFix] only places the user, so a short first leg, or a reopened trip, doesn't skip a leg at once.
+ */
+fun legAfterFix(route: RouteOption, index: Int, here: LatLng, firstFix: Boolean = false): Int {
+    if (firstFix) return index
     var leg = index
     while (leg < route.legs.lastIndex && distanceMetres(here, route.legs[leg].to.location) <= NEXT_LEG_RADIUS_M) leg++
     return leg
 }
 
-/** Whether [here] is close enough to the destination to finish the trip. */
-fun hasArrived(route: RouteOption, here: LatLng): Boolean =
-    distanceMetres(here, route.legs.last().to.location) <= ARRIVED_RADIUS_M
+/** Whether [here], on leg [index], finishes the trip: only on the last leg, not passing the destination earlier. */
+fun hasArrived(route: RouteOption, index: Int, here: LatLng): Boolean =
+    index == route.legs.lastIndex && distanceMetres(here, route.legs.last().to.location) <= ARRIVED_RADIUS_M
 
 /** Whether End should ask "End trip early?" first. Never when the location is unknown, since the user knows best. */
 fun isFarFromDestination(route: RouteOption, here: LatLng?): Boolean =
