@@ -22,6 +22,7 @@
 | 2026-11-04        | 2.1.1, 2.1.2, 2.5, 2.6, 3.1, 3.2 | Added API tests for the Planner lines that weren't covered (#82), so every Planner line and function is covered except two the API can't reach, now listed in 2.6 with the Planner branches still not exercised. Updated the coverage, the commit the tests run on, the NFR log, and the line links that moved |
 | 2026-11-15        | 2.1.1, 2.6, 3.1, 3.2 | The Planner now prunes parking spots that can't win before pricing their transit, and picks among Google's alternative transit routes (#86). Added API tests that a pruned spot is never priced, that a transit alternative is chosen when the first route walks too far, and that spots without a route are skipped, plus unit tests for the lower bound, pruning and route choice. The Google stubs now answer each matrix by its origins. Updated the coverage gaps and moved line links, and the NFR test now waits on three Google rounds; added its new log and the measured tradeoff between fewer matrix elements and the extra round trip. The coverage screenshots and the commit in 2.1.2 still show the CP2 run until this is merged |
 | 2026-11-17        | 2.1.2, 2.5, 3.2 | Reran the back-end tests on branch `planner-pruning-86` (#86) on Node 24.11.1: 174 API tests pass with 1 skipped, plus 34 unit tests and the NFR test. Updated the combined coverage and the NFR log and pruning tradeoff from this run, and noted in 2.1.2 that the commit and the coverage screenshots move to the merge commit after #86 merges. The 2.6 gaps and line links were rechecked and haven't changed. Fixed a repeated phrase in the NFR verification |
+| 2026-11-18        | 2.1.1, 2.1.3, 3.1, 3.2, 4.1, 4.2 | Brought the spec up to the code on `dep3`. Added the `GET /api/users/me/trips/:id/live` API tests from live updates (#87), the bicycle Planner tests (#88), every unit test file and the TransLink quota test, and fixed the two describe-group links that had moved. Added the NFR 3 (Live Update Latency) test, which replaces the Security test planned for CP3, and said how NFR 2 is checked. Added `BicyclePlanTest` and the automated Plan Multimodal Trip 2a (location off) and 5b (no car) tests, listed the instrumented tests outside `e2e/`, and listed the new front-end unit tests |
 
 ---
 
@@ -31,11 +32,26 @@
 
 #### 2.1.1. Tests
 
-Unit tests for the Planner's own logic and for merging a route's walking legs are in `backend/tests/unit/` (`planner.core.test.ts`, `transit-zones.test.ts` and `route-legs.test.ts`). Run them with `cd backend; npm test -- tests/unit/`.
+Unit tests for the back end's own logic are in `backend/tests/unit/`. Run them with `cd backend; npm test -- tests/unit/`.
+
+| **File** | **What it tests** |
+| -------- | ----------------- |
+| `planner.core.test.ts` | The Planner's candidate selection, lower bounds and pruning, scheduling, pricing, ranking and choice between alternative transit routes |
+| `planning-modes.test.ts` | Bicycle as a planning mode and trip leg mode, and in a new user's default modes (#88) |
+| `bike-station.service.test.ts` | Ranking stations for Bike → Transit and Transit → Bike by cycling distance and detour, and finding them in the seeded TransLink station list (#88) |
+| `transit-zones.test.ts` | Counting the fare zones a transit route crosses |
+| `route-legs.test.ts` | Merging a route's walking legs and joining their polylines |
+| `bc-time.test.ts` | B.C.'s calendar day at a fixed UTC-7, independent of the runtime's time zone data (#87) |
+| `gtfs-rt-decoder.test.ts` | Decoding TransLink's GTFS-Realtime trip updates and alerts, including saved real feeds in `tests/fixtures/translink/` (#87) |
+| `live-feeds.test.ts` | The TransLink poller: polling every 30 s only while a trip asks, and backing off after `429` or `403` (#87) |
+| `live-match.test.ts` | Matching a trip's transit legs to TransLink's live runs and stops, using the committed GTFS files in `src/data/` (#87) |
+| `live-updates.test.ts` | Building the live update for a trip's legs and alerts, and the scheduled fallback (#87) |
+
+`backend/tests/no-mock/translink-quota.test.ts` tests the daily TransLink request cap (`pacificDay` and `reserveTranslinkRequest`) against the real test database, so it runs with the unmocked API tests. It tests an internal function rather than an endpoint, so it isn't in the table below.
 
 | **Interface** | **Describe Group Location, No Mocks** | **Describe Group Location, With Mocks** | **Mocked Components** |
 | ------------- | ------------------------------------- | --------------------------------------- | --------------------- |
-| **POST /api/auth/google** | [`backend/tests/no-mock/auth.google.test.ts#L10`](../backend/tests/no-mock/auth.google.test.ts#L10) | [`backend/tests/mock/auth.google.test.ts#L51`](../backend/tests/mock/auth.google.test.ts#L51) | Google ID token verification (`OAuth2Client.verifyIdToken`), User DB, Session DB |
+| **POST /api/auth/google** | [`backend/tests/no-mock/auth.google.test.ts#L10`](../backend/tests/no-mock/auth.google.test.ts#L10) | [`backend/tests/mock/auth.google.test.ts#L49`](../backend/tests/mock/auth.google.test.ts#L49) | Google ID token verification (`OAuth2Client.verifyIdToken`), User DB, Session DB |
 | **POST /api/auth/sign-out** | [`backend/tests/no-mock/auth.sign-out.test.ts#L12`](../backend/tests/no-mock/auth.sign-out.test.ts#L12) | [`backend/tests/mock/auth.sign-out.test.ts#L19`](../backend/tests/mock/auth.sign-out.test.ts#L19) | Session DB |
 | **GET /api/users/me** | [`backend/tests/no-mock/users.me.test.ts#L11`](../backend/tests/no-mock/users.me.test.ts#L11) | [`backend/tests/mock/users.me.test.ts#L20`](../backend/tests/mock/users.me.test.ts#L20) | Session DB, User DB |
 | **GET /api/users/me/trips** | [`backend/tests/no-mock/users.trips.test.ts#L14`](../backend/tests/no-mock/users.trips.test.ts#L14) | [`backend/tests/mock/users.trips.test.ts#L19`](../backend/tests/mock/users.trips.test.ts#L19) | Trip DB |
@@ -45,6 +61,7 @@ Unit tests for the Planner's own logic and for merging a route's walking legs ar
 | **PUT /api/users/me/profile** | [`backend/tests/no-mock/users.profile.test.ts#L31`](../backend/tests/no-mock/users.profile.test.ts#L31) | [`backend/tests/mock/users.profile.test.ts#L21`](../backend/tests/mock/users.profile.test.ts#L21) | User DB |
 | **PUT /api/users/me/gas-price** | [`backend/tests/no-mock/users.gas-price.test.ts#L11`](../backend/tests/no-mock/users.gas-price.test.ts#L11) | [`backend/tests/mock/users.gas-price.test.ts#L19`](../backend/tests/mock/users.gas-price.test.ts#L19) | User DB |
 | **DELETE /api/users/me** | [`backend/tests/no-mock/users.delete.test.ts#L17`](../backend/tests/no-mock/users.delete.test.ts#L17) | [`backend/tests/mock/users.delete.test.ts#L23`](../backend/tests/mock/users.delete.test.ts#L23) | User DB, Trip DB, Session DB, Google ID token verification (`OAuth2Client.verifyIdToken`, to sign in again after deleting) |
+| **GET /api/users/me/trips/:id/live** | [`backend/tests/no-mock/users.trips-live.test.ts#L25`](../backend/tests/no-mock/users.trips-live.test.ts#L25) | [`backend/tests/mock/users.trips-live.test.ts#L59`](../backend/tests/mock/users.trips-live.test.ts#L59) | TransLink GTFS-Realtime feeds (`fetch`), TransLink quota DB, Trip DB |
 | **GET /api/users/me/parking-spots** | [`backend/tests/no-mock/users.parking-spots.test.ts#L16`](../backend/tests/no-mock/users.parking-spots.test.ts#L16) | [`backend/tests/mock/users.parking-spots.test.ts#L39`](../backend/tests/mock/users.parking-spots.test.ts#L39) | User DB |
 | **POST /api/users/me/parking-spots** | [`backend/tests/no-mock/users.parking-spots.test.ts#L62`](../backend/tests/no-mock/users.parking-spots.test.ts#L62) | [`backend/tests/mock/users.parking-spots.test.ts#L74`](../backend/tests/mock/users.parking-spots.test.ts#L74) | User DB |
 | **PUT /api/users/me/parking-spots/:id** | [`backend/tests/no-mock/users.parking-spots.test.ts#L275`](../backend/tests/no-mock/users.parking-spots.test.ts#L275) | [`backend/tests/mock/users.parking-spots.test.ts#L110`](../backend/tests/mock/users.parking-spots.test.ts#L110) | User DB |
@@ -52,14 +69,20 @@ Unit tests for the Planner's own logic and for merging a route's walking legs ar
 | **GET /api/vehicles/makes** | [`backend/tests/no-mock/vehicles.test.ts#L14`](../backend/tests/no-mock/vehicles.test.ts#L14) | _None: nothing external can fail_ | _None_ |
 | **GET /api/vehicles/makes/:make/models** | [`backend/tests/no-mock/vehicles.test.ts#L43`](../backend/tests/no-mock/vehicles.test.ts#L43) | _None: nothing external can fail_ | _None_ |
 | **GET /health** | [`backend/tests/no-mock/health.test.ts#L6`](../backend/tests/no-mock/health.test.ts#L6) | _None: nothing external can fail_ | _None_ |
-| **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts#L28`](../backend/tests/no-mock/routes.plan.test.ts#L28) | [`backend/tests/mock/routes.plan.test.ts#L221`](../backend/tests/mock/routes.plan.test.ts#L221) | Google Routes API (`fetch`), User DB for saved parking spots |
+| **POST /api/routes/plan** | [`backend/tests/no-mock/routes.plan.test.ts#L28`](../backend/tests/no-mock/routes.plan.test.ts#L28) | [`backend/tests/mock/routes.plan.test.ts#L503`](../backend/tests/mock/routes.plan.test.ts#L503) | Google Routes API (`fetch`), User DB for saved parking spots |
 | **PUT /api/users/me/planning-preferences** | [`backend/tests/no-mock/users.planning-preferences.test.ts#L12`](../backend/tests/no-mock/users.planning-preferences.test.ts#L12) | [`backend/tests/mock/users.planning-preferences.test.ts#L19`](../backend/tests/mock/users.planning-preferences.test.ts#L19) | User DB |
 
 "No mocks" tests run against a real MongoDB (the same `mongo:7.0` image deployed on the VM). The sign-in tests that need Google to accept a token are in the mocked group, because automated tests can't get a real Google ID token. Every other test signs users in by adding a user and session straight to the test database (`backend/tests/helpers/auth.ts`), so it doesn't need Google.
 
+The unmocked `GET /api/users/me/trips/:id/live` tests run with no TransLink API key (`tests/setup/env.ts` clears it, so no test can use a real key from `backend/.env`), so every answer is the scheduled fallback with `live: false`, They also check that the response lists no legs once the transit is done, that another user's or an unknown trip gets `404`, and that a session is required. The mocked tests fake TransLink's feeds by mocking `fetch`, and cover live times and alerts, a run TransLink cancelled, sharing one poll between requests, polling only alerts once no transit leg is left, TransLink refusing a feed (`429`, `403`) or failing (`500`, a network error), the daily request cap, no API key, database failures while counting a request or loading the trip, and that the API key is never logged or returned.
+
+The bicycle Planner tests (#88) are the five tests from [`backend/tests/mock/routes.plan.test.ts#L217`](../backend/tests/mock/routes.plan.test.ts#L217), above the mocked describe group: bicycle only (its time doesn't count toward the longest walk), a bicycle route over the distance limit, Bike → Transit (including a farther station winning on total time and a station route over the limit), and Transit → Bike with its retrieval buffer and zero bicycle cost.
+
 The vehicle list endpoints have no mocked group. Their data is `backend/src/data/vehicles.json`, a file in the repo loaded once at startup, so beyond the session check (already covered by the mocked `GET /api/users/me` tests) there is nothing external that can fail.
 
 #### 2.1.2. Commit Hash Where Tests Run
+
+<!-- TODO (CP3): rerun the back-end tests on the final main commit, then replace the commit and paragraph below, the screenshots in 2.2 to 2.5, the percentages in 2.5, the gaps in 2.6 (the new LiveUpdates and bicycle files aren't listed yet), and the NFR logs in 3.2 -->
 
 `4af7b0632009b09bca8502b04ef34cc77fee5e7a`
 
@@ -85,7 +108,7 @@ This is the last commit on `main` that changes code, with the Planner (#72), Pla
 
    To use another MongoDB, set `MONGODB_TEST_URI` (e.g. `mongodb://localhost:27017`) and the script won't start the container. Each Jest worker uses its own `trailmix-test-<worker>` database and drops it when it finishes.
 
-   One unmocked `POST /api/routes/plan` test checks the geometry of a real Google route, so it only runs with `RUN_LIVE_ROUTE_GEOMETRY_TESTS=true` and a real `GOOGLE_ROUTES_API_KEY`, and the runs report it as 1 skipped test otherwise. Every other test needs no API keys.
+   One unmocked `POST /api/routes/plan` test checks the geometry of a real Google route, so it only runs with `RUN_LIVE_ROUTE_GEOMETRY_TESTS=true` and a real `GOOGLE_ROUTES_API_KEY`, and the runs report it as 1 skipped test otherwise. Every other test needs no API keys: Google and TransLink are stubbed where a test needs them, and the test setup clears `TRANSLINK_API_KEY`.
 
 ### 2.2. GitHub Actions Configuration Location
 
@@ -143,9 +166,12 @@ The API tests run every line and function of the Planner's files except the two 
 
 | **Non-Functional Requirement** | **Location in Git** |
 | ------------------------------ | ------------------- |
-| **Planning Response Time** (95% of plans within 4 s) | [`backend/tests/nfr/planner.response-time.test.ts#L95`](../backend/tests/nfr/planner.response-time.test.ts#L95) |
+| **NFR 1: Planning Response Time** (95% of plans within 4 s) | [`backend/tests/nfr/planner.response-time.test.ts#L95`](../backend/tests/nfr/planner.response-time.test.ts#L95) |
+| **NFR 3: Live Update Latency** (a TransLink change reaches the app within 60 s) | [`backend/tests/nfr/live-updates.latency.test.ts#L83`](../backend/tests/nfr/live-updates.latency.test.ts#L83) |
 
-Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS / Linux) or `.\scripts\run-backend-nfr-tests.ps1` (Windows), with Docker running for the test MongoDB as in 2.1.3. The Security requirement doesn't have an automated test yet, so the second NFR test is planned for CP3.
+Run both from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS / Linux) or `.\scripts\run-backend-nfr-tests.ps1` (Windows), with Docker running for the test MongoDB as in 2.1.3.
+
+NFR 3 is the second automated NFR test, in place of the Security test planned at CP2. NFR 2 (Security) is checked by the API tests instead: the unmocked group of every endpoint that needs a session sends a request without a valid one and expects `401`, and the trip and parking spot groups expect `404` for another user's trip or spot. Its HTTPS part is the Caddy deployment, which tests that build the app with `createApp()` don't reach.
 
 ### 3.2. Test Verification and Logs
 
@@ -161,6 +187,16 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
     ```
   - **Pruning tradeoff (issue #86):** The Planner logs one `Planner screening` line per plan, with the Route Matrix elements it priced, the spots it pruned and how long each round took. Before #86 a plan priced every candidate spot's transit, so with `n` spots it priced `2(n + 1)` elements in one round; now it prices `n + 2` in the first round and one more per surviving spot in the second, so it saves exactly one element per pruned spot. In the run above, pruning saved 1 of 8 elements per plan (12.5%). The cost is a second round trip: on the same stub, the code before #86 had a p95 of 135.9 ms, so pruning added about 79 ms in this run (57 ms in the 2026-11-15 run), roughly one extra transit matrix call plus run-to-run variation. With real Google latencies the extra round trip costs more, and the saving is only as large as the number of spots pruned, which is zero when every spot could still win. For a user with few saved spots the latency cost outweighs the saving in elements; the saving grows with the number of saved spots near the route, and planning stays well within the 4 s target either way. Asking for alternative transit routes adds no request and stays in the Essentials SKU, so it costs nothing extra.
 
+- **Live Update Latency**
+
+  - **Verification:** The test runs the real app, `GET /api/users/me/trips/:id/live` endpoint, TransLink poller, request quota and test MongoDB, with only TransLink faked (by mocking `fetch`) and the poller on a fake clock, so minutes of polling run in about a second. For each case it signs in a user and creates an active trip that rides the 99 and then walks, and the client polls the endpoint every 15 s, as Navigation does. The fake TransLink then publishes a change: a new 300 s delay on the trip's run in one test, and a new alert on its line in the other. To measure the worst case rather than one lucky timing, each test publishes the change at 10 points in the poller's 30 s cycle (every 3 s), for clients 0, 5, 10 and 14 s out of step with the poller, which is 40 runs per test. Each run measures the time from TransLink publishing the change to the first response that shows it, and checks every response is `200` with `live: true`. The test prints the worst and mean latency over the 40 runs, and passes only if the worst is at most 60 s. The expected worst case is a change published just after a poll and seen by a client just before its next poll, about 30 + 15 s.
+  - **Log Output**
+    <!-- TODO: paste the output of ./scripts/run-backend-nfr-tests.sh (or .ps1) from the CP3 run here, with its date and commit -->
+    ```
+    NFR 3 delay: worst … s, mean … s over 40 phases
+    NFR 3 alert: worst … s, mean … s over 40 phases
+    ```
+
 ---
 
 ## 4. Front-end Test Specification
@@ -169,17 +205,19 @@ Run it from the repository root with `./scripts/run-backend-nfr-tests.sh` (macOS
 
 `frontend/app/src/androidTest/java/com/example/cpen321application/e2e/` (run on the Pixel 9 API 36 emulator against the deployed backend)
 
-The end-to-end test is [`PlanTripTest.kt`](../frontend/app/src/androidTest/java/com/example/cpen321application/e2e/PlanTripTest.kt). It drives the app through Compose testing against the real backend, Google Places and Google Routes, with nothing mocked. The other files in `e2e/` (`BackButtonTest`, `NavBarTest` and `QuestionnaireBackTest`) are UI integration tests that use stand-in screens and a fake backend, so they don't count as end-to-end tests and will move out of `e2e/`.
+The end-to-end tests are [`PlanTripTest.kt`](../frontend/app/src/androidTest/java/com/example/cpen321application/e2e/PlanTripTest.kt) (4 tests) and [`BicyclePlanTest.kt`](../frontend/app/src/androidTest/java/com/example/cpen321application/e2e/BicyclePlanTest.kt) (6 tests, #88). They drive the app through Compose testing against the real backend, Google Places and Google Routes, with nothing mocked. The other files in `e2e/` (`BackButtonTest`, `NavBarTest` and `QuestionnaireBackTest`) are UI integration tests that use stand-in screens and a fake backend, so they don't count as end-to-end tests and will move out of `e2e/`.
 
-**How to run it:**
+The instrumented tests outside `e2e/` aren't end-to-end tests either: `data/LiveUpdateParsingTest` parses the live update response, `data/PlanningBicycleApiTest` checks that Bike is sent in plan requests and read from saved preferences, and `ui/planning/` (`BicycleJourneyVisualsTest`, `BicyclePlanningIntegrationTest` and `ModesMenuTest`) checks the Planning and Trip Preview screens with fixed data.
+
+**How to run them:**
 
 1. Start the Pixel 9 API 36 emulator, and install and open the debug app (`./scripts/run-frontend.sh` or `.\scripts\run-frontend.ps1`).
-2. Sign in with a Google account that has finished the questionnaire, has no saved parking spots and no active trip, has a car, and keeps the default modes (Drive and Transit).
+2. Sign in with a Google account that has finished the questionnaire, has no saved parking spots and no active trip, has a car, and keeps Drive and Transit in its default modes.
 3. From the repository root, run `./scripts/run-frontend-e2e-tests.sh` (macOS / Linux) or `.\scripts\run-frontend-e2e-tests.ps1` (Windows), and press Enter when it asks whether you're signed in.
 
-The test grants location permission itself, saves its own parking spot through the app, and deletes that spot afterwards, so it leaves the account as it found it.
+The tests grant location permission themselves and leave the account as they found it: `PlanTripTest` saves its own parking spot through the app and deletes it afterwards, puts back the car `noCarShowsTheProfileBanner` removes, and turns device location back on after `locationOffShowsChooseStartPoint`. `BicyclePlanTest` sets the account's default modes for each test and restores the saved planning preferences afterwards.
 
-Unit tests for the app's logic, such as sign-in routing and sign-out, are in `frontend/app/src/test/java/com/example/cpen321application/`. The Map tab's search, parking spots, tapped places and location prompts are covered by `MapSearchViewModelTest`, `ParkingSpotsViewModelTest`, `LocationStateTest` and `ParkingSpotFormatTest` there. Planning and Trip Preview are covered by `PlanningViewModelTest`, `PlanningFormatTest`, `PreviewFormatTest` and `PreviewGeometryTest`. The trip lifecycle (issue #74) is covered by `TripHistoryViewModelTest` (save, start, the "End your current trip?" flow, end and delete), `TripTotalsTest` and `TripHistoryListTest` (History's totals and list), and `NavigationFormatTest` (the current leg, arriving, ending early and the Navigation text).
+Unit tests for the app's logic are in `frontend/app/src/test/java/com/example/cpen321application/`. Sign-in routing and sign-out are covered by `AuthViewModelTest`, and the questionnaire and Profile by `QuestionnaireViewModelTest`, `ProfileViewModelTest` and `DecimalDigitsFieldTest`. The Map tab's search, parking spots, tapped places and location prompts are covered by `MapSearchViewModelTest`, `ParkingSpotsViewModelTest`, `LocationStateTest` and `ParkingSpotFormatTest`. Planning and Trip Preview are covered by `PlanningViewModelTest`, `PlanningFormatTest`, `PreviewFormatTest`, `PreviewGeometryTest` and `FakePlannerApiTest`. The trip lifecycle (issue #74) is covered by `TripHistoryViewModelTest` (save, start, the "End your current trip?" flow, end and delete), `TripTotalsTest`, `TripHistoryListTest` and `CommuteInsightsTest` (History's totals, list and insights), and `NavigationFormatTest` (the current leg, arriving, ending early and the Navigation text). Live updates (#87) are covered by `LiveUpdatesViewModelTest` (polling every 15 s, falling back to scheduled times, and stopping) and `LiveFormatTest` (the live times, delays and alerts Navigation shows).
 
 ### 4.2. Tests
 
@@ -189,9 +227,9 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
 
     | **Scenario Steps** | **Test Case Steps** |
     | ------------------ | ------------------- |
-    | 1. The user searches for a destination on the Map tab and taps **Directions** on its place sheet. | Both tests: type "Waterfront Station" into the search box, tap the first suggestion that contains it, wait for **Directions** on its sheet and tap it. |
+    | 1. The user searches for a destination on the Map tab and taps **Directions** on its place sheet. | Every test: type "Waterfront Station" into the search box, tap the first suggestion that contains it, wait for **Directions** on its sheet and tap it. |
     | 2. The app opens Planning with the user's location as the start, the default modes and longest walk, and **Leave now**. | Location permission is granted before the app opens, so the start is "Your location" (or "Choose start point" if the emulator has no location fix yet). The modes and longest walk keep the account's defaults. |
-    | 3. The user changes the start, the modes, the longest walk, or sets **Arrive by**. | Tap the start field and search for "University of British Columbia". In `plansUpToThreeRoutesAndPreviewsOne`, also tap **Leave now ▾**, **Tomorrow** and **Set**, and check the chip says "Arrive by … tomorrow". |
+    | 3. The user changes the start, the modes, the longest walk, or sets **Arrive by**. | Every test except `locationOffShowsChooseStartPoint`: tap the start field and search for "University of British Columbia". In `plansUpToThreeRoutesAndPreviewsOne`, also tap **Leave now ▾**, **Tomorrow** and **Set**, and check the chip says "Arrive by … tomorrow". |
     | 4. The app sends the trip to the Planner. | Wait up to 30 s until the loading indicator is gone and either routes or "Couldn't reach the route service." show. |
     | 5. The Planner considers driving, transit, and Drive → Transit through nearby saved spots, then schedules, prices and ranks them. | `plansUpToThreeRoutesAndPreviewsOne` first saves "Metropolis at Metrotown" as a parking spot through its place sheet, so the Planner has a spot to switch at, and checks the no-spots banner doesn't show. |
     | 6. The app shows up to three routes labelled Cheapest, Fastest and Balanced. | Check there are 1 to 3 route rows labelled Cheapest, Fastest or Balanced, and that "Couldn't reach the route service." isn't shown. |
@@ -201,6 +239,7 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
     | 5c. No route exists for any allowed mode. | Not automated yet: Google finds a route between any two places the search offers in Metro Vancouver. |
     | 5d. Google Routes can't be reached, even after one retry. | Not automated yet: causing it needs a mocked backend, and these tests use the real one. Any run where it happens fails in the wait in step 4. The mocked backend tests of `POST /api/routes/plan` check the `503` itself. |
 
+  <!-- TODO (CP3): replace this log with a run that includes locationOffShowsChooseStartPoint, noCarShowsTheProfileBanner and BicyclePlanTest -->
   - **Test Logs:** The run of `scripts/run-frontend-e2e-tests.sh` on 2026-11-04, at commit `4af7b06`, on the Pixel 9 emulator (API 36). The Docker and Gradle build output is trimmed. Gradle's console only prints totals, so each test's result below comes from the run's JUnit report in `frontend/app/build/outputs/androidTest-results/connected/debug/`.
     ```
     $ bash scripts/run-frontend-e2e-tests.sh
@@ -240,6 +279,23 @@ Unit tests for the app's logic, such as sign-in routing and sign-out, are in `fr
     PASSED  QuestionnaireBackTest.signOutSignsOut                        2.45 s
     PASSED  QuestionnaireBackTest.backAgainClosesTheDialog               2.66 s
     ```
+
+- **Use Case: Plan Multimodal Trip, with Bike** ([Requirements_and_Design.md, Use Case 1](Requirements_and_Design.md#uc1), #88)
+
+  - **Expected Behaviors:** `BicyclePlanTest` runs the same success scenario with Bike among the modes. Each test first sets the account's default modes to Transit only, and restores its saved preferences afterwards.
+
+    | **Scenario Steps** | **Test Case Steps** |
+    | ------------------ | ------------------- |
+    | 1. The user searches for a destination on the Map tab and taps **Directions** on its place sheet. | Search for the test's destination (Waterfront Station, University of British Columbia or Vancouver Convention Centre), tap the first matching suggestion, and tap **Directions**. |
+    | 2. The app opens Planning with the user's location as the start, the default modes and longest walk, and **Leave now**. | Location permission is granted before the app opens, so the start is "Your location" or "Choose start point". |
+    | 3. The user changes the start, the modes, the longest walk, or sets **Arrive by**. | Tap the start field and search for the test's start. Open the modes menu and turn on **Bike** with Transit (`bikeAndTransit…`, `bikeToTransit…`, `transitToBike…`), turn on Bike and turn off Transit (`bicycleOnlyJourneyCanBePlannedAndDisplayed`), or switch between Drive only and Transit only (`driveOnlyAndTransitOnlyPlanningRemainAvailable`). |
+    | 4. The app sends the trip to the Planner. | Wait up to 30 s until the loading indicator is gone and routes show, failing if "Couldn't reach the route service." shows. |
+    | 5. The Planner considers the allowed modes, then schedules, prices and ranks the routes. | With Bike and Transit on, find a route whose row includes Bike and whose timeline has both a bicycle and a transit leg. |
+    | 6. The app shows up to three routes labelled Cheapest, Fastest and Balanced. | Tap a route that includes Bike, and check Trip Preview: **Bike to …** and the green bicycle icon and leg on the timeline. For Bike → Transit, **Lock bike at …** comes before **Board at …**; for Transit → Bike, **Get off at …** comes before **Pick up bike at …**; for bicycle only, there is no **Get off at**. With Drive only and then Transit only, a Drive route and then a Transit route show. |
+    | Saved Bike preference | `savedBikeAndTransitPreferencesAreRestoredAfterRelaunch`: save Bike and Transit as the default modes, relaunch the app, plan again without opening the modes menu, and check a Bike and Transit route still shows. |
+
+  <!-- TODO (CP3): add the BicyclePlanTest results from the CP3 run -->
+  - **Test Logs:** _see the CP3 run above_
 
 - **Use Case: Preview Route** ([Requirements_and_Design.md, Use Case 2](Requirements_and_Design.md#uc2))
 
