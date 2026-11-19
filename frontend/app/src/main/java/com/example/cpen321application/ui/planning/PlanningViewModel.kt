@@ -19,6 +19,7 @@ import com.example.cpen321application.data.SessionStore
 import com.example.cpen321application.data.TripPlan
 import com.example.cpen321application.data.TripMode
 import com.example.cpen321application.data.UnauthorizedException
+import com.example.cpen321application.data.busyMessage
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.Job
@@ -85,6 +86,10 @@ class PlanningViewModel(
         private set
 
     var status by mutableStateOf(PlanStatus.NEEDS_ORIGIN)
+        private set
+
+    /** Why the latest plan failed, shown while [status] is [PlanStatus.FAILED], otherwise `null`. */
+    var failureMessage by mutableStateOf<String?>(null)
         private set
 
     /** The latest routes in [sortBy] order, kept while a new plan loads so the screen doesn't go blank. */
@@ -283,6 +288,7 @@ class PlanningViewModel(
             return
         }
         status = PlanStatus.LOADING
+        failureMessage = null
         // no costVsTime, so the backend uses the user's saved preference
         val request = PlanRequest(from, to, arriveBy, modes, maxWalkMinutes = maxWalkMinutes)
         planJob = viewModelScope.launch {
@@ -293,10 +299,14 @@ class PlanningViewModel(
             } catch (e: UnauthorizedException) {
                 if (run == planRun) {
                     status = PlanStatus.FAILED
+                    failureMessage = ROUTE_SERVICE_DOWN
                     sessionExpired = true
                 }
             } catch (e: IOException) {
-                if (run == planRun) status = PlanStatus.FAILED // no network, a 503, or anything else the backend refused
+                if (run == planRun) {
+                    status = PlanStatus.FAILED
+                    failureMessage = e.busyMessage() ?: ROUTE_SERVICE_DOWN // no network, or anything else the backend refused
+                }
             }
         }
     }

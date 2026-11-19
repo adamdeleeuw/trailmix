@@ -8,6 +8,7 @@ import java.net.HttpURLConnection.HTTP_CREATED
 import java.net.HttpURLConnection.HTTP_NO_CONTENT
 import java.net.HttpURLConnection.HTTP_OK
 import java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import java.net.HttpURLConnection.HTTP_UNAVAILABLE
 import java.net.URL
 import java.net.URLEncoder
 import java.time.Instant
@@ -26,8 +27,28 @@ class UnauthorizedException : IOException("Unauthorized")
  * Thrown when the backend responds with an error status other than 401, so it was reached but failed.
  *
  * @property error The `error` message from the response body, or `null` if it had none.
+ * @property errorCode The `code` from the response body, like [PLAN_LIMIT_REACHED], or `null` if it had none.
  */
-class HttpException(val code: Int, val error: String? = null) : IOException("HTTP $code")
+class HttpException(val code: Int, val error: String? = null, val errorCode: String? = null) : IOException("HTTP $code")
+
+/** The `code` of a 503 sent when all users together have used up today's or this month's trip plans. */
+const val PLAN_LIMIT_REACHED = "PLAN_LIMIT_REACHED"
+
+private const val HTTP_TOO_MANY_REQUESTS = 429
+
+/**
+ * The message to show when the backend is busy (429), out of trip plans, or unavailable (503).
+ *
+ * @return The message, or `null` for any other failure, which keeps its screen's own message.
+ */
+fun IOException.busyMessage(): String? = when {
+    this !is HttpException -> null
+    code == HTTP_TOO_MANY_REQUESTS -> "Too many requests, try again in a minute."
+    code == HTTP_UNAVAILABLE && errorCode == PLAN_LIMIT_REACHED ->
+        "Trip planning has reached its limit for today, try again tomorrow."
+    code == HTTP_UNAVAILABLE -> "Trailmix is temporarily unavailable, try again shortly."
+    else -> null
+}
 
 /**
  * The signed-in user's account, as returned by the backend.
@@ -413,7 +434,9 @@ private suspend fun <T> request(
                 parse(JSONObject(text.ifEmpty { "{}" })) // a 204 has no body
             }
             HTTP_UNAUTHORIZED -> throw UnauthorizedException()
-            else -> throw HttpException(code, connection.errorMessage())
+            else -> connection.errorBody().let { error ->
+                throw HttpException(code, error?.optString("error")?.ifEmpty { null }, error?.optString("code")?.ifEmpty { null })
+            }
         }
     } catch (e: JSONException) {
         throw IOException("Malformed response", e)
@@ -426,9 +449,9 @@ private suspend fun <T> request(
     }
 }
 
-// the `error` of an error response's { error } body, or null if there's none or it isn't JSON
-private fun HttpURLConnection.errorMessage(): String? = try {
-    errorStream?.bufferedReader()?.use { it.readText() }?.let { JSONObject(it).optString("error").ifEmpty { null } }
+// an error response's { error, code? } body, or null if there's none or it isn't JSON
+private fun HttpURLConnection.errorBody(): JSONObject? = try {
+    errorStream?.bufferedReader()?.use { it.readText() }?.let { JSONObject(it) }
 } catch (e: JSONException) {
     null
 } catch (e: IOException) {
